@@ -216,3 +216,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Jormungandr runtime artifacts
+runs/
+checkpoints/
+events.out.tfevents.*
+*.pt

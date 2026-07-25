@@ -1,0 +1,780 @@
+from __future__ import annotations
+
+import datetime as _dt
+import json
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+
+import numpy as np
+import torch
+
+from jormungandr.core import C51Agent, PPOAgent
+
+
+JsonDict = Dict[str, Any]
+
+
+@dataclass
+class CheckpointSpec:
+    checkpoint_path: str
+    style: str
+    algo: str
+    model_id: str
+    obs_dim: int
+    hidden: int
+    aux_hidden: int
+    lr: float
+    max_grad: float
+    gamma: float
+    v_min: float
+    v_max: float
+    atoms: int
+    target_update: int
+    aux_classes: int
+    action_values: List[float]
+    feature_keys: List[str]
+    updates: int
+    policy_version: int
+    timestamp: float
+
+    def to_dict(self) -> JsonDict:
+        return {
+            "checkpoint_path": self.checkpoint_path,
+            "style": self.style,
+            "algo": self.algo,
+            "model_id": self.model_id,
+            "obs_dim": int(self.obs_dim),
+            "hidden": int(self.hidden),
+            "aux_hidden": int(self.aux_hidden),
+            "lr": float(self.lr),
+            "max_grad": float(self.max_grad),
+            "gamma": float(self.gamma),
+            "v_min": float(self.v_min),
+            "v_max": float(self.v_max),
+            "atoms": int(self.atoms),
+            "target_update": int(self.target_update),
+            "aux_classes": int(self.aux_classes),
+            "action_values": list(self.action_values),
+            "feature_keys": list(self.feature_keys),
+            "updates": int(self.updates),
+            "policy_version": int(self.policy_version),
+            "timestamp": float(self.timestamp),
+        }
+
+
+def _load_checkpoint(checkpoint_path: str) -> Dict[str, Any]:
+    # Torch checkpoints can execute pickle payloads. Trust local artifacts only.
+    try:
+        return torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    except TypeError:
+        # Backward compatibility with older torch versions that do not expose weights_only.
+        return torch.load(checkpoint_path, map_location="cpu")
+
+
+def _first_linear_in_dim(agent_state: Mapping[str, Any]) -> int:
+    keys = (
+        "q.net.0.weight",
+        "policy.net.0.weight",
+        "net.0.weight",
+    )
+    for key in keys:
+        weight = agent_state.get(key)
+        if hasattr(weight, "shape") and len(weight.shape) == 2:
+            return int(weight.shape[1])
+    return 0
+
+
+def _first_linear_hidden(agent_state: Mapping[str, Any]) -> int:
+    keys = (
+        "q.net.0.weight",
+        "policy.net.0.weight",
+        "net.0.weight",
+    )
+    for key in keys:
+        weight = agent_state.get(key)
+        if hasattr(weight, "shape") and len(weight.shape) == 2:
+            return int(weight.shape[0])
+    return 0
+
+
+def _aux_linear_hidden(agent_state: Mapping[str, Any]) -> int:
+    keys = (
+        "aux_head.net.0.weight",
+        "aux_head.0.weight",
+    )
+    for key in keys:
+        weight = agent_state.get(key)
+        if hasattr(weight, "shape") and len(weight.shape) == 2:
+            return int(weight.shape[0])
+    return 0
+
+
+def _detect_style(ckpt: Mapping[str, Any]) -> str:
+    if "learner_config" in ckpt:
+        return "service"
+    if "train_config" in ckpt or "model_spec" in ckpt:
+        return "train"
+    return "unknown"
+
+
+def _checkpoint_spec_from_payload(checkpoint_path: str, ckpt: Mapping[str, Any]) -> CheckpointSpec:
+    style = _detect_style(ckpt)
+    model_spec = ckpt.get("model_spec") or {}
+    learner_cfg = ckpt.get("learner_config") or {}
+    train_cfg = ckpt.get("train_config") or {}
+    agent_state = ckpt.get("agent") or {}
+
+    algo = str(ckpt.get("algo") or learner_cfg.get("algo") or train_cfg.get("algo") or "").strip().lower()
+    if not algo:
+        # Service checkpoints are c51 today; keep fallback conservative.
+        algo = "c51"
+
+    feature_keys = [str(x) for x in (ckpt.get("feature_keys") or [])]
+
+    obs_dim = int(
+        ckpt.get("obs_dim")
+        or model_spec.get("obs_dim")
+        or learner_cfg.get("obs_dim")
+        or train_cfg.get("obs_dim")
+        or (len(feature_keys) if feature_keys else 0)
+        or _first_linear_in_dim(agent_state)
+    )
+
+    hidden = int(
+        model_spec.get("hidden")
+        or learner_cfg.get("hidden")
+        or train_cfg.get("hidden")
+        or _first_linear_hidden(agent_state)
+        or 256
+    )
+
+    aux_hidden = int(
+        model_spec.get("aux_hidden")
+        or learner_cfg.get("aux_hidden")
+        or train_cfg.get("aux_hidden")
+        or _aux_linear_hidden(agent_state)
+        or 0
+    )
+
+    lr = float(model_spec.get("lr") or learner_cfg.get("lr") or train_cfg.get("lr") or 1e-4)
+    max_grad = float(
+        model_spec.get("max_grad") or learner_cfg.get("max_grad") or train_cfg.get("max_grad") or 1.0
+    )
+    gamma = float(model_spec.get("gamma") or learner_cfg.get("gamma") or train_cfg.get("gamma") or 0.99)
+    v_min = float(
+        ckpt.get("v_min")
+        or model_spec.get("v_min")
+        or learner_cfg.get("v_min")
+        or train_cfg.get("v_min")
+        or -10.0
+    )
+    v_max = float(
+        ckpt.get("v_max")
+        or model_spec.get("v_max")
+        or learner_cfg.get("v_max")
+        or train_cfg.get("v_max")
+        or 10.0
+    )
+    atoms = int(
+        ckpt.get("atoms")
+        or model_spec.get("atoms")
+        or learner_cfg.get("atoms")
+        or train_cfg.get("atoms")
+        or 51
+    )
+    target_update = int(
+        model_spec.get("target_update")
+        or learner_cfg.get("target_update")
+        or train_cfg.get("target_update")
+        or 1000
+    )
+
+    aux_classes = int(
+        model_spec.get("aux_classes")
+        or learner_cfg.get("aux_classes")
+        or train_cfg.get("aux_classes")
+        or 0
+    )
+
+    action_values = ckpt.get("action_values") or learner_cfg.get("action_values") or train_cfg.get("action_values")
+    if action_values is None:
+        action_values = [-1.0, 0.0, 1.0]
+    action_values = [float(x) for x in action_values]
+
+    model_id = str(ckpt.get("model_id") or "")
+    updates = int(ckpt.get("updates") or ckpt.get("global_step") or 0)
+    policy_version = int(ckpt.get("policy_version") or updates)
+    timestamp = float(ckpt.get("ts") or 0.0)
+
+    return CheckpointSpec(
+        checkpoint_path=str(Path(checkpoint_path).expanduser().resolve()),
+        style=style,
+        algo=algo,
+        model_id=model_id,
+        obs_dim=obs_dim,
+        hidden=hidden,
+        aux_hidden=aux_hidden,
+        lr=lr,
+        max_grad=max_grad,
+        gamma=gamma,
+        v_min=v_min,
+        v_max=v_max,
+        atoms=atoms,
+        target_update=target_update,
+        aux_classes=aux_classes,
+        action_values=action_values,
+        feature_keys=feature_keys,
+        updates=updates,
+        policy_version=policy_version,
+        timestamp=timestamp,
+    )
+
+
+def inspect_checkpoint(checkpoint_path: str) -> JsonDict:
+    ckpt = _load_checkpoint(checkpoint_path)
+    spec = _checkpoint_spec_from_payload(checkpoint_path, ckpt)
+    obs_normalizer = _obs_normalizer_from_checkpoint(ckpt, spec.obs_dim)
+    top_keys = sorted([str(k) for k in ckpt.keys()])
+    return {
+        "ok": True,
+        "spec": spec.to_dict(),
+        "preprocessing": _obs_normalizer_summary(obs_normalizer),
+        "top_level_keys": top_keys,
+    }
+
+
+def _build_agent_from_checkpoint(ckpt: Mapping[str, Any], spec: CheckpointSpec, device: str = "cpu"):
+    if spec.algo == "ppo":
+        aux_classes = int(spec.aux_classes)
+        if aux_classes <= 0 and isinstance(ckpt.get("agent"), dict) and "aux_head" in ckpt["agent"]:
+            aux_classes = 3
+        agent = PPOAgent(
+            obs_dim=int(spec.obs_dim),
+            hidden=int(spec.hidden),
+            aux_hidden=int(spec.aux_hidden),
+            lr=float(spec.lr),
+            clip=float((ckpt.get("model_spec") or {}).get("ppo_clip", 0.2)),
+            entropy_coef=float((ckpt.get("model_spec") or {}).get("ppo_entropy", 0.01)),
+            value_coef=float((ckpt.get("model_spec") or {}).get("ppo_value", 0.5)),
+            max_grad_norm=float(spec.max_grad),
+            log_std_init=0.0,
+            device=device,
+            action_values=[float(x) for x in spec.action_values] if spec.action_values else None,
+            aux_classes=aux_classes,
+        )
+    elif spec.algo == "c51":
+        if not spec.action_values:
+            raise ValueError("c51 checkpoint has empty action_values")
+        aux_classes = int(spec.aux_classes)
+        if aux_classes <= 0 and isinstance(ckpt.get("agent"), dict) and "aux_head" in ckpt["agent"]:
+            aux_classes = 3
+        agent = C51Agent(
+            obs_dim=int(spec.obs_dim),
+            num_actions=len(spec.action_values),
+            action_values=[float(x) for x in spec.action_values],
+            hidden=int(spec.hidden),
+            aux_hidden=int(spec.aux_hidden),
+            lr=float(spec.lr),
+            gamma=float(spec.gamma),
+            v_min=float(spec.v_min),
+            v_max=float(spec.v_max),
+            atoms=int(spec.atoms),
+            target_update=int(spec.target_update),
+            max_grad_norm=float(spec.max_grad),
+            device=device,
+            aux_classes=aux_classes,
+        )
+    else:
+        raise ValueError(f"unsupported algo in checkpoint: {spec.algo}")
+
+    if "agent" not in ckpt:
+        raise ValueError("checkpoint payload is missing 'agent' state")
+    agent_state = dict(ckpt["agent"])
+    agent_state.pop("opt", None)
+    agent.load_state_dict(agent_state)
+    return agent
+
+
+def _obs_normalizer_from_checkpoint(ckpt: Mapping[str, Any], obs_dim: int) -> Optional[JsonDict]:
+    raw = ckpt.get("obs_normalizer") or ckpt.get("normalizer")
+    if not isinstance(raw, Mapping):
+        return None
+    try:
+        count = int(raw.get("count", 0))
+        eps = float(raw.get("eps", 1e-6))
+        mean = np.asarray(raw.get("mean"), dtype=np.float32).reshape(-1)
+        m2 = np.asarray(raw.get("m2"), dtype=np.float64).reshape(-1)
+    except Exception:
+        return None
+    if count < 2 or mean.size != int(obs_dim) or m2.size != int(obs_dim):
+        return None
+    var = m2 / max(count - 1, 1)
+    std = np.sqrt(var + eps).astype(np.float32)
+    mean = np.where(np.isfinite(mean), mean, 0.0).astype(np.float32, copy=False)
+    std = np.where(np.isfinite(std) & (std > 0.0), std, 1.0).astype(np.float32, copy=False)
+    return {
+        "kind": "running_zscore",
+        "count": int(count),
+        "mean": mean,
+        "std": std,
+    }
+
+
+def _obs_normalizer_summary(normalizer: Optional[Mapping[str, Any]]) -> JsonDict:
+    if not isinstance(normalizer, Mapping):
+        return {"kind": "none", "present": False}
+    return {
+        "kind": str(normalizer.get("kind", "running_zscore")),
+        "present": True,
+        "count": int(normalizer.get("count", 0)),
+    }
+
+
+def _resolve_module(algo: str, module: str) -> str:
+    if module == "auto":
+        return "policy" if algo == "ppo" else "q"
+    if module not in {"policy", "q", "heads"}:
+        raise ValueError("module must be one of: auto, policy, q, heads")
+    return module
+
+
+class _C51Heads(torch.nn.Module):
+    def __init__(self, q: torch.nn.Module, aux_head: Optional[torch.nn.Module]):
+        super().__init__()
+        self.q = q
+        self.aux_head = aux_head
+
+    def forward(self, obs: torch.Tensor):
+        q_logits = self.q(obs)
+        if self.aux_head is None:
+            return q_logits
+        aux_logits = self.aux_head(obs)
+        return q_logits, aux_logits
+
+
+class _ObsNormalizeModule(torch.nn.Module):
+    def __init__(self, module: torch.nn.Module, mean: Sequence[float], std: Sequence[float]):
+        super().__init__()
+        self.module = module
+        self.register_buffer("mean", torch.tensor(mean, dtype=torch.float32))
+        self.register_buffer("std", torch.tensor(std, dtype=torch.float32))
+
+    def forward(self, obs: torch.Tensor):
+        return self.module((obs - self.mean) / self.std)
+
+
+def _script_module(agent: Any, module: str, *, obs_normalizer: Optional[Mapping[str, Any]] = None):
+    if module == "policy":
+        torch_module = agent.policy
+    elif module == "q":
+        torch_module = agent.q
+    elif module == "heads":
+        if not hasattr(agent, "q"):
+            raise ValueError("module=heads requires a C51-style agent with q network")
+        aux_head = getattr(agent, "aux_head", None)
+        torch_module = _C51Heads(agent.q, aux_head)
+    else:
+        raise ValueError("module must be one of: policy, q, heads")
+    if isinstance(obs_normalizer, Mapping):
+        torch_module = _ObsNormalizeModule(
+            torch_module,
+            mean=obs_normalizer.get("mean", []),
+            std=obs_normalizer.get("std", []),
+        )
+    torch_module.eval()
+    return torch.jit.script(torch_module)
+
+
+def _cxx_escape(s: str) -> str:
+    return s.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _format_cxx_float(x: float) -> str:
+    v = float(x)
+    if np.isfinite(v):
+        return f"{v:.10g}f"
+    return "0.0f"
+
+
+def _generate_cpp_header(spec: CheckpointSpec, module: str, torchscript_relpath: str) -> str:
+    n_actions = len(spec.action_values)
+    feature_keys = spec.feature_keys
+    ts_rel = _cxx_escape(torchscript_relpath)
+
+    action_values_body = ", ".join(_format_cxx_float(v) for v in spec.action_values) if n_actions else ""
+    feature_body = ", ".join(f'"{_cxx_escape(k)}"' for k in feature_keys) if feature_keys else ""
+    if n_actions > 0:
+        action_values_lines = [
+            f"inline constexpr std::array<float, {int(n_actions)}> kActionValues = {{",
+            f"    {action_values_body}",
+            "};",
+            "",
+        ]
+    else:
+        action_values_lines = [
+            "inline constexpr std::array<float, 0> kActionValues = {};",
+            "",
+        ]
+
+    if len(feature_keys) > 0:
+        feature_key_lines = [
+            f"inline constexpr std::array<const char*, {int(len(feature_keys))}> kFeatureKeys = {{",
+            f"    {feature_body}",
+            "};",
+            "",
+        ]
+    else:
+        feature_key_lines = [
+            "inline constexpr std::array<const char*, 0> kFeatureKeys = {};",
+            "",
+        ]
+
+    lines = [
+        "#pragma once",
+        "",
+        "#include <array>",
+        "#include <cstddef>",
+        "",
+        "namespace jormungandr_bundle {",
+        "",
+        "struct ModelSpec {",
+        f"  static constexpr const char* kAlgo = \"{_cxx_escape(spec.algo)}\";",
+        f"  static constexpr const char* kModule = \"{_cxx_escape(module)}\";",
+        f"  static constexpr const char* kTorchScriptRelativePath = \"{ts_rel}\";",
+        f"  static constexpr std::size_t kObsDim = {int(spec.obs_dim)};",
+        f"  static constexpr std::size_t kNumActions = {int(n_actions)};",
+        f"  static constexpr std::size_t kNumFeatureKeys = {int(len(feature_keys))};",
+        f"  static constexpr std::size_t kC51Atoms = {int(spec.atoms)};",
+        f"  static constexpr float kC51VMin = {_format_cxx_float(spec.v_min)};",
+        f"  static constexpr float kC51VMax = {_format_cxx_float(spec.v_max)};",
+        f"  static constexpr std::size_t kAuxClasses = {int(spec.aux_classes)};",
+        f"  static constexpr bool kHasAuxHead = {str(int(spec.aux_classes) > 0).lower()};",
+        "};",
+        "",
+        *action_values_lines,
+        *feature_key_lines,
+        "inline constexpr float c51_support_value(std::size_t atom_idx) {",
+        "  if (ModelSpec::kC51Atoms <= 1) return ModelSpec::kC51VMin;",
+        "  const float step = (ModelSpec::kC51VMax - ModelSpec::kC51VMin) / static_cast<float>(ModelSpec::kC51Atoms - 1);",
+        "  return ModelSpec::kC51VMin + step * static_cast<float>(atom_idx);",
+        "}",
+        "",
+        "}  // namespace jormungandr_bundle",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def export_torchscript_from_checkpoint(
+    checkpoint_path: str,
+    out_path: str,
+    module: str = "auto",
+    metadata_path: Optional[str] = None,
+) -> Dict[str, Any]:
+    ckpt = _load_checkpoint(checkpoint_path)
+    spec = _checkpoint_spec_from_payload(checkpoint_path, ckpt)
+    agent = _build_agent_from_checkpoint(ckpt, spec=spec, device="cpu")
+    obs_normalizer = _obs_normalizer_from_checkpoint(ckpt, spec.obs_dim)
+
+    resolved_module = _resolve_module(spec.algo, module)
+    scripted = _script_module(agent, resolved_module, obs_normalizer=obs_normalizer)
+
+    out_file = Path(out_path)
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+    scripted.save(str(out_file))
+
+    info = {
+        "checkpoint": str(Path(checkpoint_path).expanduser().resolve()),
+        "algo": spec.algo,
+        "module": resolved_module,
+        "obs_dim": int(spec.obs_dim),
+        "feature_keys": list(spec.feature_keys),
+        "action_values": list(spec.action_values),
+        "torchscript": str(out_file.resolve()),
+        "preprocessing": {
+            **_obs_normalizer_summary(obs_normalizer),
+            "embedded_in_artifact": bool(obs_normalizer),
+        },
+    }
+
+    meta_file = Path(metadata_path) if metadata_path else out_file.with_suffix(out_file.suffix + ".meta.json")
+    meta_file.parent.mkdir(parents=True, exist_ok=True)
+    meta_file.write_text(json.dumps(info, indent=2) + "\n", encoding="utf-8")
+    return info
+
+
+def export_inference_bundle(
+    checkpoint_path: str,
+    bundle_dir: str,
+    *,
+    module: str = "auto",
+    torchscript_name: str = "policy.ts.pt",
+    manifest_name: str = "manifest.json",
+    header_name: str = "jormungandr_model_spec.hpp",
+) -> JsonDict:
+    ckpt = _load_checkpoint(checkpoint_path)
+    spec = _checkpoint_spec_from_payload(checkpoint_path, ckpt)
+    agent = _build_agent_from_checkpoint(ckpt, spec=spec, device="cpu")
+    obs_normalizer = _obs_normalizer_from_checkpoint(ckpt, spec.obs_dim)
+    resolved_module = _resolve_module(spec.algo, module)
+
+    out_dir = Path(bundle_dir).expanduser().resolve()
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    ts_path = out_dir / torchscript_name
+    manifest_path = out_dir / manifest_name
+    header_path = out_dir / header_name
+
+    scripted = _script_module(agent, resolved_module, obs_normalizer=obs_normalizer)
+    scripted.save(str(ts_path))
+
+    manifest: JsonDict = {
+        "format": "jormungandr.inference_bundle.v1",
+        "exported_at_utc": _dt.datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+        "source": {
+            "checkpoint": str(Path(checkpoint_path).expanduser().resolve()),
+            "style": spec.style,
+            "model_id": spec.model_id,
+            "updates": int(spec.updates),
+            "policy_version": int(spec.policy_version),
+            "timestamp": float(spec.timestamp),
+        },
+        "model": {
+            "algo": spec.algo,
+            "module": resolved_module,
+            "obs_dim": int(spec.obs_dim),
+            "feature_keys": list(spec.feature_keys),
+            "action_values": list(spec.action_values),
+            "aux_classes": int(spec.aux_classes),
+            "c51": {
+                "atoms": int(spec.atoms),
+                "v_min": float(spec.v_min),
+                "v_max": float(spec.v_max),
+            },
+        },
+        "io": {
+            "input": {
+                "name": "obs",
+                "dtype": "float32",
+                "shape": ["N", int(spec.obs_dim)],
+            },
+            "output": {
+                **(
+                    {
+                        "type": "tuple",
+                        "items": [
+                            {
+                                "name": "q_logits",
+                                "dtype": "float32",
+                                "shape": ["N", len(spec.action_values), int(spec.atoms)],
+                            },
+                            {
+                                "name": "aux_logits",
+                                "dtype": "float32",
+                                "shape": ["N", int(max(0, spec.aux_classes))],
+                            },
+                        ],
+                    }
+                    if resolved_module == "heads" and spec.algo == "c51"
+                    else {
+                        "dtype": "float32",
+                        "shape": (
+                            ["N", len(spec.action_values), int(spec.atoms)]
+                            if resolved_module == "q" and spec.algo == "c51"
+                            else ["N", len(spec.action_values)]
+                        ),
+                    }
+                ),
+            },
+        },
+        "preprocessing": {
+            **_obs_normalizer_summary(obs_normalizer),
+            "embedded_in_artifact": bool(obs_normalizer),
+        },
+        "artifacts": {
+            "torchscript": ts_path.name,
+            "header": header_path.name,
+        },
+    }
+
+    header = _generate_cpp_header(
+        spec=spec,
+        module=resolved_module,
+        torchscript_relpath=ts_path.name,
+    )
+
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    header_path.write_text(header, encoding="utf-8")
+
+    return {
+        "ok": True,
+        "bundle_dir": str(out_dir),
+        "manifest": str(manifest_path),
+        "torchscript": str(ts_path),
+        "header": str(header_path),
+        "model": manifest["model"],
+    }
+
+
+def _inference_from_checkpoint(ckpt: Mapping[str, Any], spec: CheckpointSpec, obs: np.ndarray) -> JsonDict:
+    agent = _build_agent_from_checkpoint(ckpt, spec=spec, device="cpu")
+    obs_np = np.asarray(obs, dtype=np.float32)
+    if obs_np.ndim != 2:
+        raise ValueError("obs must be a 2D array [N, obs_dim]")
+    if obs_np.shape[1] != int(spec.obs_dim):
+        raise ValueError(f"obs dim mismatch: got {obs_np.shape[1]}, expected {spec.obs_dim}")
+    obs_normalizer = _obs_normalizer_from_checkpoint(ckpt, spec.obs_dim)
+    if isinstance(obs_normalizer, Mapping):
+        mean = np.asarray(obs_normalizer.get("mean", []), dtype=np.float32).reshape(1, -1)
+        std = np.asarray(obs_normalizer.get("std", []), dtype=np.float32).reshape(1, -1)
+        obs_np = (obs_np - mean) / std
+
+    obs_t = torch.tensor(obs_np, dtype=torch.float32, device=agent.device)
+    out: JsonDict = {
+        "algo": spec.algo,
+        "obs_rows": int(obs_np.shape[0]),
+        "preprocessing": _obs_normalizer_summary(obs_normalizer),
+    }
+
+    if spec.algo == "c51":
+        with torch.no_grad():
+            logits = agent.q(obs_t)
+            probs = torch.softmax(logits, dim=-1)
+            q_vals = agent._q_values(probs)
+            action_idx = torch.argmax(q_vals, dim=-1)
+            action_vals_t = torch.tensor(spec.action_values, dtype=torch.float32, device=agent.device)
+            actions = action_vals_t[action_idx]
+        out.update(
+            {
+                "q_values": q_vals.detach().cpu().numpy().tolist(),
+                "action_idx": action_idx.detach().cpu().numpy().tolist(),
+                "action": actions.detach().cpu().numpy().tolist(),
+            }
+        )
+        return out
+
+    with torch.no_grad():
+        logits = agent.policy(obs_t)
+    if spec.action_values:
+        idx = torch.argmax(logits, dim=-1)
+        action_vals_t = torch.tensor(spec.action_values, dtype=torch.float32, device=agent.device)
+        actions = action_vals_t[idx]
+        out.update(
+            {
+                "policy_logits": logits.detach().cpu().numpy().tolist(),
+                "action_idx": idx.detach().cpu().numpy().tolist(),
+                "action": actions.detach().cpu().numpy().tolist(),
+            }
+        )
+        return out
+
+    actions = torch.tanh(logits)
+    out.update(
+        {
+            "policy_logits": logits.detach().cpu().numpy().tolist(),
+            "action": actions.detach().cpu().numpy().reshape(-1).tolist(),
+        }
+    )
+    return out
+
+
+def compare_checkpoints(
+    left_checkpoint: str,
+    right_checkpoint: str,
+    *,
+    obs: Optional[np.ndarray] = None,
+    num_obs: int = 64,
+    seed: int = 7,
+) -> JsonDict:
+    left_payload = _load_checkpoint(left_checkpoint)
+    right_payload = _load_checkpoint(right_checkpoint)
+
+    left_spec = _checkpoint_spec_from_payload(left_checkpoint, left_payload)
+    right_spec = _checkpoint_spec_from_payload(right_checkpoint, right_payload)
+
+    if int(left_spec.obs_dim) <= 0 or int(right_spec.obs_dim) <= 0:
+        raise ValueError("could not infer obs_dim from one or both checkpoints")
+    if int(left_spec.obs_dim) != int(right_spec.obs_dim):
+        raise ValueError(
+            f"obs_dim mismatch: left={left_spec.obs_dim} right={right_spec.obs_dim}; provide matching checkpoints"
+        )
+
+    if obs is None:
+        rng = np.random.default_rng(int(seed))
+        obs_np = rng.standard_normal(size=(int(num_obs), int(left_spec.obs_dim))).astype(np.float32)
+    else:
+        obs_np = np.asarray(obs, dtype=np.float32)
+        if obs_np.ndim == 1:
+            obs_np = obs_np.reshape(1, -1)
+
+    left_inf = _inference_from_checkpoint(left_payload, left_spec, obs_np)
+    right_inf = _inference_from_checkpoint(right_payload, right_spec, obs_np)
+
+    summary: JsonDict = {
+        "obs_rows": int(obs_np.shape[0]),
+        "obs_dim": int(obs_np.shape[1]),
+        "left": {
+            "checkpoint": str(Path(left_checkpoint).expanduser().resolve()),
+            "algo": left_spec.algo,
+            "updates": int(left_spec.updates),
+            "policy_version": int(left_spec.policy_version),
+        },
+        "right": {
+            "checkpoint": str(Path(right_checkpoint).expanduser().resolve()),
+            "algo": right_spec.algo,
+            "updates": int(right_spec.updates),
+            "policy_version": int(right_spec.policy_version),
+        },
+        "comparisons": {},
+    }
+
+    left_actions = np.asarray(left_inf.get("action", []), dtype=np.float32).reshape(-1)
+    right_actions = np.asarray(right_inf.get("action", []), dtype=np.float32).reshape(-1)
+    if left_actions.size == right_actions.size and left_actions.size > 0:
+        summary["comparisons"]["action_mae"] = float(np.mean(np.abs(left_actions - right_actions)))
+
+    left_idx = left_inf.get("action_idx")
+    right_idx = right_inf.get("action_idx")
+    if left_idx is not None and right_idx is not None:
+        li = np.asarray(left_idx, dtype=np.int64).reshape(-1)
+        ri = np.asarray(right_idx, dtype=np.int64).reshape(-1)
+        if li.size == ri.size and li.size > 0:
+            summary["comparisons"]["action_match_rate"] = float(np.mean(li == ri))
+
+    left_q = left_inf.get("q_values")
+    right_q = right_inf.get("q_values")
+    if left_q is not None and right_q is not None:
+        lq = np.asarray(left_q, dtype=np.float32)
+        rq = np.asarray(right_q, dtype=np.float32)
+        if lq.shape == rq.shape and lq.size > 0:
+            diff = np.abs(lq - rq)
+            summary["comparisons"]["q_mae"] = float(np.mean(diff))
+            summary["comparisons"]["q_max_abs"] = float(np.max(diff))
+
+    left_logits = left_inf.get("policy_logits")
+    right_logits = right_inf.get("policy_logits")
+    if left_logits is not None and right_logits is not None:
+        ll = np.asarray(left_logits, dtype=np.float32)
+        rl = np.asarray(right_logits, dtype=np.float32)
+        if ll.shape == rl.shape and ll.size > 0:
+            diff = np.abs(ll - rl)
+            summary["comparisons"]["policy_logits_mae"] = float(np.mean(diff))
+            summary["comparisons"]["policy_logits_max_abs"] = float(np.max(diff))
+
+    return {
+        "ok": True,
+        "summary": summary,
+    }
+
+
+def load_obs_json(path: str) -> np.ndarray:
+    raw = json.loads(Path(path).read_text(encoding="utf-8"))
+    if isinstance(raw, dict) and "obs" in raw:
+        raw = raw["obs"]
+    arr = np.asarray(raw, dtype=np.float32)
+    if arr.ndim == 1:
+        arr = arr.reshape(1, -1)
+    if arr.ndim != 2:
+        raise ValueError("obs json must be a 1D or 2D numeric array")
+    return arr

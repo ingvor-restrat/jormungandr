@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jormungandr-rl"
+version = "0.1.0"
+description = "A distributed actor, central learner reinforcement-learning framework"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+authors = [{ name = "Strategynet" }]
+keywords = ["reinforcement-learning", "distributed", "pytorch", "inference"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "numpy>=1.24",
+    "torch>=2.2",
+    "tensorboard>=2.15",
+]
+
+[project.optional-dependencies]
+dev = [
+    "build>=1.2",
+    "pytest>=8.0",
+]
+record = [
+    "Pillow>=10.0",
+]
+
+[project.scripts]
+jormungandr-service = "jormungandr.service:main"
+jormungandr-export = "jormungandr.cli_export:main"
+
+[project.urls]
+Repository = "https://github.com/ingvor-restrat/jormungandr"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+pythonpath = ["src"]
+testpaths = ["tests"]
