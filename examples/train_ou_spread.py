@@ -1,7 +1,7 @@
 """Train multiple actors on a synthetic mean-reverting spread.
 
 This is a financial research illustration, not a market-data example or a
-trading recommendation.  The actors communicate with Jormungandr exclusively
+trading recommendation.  The actors communicate with Jörmungandr exclusively
 through its public HTTP API.
 """
 
@@ -552,7 +552,7 @@ def render_dashboard(
     validation_rows = [row for row in results if row.split == "validation"]
 
     lines = [
-        bold("JORMUNGANDR  /  DISTRIBUTED OU SPREAD LEARNER"),
+        bold("JÖRMUNGANDR  /  DISTRIBUTED OU SPREAD LEARNER"),
         dim("synthetic research path · C51 + auxiliary drift head · no market data"),
         "",
         f"progress  {len(results):>3}/{len(jobs):<3} episodes   "

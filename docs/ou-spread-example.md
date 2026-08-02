@@ -1,6 +1,6 @@
 # Synthetic OU Spread Example
 
-The OU spread trainer gives Jormungandr a financial research shape while
+The OU spread trainer gives Jörmungandr a financial research shape while
 remaining entirely public and synthetic. It launches one local learner service
 and multiple actor threads:
 
@@ -108,7 +108,7 @@ The first integration should still use a declared, fixed action vocabulary.
 Option-strategy actions might be templates such as wait, resize risk, roll a
 leg, or close a structure. Contract selection, lifecycle rules, payoff
 semantics, and scenario generation remain Volt responsibilities. If actions
-must be state-dependent exact contracts, Jormungandr will need an explicit
+must be state-dependent exact contracts, Jörmungandr will need an explicit
 candidate-scoring and masking contract rather than hidden strategy logic.
 
 The recording workflow is documented in

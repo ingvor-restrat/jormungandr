@@ -9,10 +9,17 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 import numpy as np
 import torch
 
-from jormungandr.core import C51Agent, PPOAgent
+from jormungandr.algorithms import algorithm_registry, canonical_algorithm_name
 
 
 JsonDict = Dict[str, Any]
+
+
+def _first_not_none(*values: Any, default: Any) -> Any:
+    for value in values:
+        if value is not None:
+            return value
+    return default
 
 
 @dataclass
@@ -30,6 +37,9 @@ class CheckpointSpec:
     v_min: float
     v_max: float
     atoms: int
+    quantiles: int
+    quantile_risk_measure: str
+    quantile_risk_level: float
     target_update: int
     aux_classes: int
     action_values: List[float]
@@ -53,6 +63,9 @@ class CheckpointSpec:
             "v_min": float(self.v_min),
             "v_max": float(self.v_max),
             "atoms": int(self.atoms),
+            "quantiles": int(self.quantiles),
+            "quantile_risk_measure": self.quantile_risk_measure,
+            "quantile_risk_level": float(self.quantile_risk_level),
             "target_update": int(self.target_update),
             "aux_classes": int(self.aux_classes),
             "action_values": list(self.action_values),
@@ -124,6 +137,8 @@ def _checkpoint_spec_from_payload(checkpoint_path: str, ckpt: Mapping[str, Any])
     learner_cfg = ckpt.get("learner_config") or {}
     train_cfg = ckpt.get("train_config") or {}
     agent_state = ckpt.get("agent") or {}
+    plugin_cfg_raw = learner_cfg.get("plugin_config")
+    plugin_cfg = plugin_cfg_raw if isinstance(plugin_cfg_raw, Mapping) else {}
 
     algo = str(ckpt.get("algo") or learner_cfg.get("algo") or train_cfg.get("algo") or "").strip().lower()
     if not algo:
@@ -142,7 +157,8 @@ def _checkpoint_spec_from_payload(checkpoint_path: str, ckpt: Mapping[str, Any])
     )
 
     hidden = int(
-        model_spec.get("hidden")
+        plugin_cfg.get("hidden")
+        or model_spec.get("hidden")
         or learner_cfg.get("hidden")
         or train_cfg.get("hidden")
         or _first_linear_hidden(agent_state)
@@ -150,54 +166,113 @@ def _checkpoint_spec_from_payload(checkpoint_path: str, ckpt: Mapping[str, Any])
     )
 
     aux_hidden = int(
-        model_spec.get("aux_hidden")
+        plugin_cfg.get("aux_hidden")
+        or model_spec.get("aux_hidden")
         or learner_cfg.get("aux_hidden")
         or train_cfg.get("aux_hidden")
         or _aux_linear_hidden(agent_state)
         or 0
     )
 
-    lr = float(model_spec.get("lr") or learner_cfg.get("lr") or train_cfg.get("lr") or 1e-4)
-    max_grad = float(
-        model_spec.get("max_grad") or learner_cfg.get("max_grad") or train_cfg.get("max_grad") or 1.0
+    lr = float(
+        plugin_cfg.get("lr")
+        or model_spec.get("lr")
+        or learner_cfg.get("lr")
+        or train_cfg.get("lr")
+        or 1e-4
     )
-    gamma = float(model_spec.get("gamma") or learner_cfg.get("gamma") or train_cfg.get("gamma") or 0.99)
+    max_grad = float(
+        _first_not_none(
+            plugin_cfg.get("max_grad"),
+            model_spec.get("max_grad"),
+            learner_cfg.get("max_grad"),
+            train_cfg.get("max_grad"),
+            default=1.0,
+        )
+    )
+    gamma = float(
+        _first_not_none(
+            plugin_cfg.get("gamma"),
+            model_spec.get("gamma"),
+            learner_cfg.get("gamma"),
+            train_cfg.get("gamma"),
+            default=0.99,
+        )
+    )
     v_min = float(
-        ckpt.get("v_min")
-        or model_spec.get("v_min")
-        or learner_cfg.get("v_min")
-        or train_cfg.get("v_min")
-        or -10.0
+        _first_not_none(
+            plugin_cfg.get("v_min"),
+            ckpt.get("v_min"),
+            model_spec.get("v_min"),
+            learner_cfg.get("v_min"),
+            train_cfg.get("v_min"),
+            default=-10.0,
+        )
     )
     v_max = float(
-        ckpt.get("v_max")
-        or model_spec.get("v_max")
-        or learner_cfg.get("v_max")
-        or train_cfg.get("v_max")
-        or 10.0
+        _first_not_none(
+            plugin_cfg.get("v_max"),
+            ckpt.get("v_max"),
+            model_spec.get("v_max"),
+            learner_cfg.get("v_max"),
+            train_cfg.get("v_max"),
+            default=10.0,
+        )
     )
     atoms = int(
-        ckpt.get("atoms")
+        plugin_cfg.get("atoms")
+        or ckpt.get("atoms")
         or model_spec.get("atoms")
         or learner_cfg.get("atoms")
         or train_cfg.get("atoms")
         or 51
     )
+    quantiles = int(
+        plugin_cfg.get("quantiles")
+        or model_spec.get("quantiles")
+        or learner_cfg.get("quantiles")
+        or train_cfg.get("quantiles")
+        or 51
+    )
+    quantile_risk_measure = str(
+        plugin_cfg.get("quantile_risk_measure")
+        or model_spec.get("quantile_risk_measure")
+        or learner_cfg.get("quantile_risk_measure")
+        or train_cfg.get("quantile_risk_measure")
+        or "mean"
+    )
+    quantile_risk_level = float(
+        plugin_cfg.get("quantile_risk_level")
+        or model_spec.get("quantile_risk_level")
+        or learner_cfg.get("quantile_risk_level")
+        or train_cfg.get("quantile_risk_level")
+        or 0.1
+    )
     target_update = int(
-        model_spec.get("target_update")
+        plugin_cfg.get("target_update")
+        or model_spec.get("target_update")
         or learner_cfg.get("target_update")
         or train_cfg.get("target_update")
         or 1000
     )
 
     aux_classes = int(
-        model_spec.get("aux_classes")
+        plugin_cfg.get("aux_classes")
+        or model_spec.get("aux_classes")
         or learner_cfg.get("aux_classes")
         or train_cfg.get("aux_classes")
         or 0
     )
+    aux_enabled = plugin_cfg.get("aux_enabled", learner_cfg.get("aux_enabled"))
+    if style == "service" and aux_enabled is False:
+        aux_classes = 0
 
-    action_values = ckpt.get("action_values") or learner_cfg.get("action_values") or train_cfg.get("action_values")
+    action_values = (
+        plugin_cfg.get("action_values")
+        or ckpt.get("action_values")
+        or learner_cfg.get("action_values")
+        or train_cfg.get("action_values")
+    )
     if action_values is None:
         action_values = [-1.0, 0.0, 1.0]
     action_values = [float(x) for x in action_values]
@@ -221,6 +296,9 @@ def _checkpoint_spec_from_payload(checkpoint_path: str, ckpt: Mapping[str, Any])
         v_min=v_min,
         v_max=v_max,
         atoms=atoms,
+        quantiles=quantiles,
+        quantile_risk_measure=quantile_risk_measure,
+        quantile_risk_level=quantile_risk_level,
         target_update=target_update,
         aux_classes=aux_classes,
         action_values=action_values,
@@ -240,58 +318,81 @@ def inspect_checkpoint(checkpoint_path: str) -> JsonDict:
         "ok": True,
         "spec": spec.to_dict(),
         "preprocessing": _obs_normalizer_summary(obs_normalizer),
+        "algorithm_plugin": dict(ckpt.get("algorithm_plugin") or {}),
+        "replay_selector": dict(ckpt.get("replay_selector") or {}),
         "top_level_keys": top_keys,
     }
 
 
-def _build_agent_from_checkpoint(ckpt: Mapping[str, Any], spec: CheckpointSpec, device: str = "cpu"):
-    if spec.algo == "ppo":
-        aux_classes = int(spec.aux_classes)
-        if aux_classes <= 0 and isinstance(ckpt.get("agent"), dict) and "aux_head" in ckpt["agent"]:
-            aux_classes = 3
-        agent = PPOAgent(
-            obs_dim=int(spec.obs_dim),
-            hidden=int(spec.hidden),
-            aux_hidden=int(spec.aux_hidden),
-            lr=float(spec.lr),
-            clip=float((ckpt.get("model_spec") or {}).get("ppo_clip", 0.2)),
-            entropy_coef=float((ckpt.get("model_spec") or {}).get("ppo_entropy", 0.01)),
-            value_coef=float((ckpt.get("model_spec") or {}).get("ppo_value", 0.5)),
-            max_grad_norm=float(spec.max_grad),
-            log_std_init=0.0,
-            device=device,
-            action_values=[float(x) for x in spec.action_values] if spec.action_values else None,
-            aux_classes=aux_classes,
-        )
-    elif spec.algo == "c51":
-        if not spec.action_values:
-            raise ValueError("c51 checkpoint has empty action_values")
-        aux_classes = int(spec.aux_classes)
-        if aux_classes <= 0 and isinstance(ckpt.get("agent"), dict) and "aux_head" in ckpt["agent"]:
-            aux_classes = 3
-        agent = C51Agent(
-            obs_dim=int(spec.obs_dim),
-            num_actions=len(spec.action_values),
-            action_values=[float(x) for x in spec.action_values],
-            hidden=int(spec.hidden),
-            aux_hidden=int(spec.aux_hidden),
-            lr=float(spec.lr),
-            gamma=float(spec.gamma),
-            v_min=float(spec.v_min),
-            v_max=float(spec.v_max),
-            atoms=int(spec.atoms),
-            target_update=int(spec.target_update),
-            max_grad_norm=float(spec.max_grad),
-            device=device,
-            aux_classes=aux_classes,
-        )
-    else:
-        raise ValueError(f"unsupported algo in checkpoint: {spec.algo}")
-
+def _build_agent_from_checkpoint(
+    ckpt: Mapping[str, Any],
+    spec: CheckpointSpec,
+    device: str = "cpu",
+    *,
+    load_optimizer: bool = False,
+):
     if "agent" not in ckpt:
         raise ValueError("checkpoint payload is missing 'agent' state")
+    learner_config = dict(ckpt.get("learner_config") or {})
+    model_spec = dict(ckpt.get("model_spec") or {})
+    learner_config.update(
+        {
+            "algo": spec.algo,
+            "action_values": list(spec.action_values),
+            "hidden": int(spec.hidden),
+            "aux_hidden": int(spec.aux_hidden),
+            "lr": float(spec.lr),
+            "gamma": float(spec.gamma),
+            "v_min": float(spec.v_min),
+            "v_max": float(spec.v_max),
+            "atoms": int(spec.atoms),
+            "quantiles": int(spec.quantiles),
+            "quantile_risk_measure": spec.quantile_risk_measure,
+            "quantile_risk_level": float(spec.quantile_risk_level),
+            "target_update": int(spec.target_update),
+            "max_grad": float(spec.max_grad),
+            "aux_enabled": bool(spec.aux_classes > 0),
+            "aux_classes": int(spec.aux_classes),
+        }
+    )
+    # Translate the original standalone PPO checkpoint vocabulary.
+    if "ppo_clip" in model_spec:
+        learner_config.setdefault("clip_ratio", model_spec["ppo_clip"])
+    if "ppo_entropy" in model_spec:
+        learner_config.setdefault("entropy_coef", model_spec["ppo_entropy"])
+    if "ppo_value" in model_spec:
+        learner_config.setdefault("value_coef", model_spec["ppo_value"])
+    try:
+        plugin = algorithm_registry.get(spec.algo)
+    except KeyError as exc:
+        raise ValueError(str(exc)) from exc
+    saved_plugin = ckpt.get("algorithm_plugin")
+    if isinstance(saved_plugin, Mapping):
+        saved_name = canonical_algorithm_name(str(saved_plugin.get("name", "")))
+        if saved_name and saved_name != canonical_algorithm_name(spec.algo):
+            raise ValueError(
+                f"checkpoint algorithm plugin {saved_name!r} does not match "
+                f"payload algorithm {spec.algo!r}"
+            )
+        saved_version = str(saved_plugin.get("version", "")).strip()
+        if saved_version and saved_version != plugin.version:
+            raise ValueError(
+                f"checkpoint requires {plugin.name}@{saved_version}, but the "
+                f"installed plugin is {plugin.checkpoint_id}; install a compatible "
+                "plugin or migrate the checkpoint"
+            )
+    agent = plugin.build(int(spec.obs_dim), learner_config, device)
     agent_state = dict(ckpt["agent"])
-    agent_state.pop("opt", None)
+    if not load_optimizer:
+        for key in (
+            "opt",
+            "actor_opt",
+            "critic_opt",
+            "alpha_opt",
+            "world_opt",
+            "value_opt",
+        ):
+            agent_state.pop(key, None)
     agent.load_state_dict(agent_state)
     return agent
 
@@ -333,7 +434,10 @@ def _obs_normalizer_summary(normalizer: Optional[Mapping[str, Any]]) -> JsonDict
 
 def _resolve_module(algo: str, module: str) -> str:
     if module == "auto":
-        return "policy" if algo == "ppo" else "q"
+        try:
+            return algorithm_registry.get(algo).default_export_module
+        except KeyError as exc:
+            raise ValueError(str(exc)) from exc
     if module not in {"policy", "q", "heads"}:
         raise ValueError("module must be one of: auto, policy, q, heads")
     return module
@@ -365,10 +469,16 @@ class _ObsNormalizeModule(torch.nn.Module):
 
 
 def _script_module(agent: Any, module: str, *, obs_normalizer: Optional[Mapping[str, Any]] = None):
-    if module == "policy":
+    if hasattr(agent, "export_module"):
+        torch_module = agent.export_module(module)
+    elif module == "policy":
         torch_module = agent.policy
     elif module == "q":
-        torch_module = agent.q
+        torch_module = getattr(agent, "q", None)
+        if torch_module is None:
+            torch_module = getattr(agent, "q1", None)
+        if torch_module is None:
+            raise ValueError("module=q requires an agent with a q or q1 network")
     elif module == "heads":
         if not hasattr(agent, "q"):
             raise ValueError("module=heads requires a C51-style agent with q network")
@@ -446,6 +556,9 @@ def _generate_cpp_header(spec: CheckpointSpec, module: str, torchscript_relpath:
         f"  static constexpr std::size_t kNumActions = {int(n_actions)};",
         f"  static constexpr std::size_t kNumFeatureKeys = {int(len(feature_keys))};",
         f"  static constexpr std::size_t kC51Atoms = {int(spec.atoms)};",
+        f"  static constexpr std::size_t kQuantiles = {int(spec.quantiles)};",
+        f"  static constexpr const char* kQuantileRiskMeasure = \"{_cxx_escape(spec.quantile_risk_measure)}\";",
+        f"  static constexpr float kQuantileRiskLevel = {_format_cxx_float(spec.quantile_risk_level)};",
         f"  static constexpr float kC51VMin = {_format_cxx_float(spec.v_min)};",
         f"  static constexpr float kC51VMax = {_format_cxx_float(spec.v_max)};",
         f"  static constexpr std::size_t kAuxClasses = {int(spec.aux_classes)};",
@@ -552,6 +665,11 @@ def export_inference_bundle(
                 "v_min": float(spec.v_min),
                 "v_max": float(spec.v_max),
             },
+            "quantile": {
+                "count": int(spec.quantiles),
+                "risk_measure": spec.quantile_risk_measure,
+                "risk_level": float(spec.quantile_risk_level),
+            },
         },
         "io": {
             "input": {
@@ -582,7 +700,11 @@ def export_inference_bundle(
                         "shape": (
                             ["N", len(spec.action_values), int(spec.atoms)]
                             if resolved_module == "q" and spec.algo == "c51"
-                            else ["N", len(spec.action_values)]
+                            else (
+                                ["N", len(spec.action_values), int(spec.quantiles)]
+                                if resolved_module == "q" and spec.algo == "qrdqn"
+                                else ["N", len(spec.action_values)]
+                            )
                         ),
                     }
                 ),
@@ -630,52 +752,35 @@ def _inference_from_checkpoint(ckpt: Mapping[str, Any], spec: CheckpointSpec, ob
         std = np.asarray(obs_normalizer.get("std", []), dtype=np.float32).reshape(1, -1)
         obs_np = (obs_np - mean) / std
 
-    obs_t = torch.tensor(obs_np, dtype=torch.float32, device=agent.device)
     out: JsonDict = {
         "algo": spec.algo,
         "obs_rows": int(obs_np.shape[0]),
         "preprocessing": _obs_normalizer_summary(obs_normalizer),
     }
 
-    if spec.algo == "c51":
-        with torch.no_grad():
-            logits = agent.q(obs_t)
-            probs = torch.softmax(logits, dim=-1)
-            q_vals = agent._q_values(probs)
-            action_idx = torch.argmax(q_vals, dim=-1)
-            action_vals_t = torch.tensor(spec.action_values, dtype=torch.float32, device=agent.device)
-            actions = action_vals_t[action_idx]
-        out.update(
-            {
-                "q_values": q_vals.detach().cpu().numpy().tolist(),
-                "action_idx": action_idx.detach().cpu().numpy().tolist(),
-                "action": actions.detach().cpu().numpy().tolist(),
-            }
+    if not hasattr(agent, "inference_batch"):
+        raise ValueError(
+            f"algorithm plugin {spec.algo} does not expose checkpoint comparison inference"
         )
-        return out
-
-    with torch.no_grad():
-        logits = agent.policy(obs_t)
-    if spec.action_values:
-        idx = torch.argmax(logits, dim=-1)
-        action_vals_t = torch.tensor(spec.action_values, dtype=torch.float32, device=agent.device)
-        actions = action_vals_t[idx]
-        out.update(
-            {
-                "policy_logits": logits.detach().cpu().numpy().tolist(),
-                "action_idx": idx.detach().cpu().numpy().tolist(),
-                "action": actions.detach().cpu().numpy().tolist(),
-            }
-        )
-        return out
-
-    actions = torch.tanh(logits)
-    out.update(
-        {
-            "policy_logits": logits.detach().cpu().numpy().tolist(),
-            "action": actions.detach().cpu().numpy().reshape(-1).tolist(),
-        }
+    results = agent.inference_batch(
+        obs_np,
+        deterministic=True,
+        epsilon=0.0,
+        action_masks=None,
     )
+    out["action"] = [float(item.action) for item in results]
+    out["action_idx"] = [int(item.action_idx) for item in results]
+    for key in (
+        "q_values",
+        "risk_values",
+        "quantiles",
+        "policy_logits",
+        "policy_probs",
+    ):
+        if results and all(key in item.extras for item in results):
+            out[key] = [item.extras[key] for item in results]
+    if results and all(item.value is not None for item in results):
+        out["value"] = [float(item.value) for item in results]
     return out
 
 
@@ -761,6 +866,30 @@ def compare_checkpoints(
             diff = np.abs(ll - rl)
             summary["comparisons"]["policy_logits_mae"] = float(np.mean(diff))
             summary["comparisons"]["policy_logits_max_abs"] = float(np.max(diff))
+
+    left_risk = left_inf.get("risk_values")
+    right_risk = right_inf.get("risk_values")
+    if left_risk is not None and right_risk is not None:
+        lrisk = np.asarray(left_risk, dtype=np.float32)
+        rrisk = np.asarray(right_risk, dtype=np.float32)
+        if lrisk.shape == rrisk.shape and lrisk.size > 0:
+            summary["comparisons"]["risk_value_mae"] = float(
+                np.mean(np.abs(lrisk - rrisk))
+            )
+
+    left_quantiles = left_inf.get("quantiles")
+    right_quantiles = right_inf.get("quantiles")
+    if left_quantiles is not None and right_quantiles is not None:
+        lquantiles = np.sort(
+            np.asarray(left_quantiles, dtype=np.float32), axis=-1
+        )
+        rquantiles = np.sort(
+            np.asarray(right_quantiles, dtype=np.float32), axis=-1
+        )
+        if lquantiles.shape == rquantiles.shape and lquantiles.size > 0:
+            summary["comparisons"]["quantile_mae"] = float(
+                np.mean(np.abs(lquantiles - rquantiles))
+            )
 
     return {
         "ok": True,

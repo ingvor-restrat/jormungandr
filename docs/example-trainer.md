@@ -19,7 +19,7 @@ python examples/train_synthetic_control.py \
 ```
 
 The default run launches two actor threads, eight training episodes, and two
-validation episodes against a local Jormungandr HTTP service.
+validation episodes against a local Jörmungandr HTTP service.
 
 ## What it demonstrates
 
@@ -34,13 +34,13 @@ The example owns the pieces that belong to a trainer:
 - train/validation assignment;
 - experiment metadata and episode summaries.
 
-Jormungandr owns:
+Jörmungandr owns:
 
 - model and policy versions;
 - prioritized training replay;
 - the isolated validation store;
 - training-only observation normalization;
-- learner and target-network updates;
+- selected algorithm and target/value-network updates;
 - auxiliary fitting and validation;
 - inference and checkpoints.
 
@@ -80,9 +80,9 @@ bounded tracking objective:
 
 The auxiliary target classifies whether the future synthetic target moves
 down, stays approximately flat, or moves up. Labels are submitted after their
-transitions to exercise Jormungandr's delayed-label join.
+transitions to exercise Jörmungandr's delayed-label join.
 
-Nothing about this environment is part of Jormungandr. It can be replaced by
+Nothing about this environment is part of Jörmungandr. It can be replaced by
 any adapter that implements the same episode boundary.
 
 ## Interleaved splits
@@ -108,7 +108,7 @@ order cannot change its training or validation meaning.
 
 Validation episodes use deterministic actions. Training episodes use
 epsilon-greedy exploration. Both are sent to the same experience endpoint;
-Jormungandr enforces the split boundary.
+Jörmungandr enforces the split boundary.
 
 ## Outputs
 
@@ -135,12 +135,12 @@ the [synthetic OU spread trainer](ou-spread-example.md).
 ## Adapter boundary for Volt
 
 A future Volt trainer should preserve the same ownership boundary.
-Jormungandr should not import option-market policy or redefine Volt's
+Jörmungandr should not import option-market policy or redefine Volt's
 contracts. A Rust actor can instead:
 
 1. construct a canonical Volt portfolio and versioned scenario;
 2. derive a fixed observation vector from the portfolio and market view;
-3. request an action from Jormungandr;
+3. request an action from Jörmungandr;
 4. translate the action index into a typed Volt candidate action;
 5. execute the transition through Volt's deterministic lifecycle/scenario
    logic;
@@ -152,21 +152,47 @@ starts. Transitions from one scenario must not be divided across training and
 validation, because that would leak the same path into both stores.
 
 Volt's current candidate grammar includes actions such as adding, removing, or
-resizing a leg, waiting, and exercising. Jormungandr 0.1 uses a fixed discrete
-action vocabulary, while Volt may compile a state-dependent set of exact
-contracts. The first integration therefore needs one explicit choice:
+resizing a leg, waiting, and exercising. Volt's runtime graph retains every
+action slot and its composed legal mask. Jörmungandr's inference and
+experience contracts now apply masks to a fixed discrete vocabulary. The next
+service integration still needs one explicit choice:
 
 - define a bounded, fixed set of option-strategy action templates and masks;
   or
-- extend Jormungandr with state-dependent action descriptors and candidate
+- extend Jörmungandr with state-dependent action descriptors and candidate
   scoring.
 
 The fixed-template route is the smaller first experiment. Dynamic candidate
 scoring is the more general architecture and should be designed as a public
 contract rather than hidden in a Volt-specific actor.
 
-Variable-size portfolio graphs present a similar boundary. The initial C51
-learner expects a fixed observation vector. A first adapter can use declared
-portfolio summary features; a later learner may consume Volt's graph view
-through a graph encoder without changing experience provenance or split
-semantics.
+Variable-size portfolio graphs present a similar boundary. Offline Volt
+research trains both Deep Sets and typed graph encoders. Deep Sets is the
+default for the first sequential experiment; configuration can select the
+graph encoder without changing the policy/value output contract. The first
+fixed-vector adapter can freeze the selected encoder, append declared runtime and
+account summaries, and send the resulting vector through the existing
+experience contract. This supports staged entry, hold/close, and bounded
+hedge/resize experiments with a fixed action vocabulary.
+
+Roll and replacement actions depend on the contracts available in each state.
+Aligned legal masks are transported now; dynamic action descriptors and
+graph-native batches still require an explicit codec and shared action
+scoring. End-to-end graph-encoder updates can use the same actor provenance
+and split rules, but require a graph-shaped inference and replay contract
+rather than hiding variable action semantics inside a fixed observation
+vector.
+
+For dynamic candidate scoring, a compatible model emits a matrix of action
+logits, an aligned legal mask, and one state value per observation.
+`jormungandr.policy.masked_actor_critic_loss` supplies the common learner-side
+objective. The encoder may be Deep Sets, a typed GNN, or a later attention
+model; encoder choice does not change the financial action identifiers.
+
+Variable observations can be retained by reference with
+`GraphTrajectoryBuffer`. Each step records the external graph identifier,
+legal mask, chosen slot, reward, terminal flag, behavior log probability,
+value estimate, and policy version. Finishing the buffer computes
+generalized-advantage and return targets while the domain adapter remains
+responsible for resolving graph identifiers to tensors. This in-memory
+facility does not change the fixed-vector HTTP experience schema.

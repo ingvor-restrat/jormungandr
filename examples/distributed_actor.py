@@ -1,4 +1,4 @@
-"""Send interleaved training and validation experience to Jormungandr."""
+"""Send interleaved training and validation experience to Jörmungandr."""
 
 from __future__ import annotations
 

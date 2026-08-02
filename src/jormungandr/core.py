@@ -770,10 +770,20 @@ class C51Agent:
         next_obs: torch.Tensor,
         reward: torch.Tensor,
         done: torch.Tensor,
+        next_action_mask: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """Project the target distribution onto this agent's fixed support."""
         next_dist_all = self.target.dist(next_obs)
         next_q = self._q_values(next_dist_all)
+        if next_action_mask is not None:
+            if next_action_mask.shape != next_q.shape:
+                raise ValueError(
+                    "next_action_mask must have shape "
+                    f"{tuple(next_q.shape)}, received {tuple(next_action_mask.shape)}"
+                )
+            if not torch.all(next_action_mask.any(dim=1)):
+                raise ValueError("each next_action_mask row must admit at least one action")
+            next_q = next_q.masked_fill(~next_action_mask, -torch.inf)
         next_actions = torch.argmax(next_q, dim=-1)
         row = torch.arange(next_dist_all.size(0), device=self.device)
         next_dist = next_dist_all[row, next_actions]
@@ -801,14 +811,41 @@ class C51Agent:
         )
         return projected
 
-    def act(self, obs: np.ndarray, epsilon: float = 0.0, deterministic: bool = False):
+    def act(
+        self,
+        obs: np.ndarray,
+        epsilon: float = 0.0,
+        deterministic: bool = False,
+        action_mask: Optional[np.ndarray] = None,
+    ):
+        legal_indices: Optional[np.ndarray] = None
+        if action_mask is not None:
+            mask = np.asarray(action_mask, dtype=np.bool_).reshape(-1)
+            if mask.shape != (len(self.action_values),):
+                raise ValueError(
+                    "action_mask must have shape "
+                    f"({len(self.action_values)},), received {mask.shape}"
+                )
+            legal_indices = np.flatnonzero(mask)
+            if legal_indices.size == 0:
+                raise ValueError("action_mask must admit at least one action")
         if not deterministic and np.random.rand() < epsilon:
-            idx = np.random.randint(0, len(self.action_values))
+            if legal_indices is None:
+                idx = np.random.randint(0, len(self.action_values))
+            else:
+                idx = int(np.random.choice(legal_indices))
             return float(self.action_values[idx]), int(idx)
         obs_t = torch.tensor(obs, dtype=torch.float32, device=self.device).unsqueeze(0)
         with torch.no_grad():
             dist = self.q.dist(obs_t)
             q_vals = self._q_values(dist)
+            if legal_indices is not None:
+                mask_t = torch.tensor(
+                    np.asarray(action_mask, dtype=np.bool_),
+                    dtype=torch.bool,
+                    device=self.device,
+                ).unsqueeze(0)
+                q_vals = q_vals.masked_fill(~mask_t, -torch.inf)
             greedy_idx = int(torch.argmax(q_vals, dim=-1).item())
         return float(self.action_values[greedy_idx]), greedy_idx
 
@@ -820,6 +857,7 @@ class C51Agent:
         aux_obs: Optional[np.ndarray] = None,
         aux_targets: Optional[np.ndarray] = None,
         aux_weight: Optional[float] = None,
+        next_action_mask: Optional[np.ndarray] = None,
     ) -> Tuple[float, np.ndarray]:
         obs, actions, reward, next_obs, done = batch
         obs_t = torch.tensor(obs, dtype=torch.float32, device=self.device)
@@ -828,13 +866,25 @@ class C51Agent:
         reward_t = torch.tensor(reward, dtype=torch.float32, device=self.device).view(-1)
         done_t = torch.tensor(done, dtype=torch.float32, device=self.device).view(-1)
         weights_t = torch.tensor(weights, dtype=torch.float32, device=self.device).view(-1)
+        next_action_mask_t = None
+        if next_action_mask is not None:
+            next_action_mask_t = torch.tensor(
+                next_action_mask,
+                dtype=torch.bool,
+                device=self.device,
+            )
 
         dist = self.q.dist(obs_t)
         dist_a = dist[torch.arange(dist.size(0), device=self.device), actions_t]
         log_dist = torch.log(dist_a + 1e-8)
 
         with torch.no_grad():
-            m = self._project_distribution(next_obs_t, reward_t, done_t)
+            m = self._project_distribution(
+                next_obs_t,
+                reward_t,
+                done_t,
+                next_action_mask=next_action_mask_t,
+            )
 
         loss_per = -(m * log_dist).sum(dim=1)
         loss = (weights_t * loss_per).mean()
@@ -891,6 +941,7 @@ class C51Agent:
         *,
         aux_obs: Optional[np.ndarray] = None,
         aux_targets: Optional[np.ndarray] = None,
+        next_action_mask: Optional[np.ndarray] = None,
     ) -> Mapping[str, float]:
         """Evaluate a held-out batch without changing model or optimizer state."""
         obs, actions, reward, next_obs, done = batch
@@ -899,12 +950,24 @@ class C51Agent:
         actions_t = torch.tensor(actions, dtype=torch.long, device=self.device).view(-1)
         reward_t = torch.tensor(reward, dtype=torch.float32, device=self.device).view(-1)
         done_t = torch.tensor(done, dtype=torch.float32, device=self.device).view(-1)
+        next_action_mask_t = None
+        if next_action_mask is not None:
+            next_action_mask_t = torch.tensor(
+                next_action_mask,
+                dtype=torch.bool,
+                device=self.device,
+            )
 
         with torch.no_grad():
             dist = self.q.dist(obs_t)
             rows = torch.arange(dist.size(0), device=self.device)
             chosen = dist[rows, actions_t]
-            target = self._project_distribution(next_obs_t, reward_t, done_t)
+            target = self._project_distribution(
+                next_obs_t,
+                reward_t,
+                done_t,
+                next_action_mask=next_action_mask_t,
+            )
             loss_per = -(target * torch.log(chosen + 1e-8)).sum(dim=1)
             out = {
                 "loss": float(loss_per.mean().cpu()),

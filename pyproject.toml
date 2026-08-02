@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jormungandr-rl"
-version = "0.1.0"
+version = "0.2.0"
 description = "A distributed actor, central learner reinforcement-learning framework"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -32,6 +32,9 @@ dev = [
 record = [
     "Pillow>=10.0",
 ]
+plot = [
+    "matplotlib>=3.8",
+]
 
 [project.scripts]
 jormungandr-service = "jormungandr.service:main"
@@ -48,5 +51,5 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 addopts = "-ra"
-pythonpath = ["src"]
+pythonpath = ["src", "."]
 testpaths = ["tests"]

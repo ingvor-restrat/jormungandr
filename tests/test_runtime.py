@@ -205,3 +205,36 @@ def test_http_experience_endpoint_routes_both_splits() -> None:
         thread.join(timeout=2.0)
         runtime.close_all()
         server.server_close()
+
+
+def test_internal_comparison_retains_actor_performance_metrics() -> None:
+    runtime = JormungandrRuntime()
+    runtime.create_model(
+        obs_dim=2,
+        model_id="comparison-test",
+        tensorboard_enabled=False,
+        learner={"enabled": True, "device": "cpu", "hidden": 8},
+    )
+    try:
+        runtime.log_metrics(
+            "comparison-test",
+            7,
+            {
+                "sampler/validation/reward_mean": 1.25,
+                "domain/downside_cvar": -0.5,
+            },
+        )
+
+        comparison = runtime.compare_models()
+        row = comparison["models"][0]
+        history = runtime.get_training_metrics("comparison-test")
+
+        assert row["performance_metrics"]["validation/sampler/reward_mean"] == 1.25
+        assert row["performance_metrics"]["domain/downside_cvar"] == -0.5
+        assert (
+            "validation/sampler/reward_mean"
+            in comparison["performance_metric_names"]
+        )
+        assert history["performance_history"][-1]["step"] == 7
+    finally:
+        runtime.close_all()

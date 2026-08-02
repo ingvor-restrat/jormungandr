@@ -1,6 +1,6 @@
 """End-to-end multi-actor training against a synthetic control environment.
 
-The example launches an in-process Jormungandr HTTP service. Actor threads know
+The example launches an in-process Jörmungandr HTTP service. Actor threads know
 only its URL and the generic environment protocol below; they do not access the
 learner directly.
 """
@@ -423,7 +423,7 @@ def summarize(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run a generic multi-actor Jormungandr training example."
+        description="Run a generic multi-actor Jörmungandr training example."
     )
     parser.add_argument("--actors", type=int, default=2)
     parser.add_argument("--train-episodes", type=int, default=8)

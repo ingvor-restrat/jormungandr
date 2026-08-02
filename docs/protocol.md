@@ -83,6 +83,10 @@ Optional fields:
 | --- | --- |
 | `ts_ns` | Actor observation time in integer nanoseconds. |
 | `priority` | Initial positive priority for a training item. |
+| `behavior_logp` | Log probability assigned by the behavior policy; required for exact PPO/V-trace correction. |
+| `behavior_value` | State-value estimate recorded when the action was selected; used by GAE. |
+| `action_mask` | Boolean mask aligned with `action_values` at the current state. |
+| `next_action_mask` | Boolean mask aligned with `action_values` at the next state. |
 | `aux` | Auxiliary label object, normally containing `kind` and `label`. |
 | `meta` | Application metadata retained with the stored item. |
 | `session_id` | Compatibility identifier for a locally managed episode. |
@@ -120,7 +124,12 @@ POST /v1/models/{model_id}/policy/infer
 ```
 
 ```json
-{"obs": [0.1, 0.2, 0.3], "deterministic": true}
+{
+  "obs": [0.1, 0.2, 0.3],
+  "deterministic": false,
+  "epsilon": 0.02,
+  "action_mask": [true, false, true]
+}
 ```
 
 Batched observations use `obs_batch`:
@@ -131,13 +140,26 @@ Batched observations use `obs_batch`:
     [0.1, 0.2, 0.3],
     [0.3, 0.2, 0.1]
   ],
-  "deterministic": true
+  "deterministic": true,
+  "action_masks": [
+    [true, false, true],
+    [true, true, false]
+  ]
 }
 ```
 
 Set `deterministic` to false and provide `epsilon` to enable epsilon-greedy
-selection. Every item returns `action`, `action_idx`, and `q_values`. The
-response also declares `policy_version` and `updates`.
+or epsilon-mixture selection. Every item returns `action` and `action_idx`.
+Value learners additionally return `q_values`; policy learners return
+`policy_logits` and `policy_probs`; QR-DQN also returns `quantiles` and
+`risk_values`. Stochastic responses include `behavior_logp`, and
+actor--critic responses include `behavior_value`. Return those fields with the
+resulting transition. The response also declares `policy_version` and
+`updates`.
+
+Illegal action slots have zero policy probability and cannot be sampled. Raw
+finite logits or Q summaries remain in the response for diagnostics; the
+Boolean mask is the authority for legality.
 
 Auxiliary-only inference:
 
@@ -154,11 +176,24 @@ using the stable model `feature_keys`.
 | --- | --- | --- |
 | `GET` | `/health` | Process health. |
 | `GET` | `/v1/runtime/stats` | HTTP, model, split, and learner counters. |
+| `GET` | `/v1/algorithms` | List installed algorithm plugins and their versions. |
 | `GET` | `/v1/models` | List model records. |
+| `GET` | `/v1/models/compare` | Align latest metrics across model identifiers. |
 | `GET` | `/v1/models/{id}` | Inspect one model. |
 | `GET` | `/v1/models/{id}/policy` | Inspect learner and validation state. |
+| `GET` | `/v1/models/{id}/metrics` | Read recent plugin/selector history and selection audit. |
 | `POST` | `/v1/models/{id}/policy/checkpoint` | Force a checkpoint. |
 | `DELETE` | `/v1/models/{id}` | Stop and remove a model. |
 
 The older `/replay/*` routes remain compatibility aliases. New actors should
 use `/experience/*`, whose identity fields and split semantics are enforced.
+
+## Checkpoint restore
+
+Create a model with `checkpoint_path` to restore its algorithm, network and
+target state, optimizer, normalizer, update counter, policy version, action
+vocabulary, and plugin configuration. An explicit `obs_dim` must either be
+zero or match the checkpoint. Replay and validation items are not embedded in
+the checkpoint and begin empty. A checkpoint that records an algorithm-plugin
+version is not silently loaded through a different installed version; migrate
+the state explicitly or install the compatible plugin.

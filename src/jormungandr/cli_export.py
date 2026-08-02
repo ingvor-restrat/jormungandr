@@ -16,7 +16,7 @@ from jormungandr.export import (
 def _build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         description=(
-            "Jormungandr checkpoint inspection, comparison, and inference export utility."
+            "Jörmungandr checkpoint inspection, comparison, and inference export utility."
         )
     )
 

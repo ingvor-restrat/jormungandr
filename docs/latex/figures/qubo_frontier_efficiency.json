@@ -1,0 +1,424 @@
+{
+  "base_seed": 20260802,
+  "benchmark": "correlated_noisy_branch_search",
+  "matched_efficiency": [
+    {
+      "break_even_terminal_evaluation_ms": 0.9387236128095537,
+      "generated_candidate_delta": 32.0,
+      "qubo_additional_selector_ms": 1.8774472256191075,
+      "qubo_beam_width": 4,
+      "qubo_exact_recovery_rate": 0.614,
+      "qubo_mean_regret": 0.1952341350430573,
+      "terminal_evaluation_delta": 2.0,
+      "utility_beam_width": 6,
+      "utility_exact_recovery_rate": 0.686,
+      "utility_mean_regret": 0.1666683006878489
+    },
+    {
+      "break_even_terminal_evaluation_ms": 1.1129112421767786,
+      "generated_candidate_delta": 32.0,
+      "qubo_additional_selector_ms": 2.2258224843535572,
+      "qubo_beam_width": 6,
+      "qubo_exact_recovery_rate": 0.674,
+      "qubo_mean_regret": 0.1632938650389512,
+      "terminal_evaluation_delta": 2.0,
+      "utility_beam_width": 8,
+      "utility_exact_recovery_rate": 0.722,
+      "utility_mean_regret": 0.1435031094847474
+    },
+    {
+      "break_even_terminal_evaluation_ms": 1.3765641849022359,
+      "generated_candidate_delta": 32.0,
+      "qubo_additional_selector_ms": 2.7531283698044717,
+      "qubo_beam_width": 8,
+      "qubo_exact_recovery_rate": 0.732,
+      "qubo_mean_regret": 0.13047908341313658,
+      "terminal_evaluation_delta": 2.0,
+      "utility_beam_width": 10,
+      "utility_exact_recovery_rate": 0.744,
+      "utility_mean_regret": 0.12657410526404955
+    },
+    {
+      "break_even_terminal_evaluation_ms": 1.718997820862569,
+      "generated_candidate_delta": 32.0,
+      "qubo_additional_selector_ms": 3.437995641725138,
+      "qubo_beam_width": 10,
+      "qubo_exact_recovery_rate": 0.754,
+      "qubo_mean_regret": 0.11347133767003431,
+      "terminal_evaluation_delta": 2.0,
+      "utility_beam_width": 12,
+      "utility_exact_recovery_rate": 0.774,
+      "utility_mean_regret": 0.10345006946516949
+    },
+    {
+      "break_even_terminal_evaluation_ms": 1.0820210443343967,
+      "generated_candidate_delta": 64.0,
+      "qubo_additional_selector_ms": 4.328084177337587,
+      "qubo_beam_width": 12,
+      "qubo_exact_recovery_rate": 0.784,
+      "qubo_mean_regret": 0.09265196562754971,
+      "terminal_evaluation_delta": 4.0,
+      "utility_beam_width": 16,
+      "utility_exact_recovery_rate": 0.806,
+      "utility_mean_regret": 0.08975399356771839
+    }
+  ],
+  "oracle": {
+    "generated_candidates": 5460,
+    "terminal_paths": 4096
+  },
+  "paired_comparisons": [
+    {
+      "beam_width": 4,
+      "equal_rate": 0.916,
+      "mean_regret_improvement_95ci": [
+        -0.0040089834966043295,
+        0.022743577164032212
+      ],
+      "paired_trials": 500,
+      "qubo_additional_selector_ms": 1.895113154547289,
+      "qubo_better_rate": 0.046,
+      "qubo_exact_recovery_rate_delta": 0.002,
+      "utility_minus_qubo_mean_regret": 0.00936729683371394
+    },
+    {
+      "beam_width": 6,
+      "equal_rate": 0.944,
+      "mean_regret_improvement_95ci": [
+        -0.0041885599965115,
+        0.010937431294306769
+      ],
+      "paired_trials": 500,
+      "qubo_additional_selector_ms": 2.242558018770069,
+      "qubo_better_rate": 0.028,
+      "qubo_exact_recovery_rate_delta": -0.012,
+      "utility_minus_qubo_mean_regret": 0.003374435648897635
+    },
+    {
+      "beam_width": 8,
+      "equal_rate": 0.918,
+      "mean_regret_improvement_95ci": [
+        0.0021708302610307633,
+        0.023877221882190887
+      ],
+      "paired_trials": 500,
+      "qubo_additional_selector_ms": 2.769649223657325,
+      "qubo_better_rate": 0.054,
+      "qubo_exact_recovery_rate_delta": 0.01,
+      "utility_minus_qubo_mean_regret": 0.013024026071610824
+    },
+    {
+      "beam_width": 10,
+      "equal_rate": 0.956,
+      "mean_regret_improvement_95ci": [
+        -0.0014701150437550579,
+        0.027675650231785545
+      ],
+      "paired_trials": 500,
+      "qubo_additional_selector_ms": 3.456089765066281,
+      "qubo_better_rate": 0.03,
+      "qubo_exact_recovery_rate_delta": 0.01,
+      "utility_minus_qubo_mean_regret": 0.013102767594015243
+    },
+    {
+      "beam_width": 12,
+      "equal_rate": 0.934,
+      "mean_regret_improvement_95ci": [
+        -0.0026403539009723642,
+        0.024236561576211905
+      ],
+      "paired_trials": 500,
+      "qubo_additional_selector_ms": 4.364118019351736,
+      "qubo_better_rate": 0.04,
+      "qubo_exact_recovery_rate_delta": 0.01,
+      "utility_minus_qubo_mean_regret": 0.01079810383761977
+    },
+    {
+      "beam_width": 16,
+      "equal_rate": 0.95,
+      "mean_regret_improvement_95ci": [
+        0.0026992533798252706,
+        0.023912254269217798
+      ],
+      "paired_trials": 500,
+      "qubo_additional_selector_ms": 6.809491269523278,
+      "qubo_better_rate": 0.036,
+      "qubo_exact_recovery_rate_delta": 0.016,
+      "utility_minus_qubo_mean_regret": 0.013305753824521534
+    }
+  ],
+  "qubo": {
+    "qubo_cardinality_penalty": 4.0,
+    "qubo_diversity_weight": 0.12,
+    "qubo_local_search_passes": 4,
+    "qubo_utility_weight": 1.0
+  },
+  "summaries": [
+    {
+      "beam_width": 4,
+      "exact_recovery_95ci": [
+        0.57061231973477,
+        0.655649267240184
+      ],
+      "exact_recovery_rate": 0.614,
+      "mean_expanded_nodes": 21.0,
+      "mean_generated_candidates": 84.0,
+      "mean_regret": 0.1952341350430573,
+      "mean_regret_95ci": [
+        0.15971631537193412,
+        0.2307519547141805
+      ],
+      "mean_search_time_ms": 2.191230175551027,
+      "mean_selector_time_ms": 1.9559753111097962,
+      "mean_terminal_evaluations": 4.0,
+      "p95_regret": 1.1334927493497007,
+      "strategy": "qubo",
+      "trials": 500
+    },
+    {
+      "beam_width": 4,
+      "exact_recovery_95ci": [
+        0.5685873695673256,
+        0.6537047158817519
+      ],
+      "exact_recovery_rate": 0.612,
+      "mean_expanded_nodes": 21.0,
+      "mean_generated_candidates": 84.0,
+      "mean_regret": 0.20460143187677124,
+      "mean_regret_95ci": [
+        0.1675677299423374,
+        0.24163513381120508
+      ],
+      "mean_search_time_ms": 0.26300286082550883,
+      "mean_selector_time_ms": 0.06086215656250715,
+      "mean_terminal_evaluations": 4.0,
+      "p95_regret": 1.256990378983682,
+      "strategy": "utility",
+      "trials": 500
+    },
+    {
+      "beam_width": 6,
+      "exact_recovery_95ci": [
+        0.6317212496204101,
+        0.7136253831308357
+      ],
+      "exact_recovery_rate": 0.674,
+      "mean_expanded_nodes": 29.0,
+      "mean_generated_candidates": 116.0,
+      "mean_regret": 0.1632938650389512,
+      "mean_regret_95ci": [
+        0.13004096705238383,
+        0.1965467630255186
+      ],
+      "mean_search_time_ms": 2.621989014092833,
+      "mean_selector_time_ms": 2.3210861042607576,
+      "mean_terminal_evaluations": 6.0,
+      "p95_regret": 1.0340266820164652,
+      "strategy": "qubo",
+      "trials": 500
+    },
+    {
+      "beam_width": 6,
+      "exact_recovery_95ci": [
+        0.6440308091059584,
+        0.7251328328005456
+      ],
+      "exact_recovery_rate": 0.686,
+      "mean_expanded_nodes": 29.0,
+      "mean_generated_candidates": 116.0,
+      "mean_regret": 0.1666683006878489,
+      "mean_regret_95ci": [
+        0.13324025634739306,
+        0.20009634502830476
+      ],
+      "mean_search_time_ms": 0.3446396861691028,
+      "mean_selector_time_ms": 0.07852808549068868,
+      "mean_terminal_evaluations": 6.0,
+      "p95_regret": 1.079492144827771,
+      "strategy": "utility",
+      "trials": 500
+    },
+    {
+      "beam_width": 8,
+      "exact_recovery_95ci": [
+        0.6915155074925284,
+        0.7689466695091324
+      ],
+      "exact_recovery_rate": 0.732,
+      "mean_expanded_nodes": 37.0,
+      "mean_generated_candidates": 148.0,
+      "mean_regret": 0.13047908341313658,
+      "mean_regret_95ci": [
+        0.10099969165219896,
+        0.1599584751740742
+      ],
+      "mean_search_time_ms": 3.2293543913401663,
+      "mean_selector_time_ms": 2.8649128435645252,
+      "mean_terminal_evaluations": 8.0,
+      "p95_regret": 0.8059880514803958,
+      "strategy": "qubo",
+      "trials": 500
+    },
+    {
+      "beam_width": 8,
+      "exact_recovery_95ci": [
+        0.6811506232701695,
+        0.7594640461021093
+      ],
+      "exact_recovery_rate": 0.722,
+      "mean_expanded_nodes": 37.0,
+      "mean_generated_candidates": 148.0,
+      "mean_regret": 0.1435031094847474,
+      "mean_regret_95ci": [
+        0.11168283408940513,
+        0.17532338488008967
+      ],
+      "mean_search_time_ms": 0.4216261147521436,
+      "mean_selector_time_ms": 0.09526361990720034,
+      "mean_terminal_evaluations": 8.0,
+      "p95_regret": 1.0046966306663296,
+      "strategy": "utility",
+      "trials": 500
+    },
+    {
+      "beam_width": 10,
+      "exact_recovery_95ci": [
+        0.7144070676180768,
+        0.7897196261682243
+      ],
+      "exact_recovery_rate": 0.754,
+      "mean_expanded_nodes": 45.0,
+      "mean_generated_candidates": 180.0,
+      "mean_regret": 0.11347133767003431,
+      "mean_regret_95ci": [
+        0.08666539325011935,
+        0.14027728208994927
+      ],
+      "mean_search_time_ms": 3.993390789721161,
+      "mean_selector_time_ms": 3.5678742388263345,
+      "mean_terminal_evaluations": 10.0,
+      "p95_regret": 0.7230334503810192,
+      "strategy": "qubo",
+      "trials": 500
+    },
+    {
+      "beam_width": 10,
+      "exact_recovery_95ci": [
+        0.7039862648123214,
+        0.7802929213445977
+      ],
+      "exact_recovery_rate": 0.744,
+      "mean_expanded_nodes": 45.0,
+      "mean_generated_candidates": 180.0,
+      "mean_regret": 0.12657410526404955,
+      "mean_regret_95ci": [
+        0.09703401795109873,
+        0.15611419257700038
+      ],
+      "mean_search_time_ms": 0.4975211026612669,
+      "mean_selector_time_ms": 0.11178447376005352,
+      "mean_terminal_evaluations": 10.0,
+      "p95_regret": 0.7706478784033376,
+      "strategy": "utility",
+      "trials": 500
+    },
+    {
+      "beam_width": 12,
+      "exact_recovery_95ci": [
+        0.7458363816926995,
+        0.8178328349817475
+      ],
+      "exact_recovery_rate": 0.784,
+      "mean_expanded_nodes": 53.0,
+      "mean_generated_candidates": 212.0,
+      "mean_regret": 0.09265196562754971,
+      "mean_regret_95ci": [
+        0.0688795735740757,
+        0.11642435768102372
+      ],
+      "mean_search_time_ms": 4.98656896315515,
+      "mean_selector_time_ms": 4.493996616452932,
+      "mean_terminal_evaluations": 12.0,
+      "p95_regret": 0.6385942887790574,
+      "strategy": "qubo",
+      "trials": 500
+    },
+    {
+      "beam_width": 12,
+      "exact_recovery_95ci": [
+        0.7353308968855181,
+        0.8084908121595469
+      ],
+      "exact_recovery_rate": 0.774,
+      "mean_expanded_nodes": 53.0,
+      "mean_generated_candidates": 212.0,
+      "mean_regret": 0.10345006946516949,
+      "mean_regret_95ci": [
+        0.07811412821853411,
+        0.12878601071180487
+      ],
+      "mean_search_time_ms": 0.5776487810071558,
+      "mean_selector_time_ms": 0.12987859710119665,
+      "mean_terminal_evaluations": 12.0,
+      "p95_regret": 0.6812349495356976,
+      "strategy": "utility",
+      "trials": 500
+    },
+    {
+      "beam_width": 16,
+      "exact_recovery_95ci": [
+        0.7860541079213073,
+        0.853035637744791
+      ],
+      "exact_recovery_rate": 0.822,
+      "mean_expanded_nodes": 69.0,
+      "mean_generated_candidates": 276.0,
+      "mean_regret": 0.07644823974319687,
+      "mean_regret_95ci": [
+        0.054846576820982124,
+        0.09804990266541161
+      ],
+      "mean_search_time_ms": 7.58575785625726,
+      "mean_selector_time_ms": 6.975403708638623,
+      "mean_terminal_evaluations": 16.0,
+      "p95_regret": 0.6100402805593903,
+      "strategy": "qubo",
+      "trials": 500
+    },
+    {
+      "beam_width": 16,
+      "exact_recovery_95ci": [
+        0.7690596512561212,
+        0.838274082202966
+      ],
+      "exact_recovery_rate": 0.806,
+      "mean_expanded_nodes": 69.0,
+      "mean_generated_candidates": 276.0,
+      "mean_regret": 0.08975399356771839,
+      "mean_regret_95ci": [
+        0.0658008744184182,
+        0.11370711271701858
+      ],
+      "mean_search_time_ms": 0.732290729181841,
+      "mean_selector_time_ms": 0.16591243911534548,
+      "mean_terminal_evaluations": 16.0,
+      "p95_regret": 0.6385942887790574,
+      "strategy": "utility",
+      "trials": 500
+    }
+  ],
+  "tree": {
+    "branching_factor": 4,
+    "depth": 6,
+    "noise_scale": 0.9
+  },
+  "trials": 500,
+  "widths": [
+    4,
+    6,
+    8,
+    10,
+    12,
+    16
+  ]
+}
