@@ -1,6 +1,7 @@
 # Reproducible Results
 
-These functional results were recorded for Jörmungandr 0.2.0 on 2 August 2026.
+These functional results were recorded for Jörmungandr 0.2.0 through 4 August
+2026.
 They validate framework behavior and packaging; they are not learning-quality
 or performance benchmark claims.
 
@@ -14,14 +15,13 @@ Result:
 
 | Suite | Tests | Result |
 | --- | ---: | --- |
-| replay, masks, graph trajectories, and C51 correctness | 9 | passed |
-| algorithm, QUBO, quantile, and plugin lifecycle | 19 | passed |
-| split-aware runtime, HTTP, validation, and internal comparison | 5 | passed |
-| checkpoints and inference bundles | 1 | passed |
-| generic trainer scheduling and environment | 2 | passed |
-| OU spread process, reference, and scheduling | 3 | passed |
-| branch-frontier pruning and oracle benchmark contract | 5 | passed |
-| **Total** | **44** | **passed** |
+| core algorithm, replay, and artifact lifecycle | 32 | passed |
+| runtime, actors, monitor, trainer, and OU example | 13 | passed |
+| search, joint-action composition, and constrained environment | 13 | passed |
+| structured representation, transition/PPO service, export, and parity | 15 | passed |
+| structured joint trajectory and multiprocess service | 13 | passed |
+| structured reward-free supervision and behavior cloning | 6 | passed |
+| **Total** | **92** | **passed** |
 
 The tests cover zero-priority replay safety, probability preservation in the
 C51 projection, legal masking, graph-reference GAE, held-out evaluation
@@ -195,6 +195,203 @@ The [animated curves and same-path playback](markup/README.md) are explanatory
 views of the committed JSON. PPO/APPO/IMPALA require behavior-policy
 trajectories; BC/MARWIL/CQL require a declared offline dataset; DreamerV3 needs
 a sequence and model-compute budget. Those cohorts remain separate by design.
+
+## Independent CartPole PPO reference
+
+The trajectory implementation diagnostic compares Jörmungandr's real PPO
+plugin with Stable-Baselines3 2.9.0 in the pinned CPU environment at
+[`benchmarks/requirements-sb3-reference.txt`](../benchmarks/requirements-sb3-reference.txt).
+Both implementations have exactly 9,155 trainable parameters: separate
+two-layer, width-64 policy and value MLPs. They share the major PPO controls,
+1,024-step rollouts, and a 49,152-interaction budget. Deterministic evaluation
+uses the same twenty held-out reset seeds every 4,096 interactions.
+
+Command:
+
+```bash
+env -u PYTHONPATH -u VIRTUAL_ENV PYTHONPATH="$PWD/src" \
+  /path/to/sb3-reference/bin/python examples/benchmark_gym_ppo.py \
+  --runs 3 --total-timesteps 49152 --rollout-steps 1024 \
+  --evaluation-every-timesteps 4096 --evaluation-episodes 20 \
+  --json-output docs/latex/figures/cartpole_ppo_reference.json \
+  --plot-output docs/latex/figures/cartpole_ppo_reference.pdf
+```
+
+Recorded on 4 August 2026:
+
+| implementation | first solved run 0 | run 1 | run 2 | final held-out means |
+| --- | ---: | ---: | ---: | ---: |
+| Jörmungandr PPO | 20,480 | 20,480 | 20,480 | 500 / 500 / 500 |
+| Stable-Baselines3 PPO | 8,192 | 24,576 | 12,288 | 500 / 500 / 500 |
+
+The built-in PPO therefore solves the reference control task at matched model
+capacity and budget. SB3 often reaches the threshold earlier, and both methods
+have non-monotone intermediate evaluations. Jörmungandr's final
+behavior-log-probability and behavior-value fallback rates are zero in every
+run, confirming that PPO consumed recorded behavior-policy data rather than
+silently recomputing it. This controls for a gross vector-PPO implementation
+bug; it does not validate an application's reward, structured representation,
+joint-action trajectory, or opponent protocol.
+
+## Structured CartPole representation parity
+
+The S0 control reuses the flat Jörmungandr CartPole cohort above and changes
+only its interface and compatible encoder. Four scalar coordinates become
+typed entities with stable IDs, and left/right become state-local candidates.
+The structured transformer has 20,674 parameters. Seeds, reward, PPO controls,
+49,152-turn budget, evaluation interval, and twenty held-out resets are fixed.
+
+```bash
+env -u PYTHONPATH -u VIRTUAL_ENV PYTHONPATH="$PWD/src:$PWD" \
+  /path/to/sb3-reference/bin/python \
+  examples/benchmark_structured_cartpole_ppo.py \
+  --flat-reference docs/latex/figures/cartpole_ppo_reference.json \
+  --json-output docs/latex/figures/structured_cartpole_parity.json \
+  --plot-output docs/latex/figures/structured_cartpole_parity.pdf
+```
+
+| representation | first solved run 0 | run 1 | run 2 | final held-out means |
+| --- | ---: | ---: | ---: | ---: |
+| flat MLP | 20,480 | 20,480 | 20,480 | 500 / 500 / 500 |
+| entity/candidate transformer | 8,192 | 32,768 | 12,288 | 500 / 500 / 500 |
+
+The declared S0 gate passes. Structured final median is 500, and its median
+first-solved checkpoint is 12,288, below twice the flat 20,480 reference.
+Semantic logits and values are invariant to entity/candidate permutations
+within the declared `1e-5` tolerance. Wire round trip, trajectory storage,
+checkpoint restore, and the versioned structured inference bundle preserve
+candidate identity. This localizes any later Kaggriculture failure away from a
+gross entity/candidate representation defect.
+
+## Structured joint-trajectory service contract
+
+The J0 functional gate uses two spawned actor processes and one central
+`structured_ppo` service model. The actors submit different factor counts, but
+four environment turns produce four reward-bearing trajectory steps. The
+service rejects stale, duplicate, future, or out-of-order provenance, keeps
+validation isolated, updates the common model, and persists PPO loss, KL,
+entropy, value loss, explained variance, gradient norm, actor latency, and
+policy lag. A checkpoint restored into a clean frozen model reproduces policy
+logits and value. This is a lifecycle/formulation test, not yet an
+environment-learning benchmark.
+
+The same contract now has two equivalent HTTP wires. The compact sequence
+round trip stores `N + 1` observations for `N` steps, reconstructs shared
+adjacent observations, and is smaller than the legacy step-array JSON. The
+loopback service test sends gzip-compressed requests and admits a compact
+validation trajectory through the public endpoint without routing it into
+training.
+
+Structured PPO 1.2 adds pre-GAE signal diagnostics to every update. The unit
+control with two terminal returns, `1.0` and `-0.5`, reports mean `0.25`,
+standard deviation `0.75`, range `[-0.5, 1.0]`, two unique returns, mean length
+three, and a one-third nonzero-reward fraction. The exact-joint control with
+one two-step episode reports return `1.0`, zero spread, one unique return, and
+a one-half nonzero-reward fraction. These metrics are descriptive; they do not
+modify advantages or the PPO objective.
+
+## Structured behavior-cloning contract
+
+The BC0 gate trains `structured_bc` on eight weighted semantic labels covering
+two factor families and four independent candidate permutations. The tiny
+corpus reaches 100% validation accuracy. Reordering candidate rows while
+retaining IDs preserves the semantic logits within `1e-5`; validation
+evaluation leaves every policy parameter unchanged. The supervision record has
+no reward field, requires its factor candidates to be currently legal, rejects
+duplicate provenance, and reports overall plus source/factor accuracy, NLL,
+entropy, calibration error, and gradient norm.
+
+A central service test sends interleaved training and validation labels into
+separate bounded buffers, performs updates only from the training split, and
+checkpoints the learned entity/candidate transformer. A frozen
+`structured_ppo` model initialized from that checkpoint produces identical
+candidate logits while beginning at update and policy version zero. BC0 passes;
+this validates the generic imitation and initialization contract, not expert
+quality or downstream return.
+
+## Constrained joint-action learning gate
+
+`ConstrainedWorkbench-v0` is a Gymnasium-compatible generic assignment task
+with no application concepts. Each three-turn episode observes two to four
+typed workers and two to four state-local jobs. Every worker selects one job or
+PASS; a job can be used once, jobs consume shared capacity, and conflict groups
+are mutually exclusive. Step utility is hidden from the learner: reward is zero
+until termination, when accumulated utility is divided by the exact enumerated
+episode optimum. The oracle therefore returns 1.0 by construction.
+
+All learned arms use the same 12,770-parameter width-32, one-layer
+entity/candidate transformer. BC receives 256 oracle training episodes and 500
+updates. Random-start PPO and BC-initialized PPO each receive 12,288 environment
+turns per run. Results below average three training seeds on the same 64 held-out
+episode seeds.
+
+```bash
+env -u PYTHONPATH -u VIRTUAL_ENV PYTHONPATH="$PWD/src:$PWD" \
+  /path/to/sb3-reference/bin/python \
+  examples/benchmark_constrained_workbench.py \
+  --runs 3 --ppo-total-turns 12288 \
+  --bc-updates 500 --bc-train-episodes 256 \
+  --bc-validation-episodes 96 --evaluation-episodes 64 \
+  --json-output docs/latex/figures/constrained_workbench_j1.json \
+  --plot-output docs/latex/figures/constrained_workbench_j1.pdf
+```
+
+| policy | return before PPO | return at 12,288 turns |
+| --- | ---: | ---: |
+| exact oracle | 1.0000 | 1.0000 |
+| random legal | 0.4689 | 0.4689 |
+| structured BC | 0.9080 | — |
+| joint PPO, random initialization | 0.5050 | 0.8750 |
+| structured BC then joint PPO | 0.9080 | 0.9227 |
+
+BC held-out accuracy is 0.8228 for worker-kind 0 and 0.8159 for worker-kind 1;
+their action-frequency baselines are 0.4875 and 0.4755. All three tiny
+deterministic corpora reach 100% accuracy. The mean paired final PPO improvement
+over random legal play is 0.4061. A hierarchical paired bootstrap resampling
+both independent training runs and common evaluation seeds gives a 95% interval
+of [0.3581, 0.4533]. BC-to-PPO median return is 0.9337 of oracle, above the
+predeclared 0.80 threshold.
+
+No oracle, random, BC, or PPO evaluation deployed an infeasible action. Moving
+from two to four workers changes nested factor count but retains exactly three
+trajectory steps and one nonzero terminal reward. Every J1 condition therefore
+passes. This is a deliberately small exact-oracle diagnostic, not evidence of
+performance on a larger application.
+
+## Masked Taxi constraint control
+
+Taxi-v4 compares masked Jörmungandr PPO, the identical PPO with masks disabled,
+SB3-contrib 2.9.0 MaskablePPO, and a masked tabular Q-learning reference. The
+two neural masked implementations have exactly 72,903 trainable parameters.
+All participants receive 131,072 interactions over three seeds, with fifty
+fixed held-out episodes every 16,384 interactions.
+
+```bash
+env -u PYTHONPATH -u VIRTUAL_ENV PYTHONPATH="$PWD/src" \
+  /path/to/sb3-reference/bin/python \
+  examples/benchmark_masked_taxi_ppo.py \
+  --runs 3 --total-timesteps 131072 --rollout-steps 2048 \
+  --evaluation-every-timesteps 16384 --evaluation-episodes 50 \
+  --json-output docs/latex/figures/masked_taxi_ppo_reference.json \
+  --plot-output docs/latex/figures/masked_taxi_ppo_reference.pdf
+```
+
+Recorded on 4 August 2026:
+
+| implementation | run 0 success / return | run 1 | run 2 | invalid choices |
+| --- | ---: | ---: | ---: | ---: |
+| Jörmungandr PPO, masked | .96 / 0.18 | 1.00 / 8.20 | .92 / −8.34 | 0 |
+| Jörmungandr PPO, unmasked | .00 / −200 | .00 / −200 | .00 / −200 | 462,511 |
+| SB3-contrib MaskablePPO | 1.00 / 8.44 | 1.00 / 8.24 | 1.00 / 8.44 | 0 |
+| masked tabular Q-learning | 1.00 / 8.44 | 1.00 / 8.44 | 1.00 / 8.44 | 0 |
+
+Masked Jörmungandr's mean success AUC is 0.7042 versus zero for its unmasked
+twin, so masking materially improves learning efficiency and the declared
+zero-invalid-action gate passes. Its final seed variance is nevertheless worse
+than both independent masked references, and mean success peaked at 97.3% at
+65,536 steps before regressing. The result supports making system constraints
+part of the available action space; it also supports checkpoint selection and
+continued PPO stability diagnostics.
 
 ## QUBO branch-search benchmark
 

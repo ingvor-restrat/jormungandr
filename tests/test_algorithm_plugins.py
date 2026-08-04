@@ -15,7 +15,7 @@ from jormungandr.core import PrioritizedReplayBuffer
 from jormungandr.service import JormungandrRuntime
 
 
-BUILTIN_ALGORITHMS = {
+VECTOR_ALGORITHMS = {
     "appo",
     "bc",
     "c51",
@@ -29,6 +29,7 @@ BUILTIN_ALGORITHMS = {
     "qrdqn",
     "sac",
 }
+BUILTIN_ALGORITHMS = VECTOR_ALGORITHMS | {"structured_bc", "structured_ppo"}
 
 
 def _batch(seed: int = 11):
@@ -60,9 +61,18 @@ def _metadata():
 
 def test_all_documented_algorithms_are_registered() -> None:
     assert BUILTIN_ALGORITHMS.issubset(set(available_algorithms()))
+    assert algorithm_registry.get("structured_ppo").representation_modes == (
+        "entity_candidates",
+    )
+    assert algorithm_registry.get("structured_bc").replay_mode == "supervision"
+    assert all(
+        algorithm_registry.get(name).representation_modes
+        == ("vector_discrete",)
+        for name in VECTOR_ALGORITHMS
+    )
 
 
-@pytest.mark.parametrize("algorithm", sorted(BUILTIN_ALGORITHMS))
+@pytest.mark.parametrize("algorithm", sorted(VECTOR_ALGORITHMS))
 def test_builtin_plugin_updates_infers_and_round_trips(algorithm: str) -> None:
     config = {
         "action_values": [-1.0, 0.0, 1.0],

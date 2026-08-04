@@ -1,18 +1,25 @@
 """Stable contracts shared by Jörmungandr learner plugins.
 
-The service deliberately exchanges NumPy arrays and plain mappings at this
-boundary.  A built-in plugin may use PyTorch, while a future native plugin can
-implement the same contract through a Python extension without changing the
-wire protocol or checkpoint envelope.
+The vector service exchanges NumPy arrays and plain mappings at this boundary;
+structured plugins additionally consume the generic entity/candidate schema.
+A built-in plugin may use PyTorch, while a future native plugin can implement
+the same contracts through a Python extension.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Callable, Mapping, Optional, Protocol, Sequence
+from typing import Any, Callable, Mapping, Optional, Protocol, TYPE_CHECKING
 
 import numpy as np
 import torch
+
+if TYPE_CHECKING:
+    from jormungandr.structured import (
+        DynamicActionResult,
+        EntityCandidateObservation,
+        StructuredPolicySpec,
+    )
 
 
 TransitionBatch = tuple[
@@ -26,7 +33,7 @@ TransitionBatch = tuple[
 
 @dataclass(frozen=True)
 class ActionResult:
-    """One action plus the behavior-policy data needed by async learners."""
+    """One fixed-profile action plus async behavior-policy data."""
 
     action: float
     action_idx: int
@@ -45,10 +52,9 @@ class UpdateResult:
 
 
 class LearnerAgent(Protocol):
-    """Runtime-facing portion of an algorithm implementation."""
+    """Representation-neutral runtime portion of an algorithm implementation."""
 
     device: torch.device
-    action_values: Sequence[float]
     last_metrics: Mapping[str, float]
 
     def state_dict(self) -> Mapping[str, Any]: ...
@@ -59,6 +65,23 @@ class LearnerAgent(Protocol):
 BuildAgent = Callable[[int, Mapping[str, Any], str], LearnerAgent]
 
 
+class StructuredLearnerAgent(LearnerAgent, Protocol):
+    """Optional learner interface for variable entities and local candidates."""
+
+    def action_result_structured(
+        self,
+        observation: "EntityCandidateObservation",
+        *,
+        deterministic: bool,
+    ) -> "DynamicActionResult": ...
+
+
+BuildStructuredAgent = Callable[
+    ["StructuredPolicySpec", Mapping[str, Any], str],
+    StructuredLearnerAgent,
+]
+
+
 @dataclass(frozen=True)
 class AlgorithmPlugin:
     """Description and factory for one independently replaceable learner."""
@@ -66,7 +89,7 @@ class AlgorithmPlugin:
     name: str
     version: str
     family: str
-    build: BuildAgent
+    build: Optional[BuildAgent]
     default_export_module: str
     replay_mode: str = "transition"
     enforce_policy_lag: bool = False
@@ -75,10 +98,15 @@ class AlgorithmPlugin:
     noise_profile: str = ""
     backend: str = "python-torch"
     runtime_defaults: Mapping[str, Any] = field(default_factory=dict)
+    representation_modes: tuple[str, ...] = ("vector_discrete",)
+    build_structured: Optional[BuildStructuredAgent] = None
 
     @property
     def checkpoint_id(self) -> str:
         return f"{self.name}@{self.version}"
+
+    def supports_representation(self, mode: str) -> bool:
+        return str(mode) in self.representation_modes
 
 
 def normalize_update_result(value: Any) -> UpdateResult:

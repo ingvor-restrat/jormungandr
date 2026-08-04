@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import errno
+import gzip
 import json
 import shlex
 import sys
@@ -12,7 +13,7 @@ from collections import Counter, defaultdict, deque
 from dataclasses import asdict, dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Mapping, Optional, TypeVar
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, TypeVar
 from urllib.parse import urlparse
 
 import numpy as np
@@ -31,6 +32,7 @@ from jormungandr.selectors import (
     build_replay_selector,
     select_trajectory_replay,
 )
+from jormungandr.structured_service import StructuredServiceManager
 
 JsonDict = Dict[str, Any]
 T = TypeVar("T")
@@ -266,6 +268,10 @@ class JormungandrRuntime:
         self._started_ts = time.time()
         self._tensorboard_root = self._resolve_root(tensorboard_root)
         self._checkpoint_root = self._resolve_root(checkpoint_root)
+        self._structured_models = StructuredServiceManager(
+            checkpoint_root=self._checkpoint_root,
+            tensorboard_root=self._tensorboard_root,
+        )
         self._http_total = 0
         self._http_status: Counter[int] = Counter()
         self._http_methods: Counter[str] = Counter()
@@ -324,6 +330,12 @@ class JormungandrRuntime:
             plugin = algorithm_registry.get(algo)
         except KeyError as exc:
             raise JormungandrServiceError(str(exc)) from exc
+        if not plugin.supports_representation("vector_discrete"):
+            raise JormungandrServiceError(
+                f"algorithm {plugin.name!r} requires the in-process structured "
+                "policy interface; the v1 service model endpoint accepts the "
+                "vector_discrete profile"
+            )
         plugin_defaults = dict(plugin.runtime_defaults)
         plugin_config_raw = raw.get("plugin_config", {})
         if not isinstance(plugin_config_raw, Mapping):
@@ -692,6 +704,10 @@ class JormungandrRuntime:
         cfg.device = str(resolved_device)
         plugin = algorithm_registry.get(cfg.algo)
         config = asdict(cfg)
+        if plugin.build is None:
+            raise JormungandrServiceError(
+                f"algorithm {plugin.name!r} has no vector_discrete builder"
+            )
         agent = plugin.build(int(obs_dim), config, str(cfg.device))
         selector = build_replay_selector(cfg.replay_selector, config)
         return LearnerState(
@@ -1831,6 +1847,7 @@ class JormungandrRuntime:
                 "replay_mode": plugin.replay_mode,
                 "enforce_policy_lag": bool(plugin.enforce_policy_lag),
                 "runtime_defaults": dict(plugin.runtime_defaults),
+                "representation_modes": list(plugin.representation_modes),
                 "default_export_module": plugin.default_export_module,
                 "description": plugin.description,
                 "noise_profile": plugin.noise_profile,
@@ -3064,6 +3081,120 @@ class JormungandrRuntime:
                 self.delete_model(mid)
             except Exception:
                 pass
+        self._structured_models.close_all()
+
+    # -------------------------------------
+    # v2 variable entity/candidate models
+    # -------------------------------------
+    def create_structured_model(
+        self,
+        *,
+        representation: Mapping[str, Any],
+        learner: Mapping[str, Any],
+        model_id: Optional[str] = None,
+        capacity: int = 200_000,
+        validation_capacity: int = 20_000,
+        alpha: float = 0.6,
+        metadata: Optional[Mapping[str, Any]] = None,
+        checkpoint_path: str = "",
+        policy_initialization_path: str = "",
+        tensorboard_enabled: bool = True,
+        tensorboard_logdir: str = "",
+    ) -> JsonDict:
+        return self._structured_models.create_model(
+            representation=representation,
+            learner=learner,
+            model_id=model_id,
+            capacity=capacity,
+            validation_capacity=validation_capacity,
+            alpha=alpha,
+            metadata=metadata,
+            checkpoint_path=checkpoint_path,
+            policy_initialization_path=policy_initialization_path,
+            tensorboard_enabled=tensorboard_enabled,
+            tensorboard_logdir=tensorboard_logdir,
+        )
+
+    def list_structured_models(self) -> List[JsonDict]:
+        return self._structured_models.list_models()
+
+    def get_structured_model(self, model_id: str) -> JsonDict:
+        return self._structured_models.get_model(model_id)
+
+    def get_structured_metrics(self, model_id: str) -> JsonDict:
+        return self._structured_models.get_metrics(model_id)
+
+    def log_structured_metrics(
+        self,
+        model_id: str,
+        *,
+        step: int,
+        metrics: Mapping[str, Any],
+    ) -> JsonDict:
+        return self._structured_models.log_metrics(
+            model_id, step=step, metrics=metrics
+        )
+
+    def structured_policy_infer(
+        self,
+        model_id: str,
+        *,
+        observations: Sequence[Mapping[str, Any]],
+        deterministic: bool,
+        epsilon: float,
+    ) -> JsonDict:
+        return self._structured_models.infer(
+            model_id,
+            observations,
+            deterministic=deterministic,
+            epsilon=epsilon,
+        )
+
+    def structured_policy_score(
+        self,
+        model_id: str,
+        *,
+        observations: Sequence[Mapping[str, Any]],
+    ) -> JsonDict:
+        return self._structured_models.score(model_id, observations)
+
+    def structured_experience_add(
+        self,
+        model_id: str,
+        items: Sequence[Mapping[str, Any]],
+    ) -> JsonDict:
+        return self._structured_models.experience_add(model_id, items)
+
+    def structured_trajectory_add(
+        self,
+        model_id: str,
+        trajectories: Sequence[Sequence[Mapping[str, Any]]],
+    ) -> JsonDict:
+        return self._structured_models.trajectory_add(
+            model_id, trajectories
+        )
+
+    def structured_trajectory_sequence_add(
+        self,
+        model_id: str,
+        sequences: Sequence[Mapping[str, Any]],
+    ) -> JsonDict:
+        return self._structured_models.trajectory_sequence_add(
+            model_id, sequences
+        )
+
+    def structured_supervision_add(
+        self,
+        model_id: str,
+        items: Sequence[Mapping[str, Any]],
+    ) -> JsonDict:
+        return self._structured_models.supervision_add(model_id, items)
+
+    def force_structured_checkpoint(self, model_id: str) -> JsonDict:
+        return self._structured_models.checkpoint(model_id)
+
+    def delete_structured_model(self, model_id: str) -> JsonDict:
+        return self._structured_models.delete_model(model_id)
 
 
 class JormungandrHttpHandler(BaseHTTPRequestHandler):
@@ -3084,6 +3215,16 @@ class JormungandrHttpHandler(BaseHTTPRequestHandler):
         raw = self.rfile.read(n)
         if not raw:
             return {}
+        content_encoding = self.headers.get("Content-Encoding", "").strip().lower()
+        if content_encoding:
+            if content_encoding != "gzip":
+                raise ValueError(
+                    f"unsupported Content-Encoding: {content_encoding!r}"
+                )
+            try:
+                raw = gzip.decompress(raw)
+            except (OSError, EOFError) as exc:
+                raise ValueError(f"invalid gzip request body: {exc}") from exc
         try:
             obj = json.loads(raw.decode("utf-8"))
         except json.JSONDecodeError as exc:
@@ -3149,6 +3290,24 @@ class JormungandrHttpHandler(BaseHTTPRequestHandler):
                 self._ok({"service": "jormungandr", "ts": time.time()})
                 return
 
+            if parts == ["v2", "models"]:
+                self._ok({"models": self.runtime.list_structured_models()})
+                return
+
+            if len(parts) == 3 and parts[:2] == ["v2", "models"]:
+                self._ok(
+                    {"model": self.runtime.get_structured_model(parts[2])}
+                )
+                return
+
+            if (
+                len(parts) == 4
+                and parts[:2] == ["v2", "models"]
+                and parts[3] == "metrics"
+            ):
+                self._ok(self.runtime.get_structured_metrics(parts[2]))
+                return
+
             if parts == ["v1", "runtime", "stats"]:
                 self._ok({"stats": self.runtime.snapshot_stats()})
                 return
@@ -3192,6 +3351,8 @@ class JormungandrHttpHandler(BaseHTTPRequestHandler):
             self._err(404, "not found")
         except KeyError as exc:
             self._err(404, str(exc))
+        except ValueError as exc:
+            self._err(400, str(exc))
         except Exception as exc:
             self._err(500, "internal error", detail=str(exc))
 
@@ -3200,6 +3361,204 @@ class JormungandrHttpHandler(BaseHTTPRequestHandler):
         try:
             parts = self._path_parts()
             body = self._read_json()
+
+            if parts == ["v2", "models"]:
+                replay = body.get("replay", {})
+                validation = body.get("validation", {})
+                tensorboard = body.get("tensorboard", {})
+                representation = body.get("representation")
+                learner = body.get("learner")
+                if not isinstance(replay, dict):
+                    raise JormungandrServiceError("replay must be an object")
+                if not isinstance(validation, dict):
+                    raise JormungandrServiceError(
+                        "validation must be an object"
+                    )
+                if not isinstance(tensorboard, dict):
+                    raise JormungandrServiceError(
+                        "tensorboard must be an object"
+                    )
+                if not isinstance(representation, dict):
+                    raise JormungandrServiceError(
+                        "representation must be an object"
+                    )
+                if not isinstance(learner, dict):
+                    raise JormungandrServiceError("learner must be an object")
+                model = self.runtime.create_structured_model(
+                    representation=representation,
+                    learner=learner,
+                    model_id=body.get("model_id"),
+                    capacity=int(replay.get("capacity", 200_000)),
+                    validation_capacity=int(
+                        validation.get("capacity", 20_000)
+                    ),
+                    alpha=float(replay.get("alpha", 0.6)),
+                    metadata=(
+                        body.get("metadata")
+                        if isinstance(body.get("metadata"), dict)
+                        else None
+                    ),
+                    checkpoint_path=str(body.get("checkpoint_path", "")),
+                    policy_initialization_path=str(
+                        body.get("policy_initialization_path", "")
+                    ),
+                    tensorboard_enabled=bool(
+                        tensorboard.get("enabled", True)
+                    ),
+                    tensorboard_logdir=str(
+                        tensorboard.get("logdir", "")
+                    ),
+                )
+                self._ok({"model": model}, status=201)
+                return
+
+            if len(parts) >= 4 and parts[:2] == ["v2", "models"]:
+                model_id = parts[2]
+                action = parts[3]
+                if action == "policy" and len(parts) == 5 and parts[4] == "infer":
+                    observation_batch = body.get("observations")
+                    if observation_batch is None:
+                        observation = body.get("observation")
+                        if not isinstance(observation, dict):
+                            raise JormungandrServiceError(
+                                "observation must be an object"
+                            )
+                        observation_batch = [observation]
+                    if not isinstance(observation_batch, list) or not all(
+                        isinstance(item, dict) for item in observation_batch
+                    ):
+                        raise JormungandrServiceError(
+                            "observations must be an array of objects"
+                        )
+                    self._ok(
+                        self.runtime.structured_policy_infer(
+                            model_id,
+                            observations=observation_batch,
+                            deterministic=bool(
+                                body.get("deterministic", True)
+                            ),
+                            epsilon=float(body.get("epsilon", 0.0)),
+                        )
+                    )
+                    return
+                if action == "policy" and len(parts) == 5 and parts[4] == "score":
+                    observation_batch = body.get("observations")
+                    if observation_batch is None:
+                        observation = body.get("observation")
+                        if not isinstance(observation, dict):
+                            raise JormungandrServiceError(
+                                "observation must be an object"
+                            )
+                        observation_batch = [observation]
+                    if not isinstance(observation_batch, list) or not all(
+                        isinstance(item, dict) for item in observation_batch
+                    ):
+                        raise JormungandrServiceError(
+                            "observations must be an array of objects"
+                        )
+                    self._ok(
+                        self.runtime.structured_policy_score(
+                            model_id, observations=observation_batch
+                        )
+                    )
+                    return
+                if action == "experience" and len(parts) == 5 and parts[4] == "add":
+                    schema = str(body.get("schema", "")).strip()
+                    if schema != "jormungandr.structured_experience.v1":
+                        raise JormungandrServiceError(
+                            "schema must be "
+                            "'jormungandr.structured_experience.v1'"
+                        )
+                    items = body.get("items")
+                    if not isinstance(items, list):
+                        raise JormungandrServiceError(
+                            "items must be an array"
+                        )
+                    self._ok(
+                        self.runtime.structured_experience_add(
+                            model_id, items
+                        )
+                    )
+                    return
+                if action == "trajectories" and len(parts) == 5 and parts[4] == "add":
+                    schema = str(body.get("schema", "")).strip()
+                    if schema == "jormungandr.structured_trajectories.v1":
+                        trajectories = body.get("trajectories")
+                        if not isinstance(trajectories, list) or not all(
+                            isinstance(trajectory, list)
+                            for trajectory in trajectories
+                        ):
+                            raise JormungandrServiceError(
+                                "trajectories must be an array of step arrays"
+                            )
+                        self._ok(
+                            self.runtime.structured_trajectory_add(
+                                model_id, trajectories
+                            )
+                        )
+                        return
+                    if schema == (
+                        "jormungandr.structured_joint_trajectory_sequences.v1"
+                    ):
+                        sequences = body.get("sequences")
+                        if not isinstance(sequences, list) or not all(
+                            isinstance(sequence, dict) for sequence in sequences
+                        ):
+                            raise JormungandrServiceError(
+                                "sequences must be an array of objects"
+                            )
+                        self._ok(
+                            self.runtime.structured_trajectory_sequence_add(
+                                model_id, sequences
+                            )
+                        )
+                        return
+                    else:
+                        raise JormungandrServiceError(
+                            "trajectory schema must be a supported v1 step "
+                            "array or observation-chain sequence"
+                        )
+                if action == "supervision" and len(parts) == 5 and parts[4] == "add":
+                    schema = str(body.get("schema", "")).strip()
+                    if schema != "jormungandr.structured_supervision_batch.v1":
+                        raise JormungandrServiceError(
+                            "schema must be "
+                            "'jormungandr.structured_supervision_batch.v1'"
+                        )
+                    items = body.get("items")
+                    if not isinstance(items, list) or not all(
+                        isinstance(item, dict) for item in items
+                    ):
+                        raise JormungandrServiceError(
+                            "items must be an array of objects"
+                        )
+                    self._ok(
+                        self.runtime.structured_supervision_add(
+                            model_id, items
+                        )
+                    )
+                    return
+                if action == "metrics" and len(parts) == 4:
+                    metrics = body.get("metrics")
+                    if not isinstance(metrics, dict):
+                        raise JormungandrServiceError(
+                            "metrics must be an object"
+                        )
+                    self._ok(
+                        self.runtime.log_structured_metrics(
+                            model_id,
+                            step=int(body.get("step", 0)),
+                            metrics=metrics,
+                        )
+                    )
+                    return
+                if action == "policy" and len(parts) == 5 and parts[4] == "checkpoint":
+                    self._ok(
+                        self.runtime.force_structured_checkpoint(model_id)
+                    )
+                    return
+                self._err(404, "not found")
+                return
 
             if parts == ["v1", "models"]:
                 replay = body.get("replay", {})
@@ -3461,6 +3820,9 @@ class JormungandrHttpHandler(BaseHTTPRequestHandler):
         self._request_started_ts = time.time()
         try:
             parts = self._path_parts()
+            if len(parts) == 3 and parts[:2] == ["v2", "models"]:
+                self._ok(self.runtime.delete_structured_model(parts[2]))
+                return
             if len(parts) == 3 and parts[:2] == ["v1", "models"]:
                 self._ok(self.runtime.delete_model(parts[2]))
                 return

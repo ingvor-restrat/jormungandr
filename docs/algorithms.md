@@ -93,6 +93,13 @@ PPO defaults to `max_policy_lag: 0`; IMPALA and APPO default to 64. Offline
 MARWIL uses contiguous returns but does not enforce learner-version age on its
 demonstrations.
 
+Structured PPO version 1.2 records reward diversity before computing GAE:
+episode-return mean, standard deviation, range, unique count, episode length,
+and nonzero-reward fraction. Read these beside policy loss, entropy, KL, and
+explained variance. A high explained variance with one unique episode return
+means the critic can fit the common outcome; it does not mean PPO has evidence
+for preferring one action sequence.
+
 ## Quantile policies and probabilistic Torch
 
 In most actor--critic language, quantile regression belongs to the critic:

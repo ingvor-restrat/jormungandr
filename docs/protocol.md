@@ -1,7 +1,117 @@
 # Experience and Inference Protocol
 
-The HTTP API is rooted at `/v1`. JSON responses contain `ok: true` on success
-and `ok: false` with an `error` string on failure.
+The fixed vector/discrete HTTP API is rooted at `/v1`; the variable
+entity/candidate API is rooted at `/v2`. JSON responses contain `ok: true` on
+success and `ok: false` with an `error` string on failure.
+
+The v2 profile is separate rather than an ambiguous extension of v1 arrays.
+It retains actor, episode, timestep, split, and policy-version provenance while
+replacing the global action vocabulary with actor-owned semantic candidate
+IDs.
+
+## Variable entity/candidate v2
+
+Create a central structured model with `POST /v2/models`. The representation
+declares fixed feature widths but entity and candidate counts remain variable:
+
+```json
+{
+  "model_id": "structured-example",
+  "representation": {
+    "global_dim": 12,
+    "entity_dim": 24,
+    "candidate_dim": 41,
+    "entity_type_count": 8
+  },
+  "replay": {"capacity": 200000, "alpha": 0.6},
+  "learner": {
+    "enabled": true,
+    "algo": "structured_dqn",
+    "device": "auto",
+    "batch_size": 256,
+    "min_replay": 2048,
+    "replay_ratio": 1.0
+  }
+}
+```
+
+Actors call `POST /v2/models/{id}/policy/infer` with `observation` or an
+`observations` batch. Each observation uses schema
+`jormungandr.entity_candidates.v1` and contains global features, entity
+features/type IDs/semantic IDs, and candidate features/semantic IDs/legal
+mask. The response returns the selected `candidate_id`, its local batching
+index, behavior log probability, Q value, aligned candidate values, and the
+common policy version.
+
+Transitions enter `POST /v2/models/{id}/experience/add` under schema
+`jormungandr.structured_experience.v1`. Required fields are `split`,
+`actor_id`, `episode_id`, `timestep`, `policy_version`, `observation`,
+`candidate_id`, `reward`, `next_observation`, and `done`. The service verifies
+the semantic candidate against the recorded local set before admitting it to
+prioritized replay. `replay_ratio` bounds learner samples per ingested
+environment transition, preventing a fast learner thread from silently
+changing the experimental update budget.
+
+Inspect a model with `GET /v2/models/{id}` and force a service-owned checkpoint
+with `POST /v2/models/{id}/policy/checkpoint`.
+
+### Joint trajectory mode
+
+Create a trajectory model by setting `learner.algo` to `structured_ppo` and
+declaring `min_trajectory_steps` plus `max_policy_lag`. Actors first call
+`POST /v2/models/{id}/policy/score`. Its response aligns `candidate_logits`
+with semantic `candidate_ids`, returns one `behavior_value`, and names the
+exact `policy_version`.
+
+The actor samples one candidate per factor in order. Environment-owned
+constraint updates may restrict the current or later candidates. The request
+to `POST /v2/models/{id}/trajectories/add` uses schema
+`jormungandr.structured_trajectories.v1` and contains an array of complete
+trajectories. Every `jormungandr.structured_joint_step.v1` record includes:
+
+- actor, episode, timestep, split, and policy version;
+- one entity/candidate observation and next observation;
+- factor IDs, their candidate IDs, selected ID, and conditional log probability;
+- the exact sum as `joint_behavior_log_probability`;
+- one centralized behavior value and one scalar reward; and
+- termination/truncation plus optional actor-owned audit metadata.
+
+The service rejects missing, duplicated, out-of-order, future, or excessively
+stale train trajectories before they update the model. Validation episodes are
+stored separately and do not produce gradients. Current ingress requires
+complete episodes; partial fragments need an explicit bootstrap contract.
+Each learner-history point exposes the raw batch's episode-return mean,
+standard deviation, minimum, maximum, unique-value count, mean episode length,
+and nonzero-reward fraction. These fields are computed before GAE and are
+therefore the direct check for an all-identical sparse-reward batch.
+
+### Structured supervision mode
+
+Create a reward-free supervised model with `learner.algo` set to
+`structured_bc`. Submit examples to
+`POST /v2/models/{id}/supervision/add` using batch schema
+`jormungandr.structured_supervision_batch.v1`. Each item uses schema
+`jormungandr.structured_supervision.v1` and contains actor/episode/timestep
+provenance, an entity/candidate observation, `factor_id`, the factor's current
+legal `candidate_ids`, a semantic `target_candidate_id`, and a `train` or
+`validation` split. Optional `sample_weight`, `source_group`, and
+`factor_group` fields support application-owned balancing and diagnostics.
+There is deliberately no reward field.
+
+Duplicate factor labels are rejected. Validation labels enter a distinct
+bounded store and never update parameters or optimizer state. Learner metrics
+include weighted accuracy, NLL, entropy, calibration error, gradient norm, and
+per-source/per-factor summaries.
+
+After checkpointing structured BC, create a `structured_ppo` model with
+`policy_initialization_path` set to that checkpoint. Representation and model
+configuration must match. This copies only the compatible policy state: the
+new PPO learner begins at update and policy version zero with fresh optimizer,
+value-learning, and trajectory state. `checkpoint_path`, by contrast, restores
+the complete same-algorithm learner state and is mutually exclusive with
+`policy_initialization_path`.
+
+## Fixed vector/discrete v1
 
 ## Create a model
 

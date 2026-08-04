@@ -1,0 +1,2002 @@
+{
+  "aggregate": {
+    "jormungandr_structured": [
+      {
+        "return_mean": 9.416666666666666,
+        "return_median": 9.4,
+        "return_std_across_runs": 0.028867513459480673,
+        "run_means": [
+          9.4,
+          9.45,
+          9.4
+        ],
+        "solved_fraction": 0.0,
+        "timesteps": 0
+      },
+      {
+        "return_mean": 84.53333333333333,
+        "return_median": 81.3,
+        "return_std_across_runs": 66.90861927534698,
+        "run_means": [
+          153.0,
+          81.3,
+          19.3
+        ],
+        "solved_fraction": 0.0,
+        "timesteps": 4096
+      },
+      {
+        "return_mean": 209.83333333333334,
+        "return_median": 119.6,
+        "return_std_across_runs": 257.2081712024976,
+        "run_means": [
+          500.0,
+          119.6,
+          9.9
+        ],
+        "solved_fraction": 0.3333333333333333,
+        "timesteps": 8192
+      },
+      {
+        "return_mean": 366.59999999999997,
+        "return_median": 450.25,
+        "return_std_across_runs": 189.60957913565443,
+        "run_means": [
+          450.25,
+          149.55,
+          500.0
+        ],
+        "solved_fraction": 0.3333333333333333,
+        "timesteps": 12288
+      },
+      {
+        "return_mean": 372.6166666666666,
+        "return_median": 500.0,
+        "return_std_across_runs": 220.6344053708155,
+        "run_means": [
+          500.0,
+          117.85,
+          500.0
+        ],
+        "solved_fraction": 0.6666666666666666,
+        "timesteps": 16384
+      },
+      {
+        "return_mean": 364.15000000000003,
+        "return_median": 390.5,
+        "return_std_across_runs": 150.762039320248,
+        "run_means": [
+          390.5,
+          201.95,
+          500.0
+        ],
+        "solved_fraction": 0.3333333333333333,
+        "timesteps": 20480
+      },
+      {
+        "return_mean": 379.59999999999997,
+        "return_median": 353.4,
+        "return_std_across_runs": 61.72187618664878,
+        "run_means": [
+          335.3,
+          450.1,
+          353.4
+        ],
+        "solved_fraction": 0.0,
+        "timesteps": 24576
+      },
+      {
+        "return_mean": 201.83333333333334,
+        "return_median": 206.3,
+        "return_std_across_runs": 80.4430595721802,
+        "run_means": [
+          206.3,
+          119.25,
+          279.95
+        ],
+        "solved_fraction": 0.0,
+        "timesteps": 28672
+      },
+      {
+        "return_mean": 268.48333333333335,
+        "return_median": 197.4,
+        "return_std_across_runs": 205.41623799820044,
+        "run_means": [
+          197.4,
+          500.0,
+          108.05
+        ],
+        "solved_fraction": 0.3333333333333333,
+        "timesteps": 32768
+      },
+      {
+        "return_mean": 398.9666666666667,
+        "return_median": 451.15,
+        "return_std_across_runs": 134.91883053648712,
+        "run_means": [
+          245.75,
+          500.0,
+          451.15
+        ],
+        "solved_fraction": 0.3333333333333333,
+        "timesteps": 36864
+      },
+      {
+        "return_mean": 342.1666666666667,
+        "return_median": 369.3,
+        "return_std_across_runs": 173.00324659766744,
+        "run_means": [
+          369.3,
+          157.2,
+          500.0
+        ],
+        "solved_fraction": 0.3333333333333333,
+        "timesteps": 40960
+      },
+      {
+        "return_mean": 498.0,
+        "return_median": 500.0,
+        "return_std_across_runs": 3.4641016151377544,
+        "run_means": [
+          500.0,
+          494.0,
+          500.0
+        ],
+        "solved_fraction": 1.0,
+        "timesteps": 45056
+      },
+      {
+        "return_mean": 500.0,
+        "return_median": 500.0,
+        "return_std_across_runs": 0.0,
+        "run_means": [
+          500.0,
+          500.0,
+          500.0
+        ],
+        "solved_fraction": 1.0,
+        "timesteps": 49152
+      }
+    ]
+  },
+  "benchmark": "CartPole-v1 flat versus entity/candidate PPO",
+  "config": {
+    "base_seed": 20260804,
+    "clip_ratio": 0.2,
+    "entropy_coefficient": 0.0,
+    "epochs": 10,
+    "evaluation_episodes": 20,
+    "evaluation_every_timesteps": 4096,
+    "feedforward_dim": 64,
+    "gae_lambda": 0.95,
+    "gamma": 0.99,
+    "heads": 4,
+    "layers": 2,
+    "learning_rate": 0.0003,
+    "max_grad_norm": 0.5,
+    "minibatch_size": 64,
+    "model_dim": 32,
+    "rollout_steps": 1024,
+    "runs": 3,
+    "solved_threshold": 475.0,
+    "total_timesteps": 49152,
+    "value_coefficient": 0.5
+  },
+  "decision": {
+    "final_return_gate": true,
+    "flat_final_median": 500.0,
+    "flat_first_solved_timesteps": [
+      20480,
+      20480,
+      20480
+    ],
+    "gate": "S0",
+    "identity_and_permutation_gate": true,
+    "passed": true,
+    "structured_final_median": 500.0,
+    "structured_first_solved_timesteps": [
+      8192,
+      32768,
+      12288
+    ],
+    "time_to_threshold_gate": true
+  },
+  "representation": {
+    "candidate_ids": [
+      "action:left",
+      "action:right"
+    ],
+    "entity_ids": [
+      "cart-position",
+      "cart-velocity",
+      "pole-angle",
+      "pole-velocity"
+    ],
+    "policy": "EntityCandidateTransformer",
+    "spec": {
+      "candidate_dim": 2,
+      "entity_dim": 2,
+      "entity_type_count": 4,
+      "global_dim": 1
+    }
+  },
+  "runs": [
+    {
+      "curve": [
+        {
+          "evaluation": {
+            "return_mean": 9.4,
+            "return_std": 0.6805570473787206,
+            "returns": [
+              9.0,
+              8.0,
+              8.0,
+              9.0,
+              10.0,
+              9.0,
+              10.0,
+              10.0,
+              10.0,
+              10.0,
+              10.0,
+              9.0,
+              9.0,
+              10.0,
+              9.0,
+              9.0,
+              10.0,
+              10.0,
+              9.0,
+              10.0
+            ],
+            "solved": false
+          },
+          "learner": null,
+          "timesteps": 0,
+          "updates": 0
+        },
+        {
+          "evaluation": {
+            "return_mean": 153.0,
+            "return_std": 11.285761872936694,
+            "returns": [
+              172.0,
+              159.0,
+              172.0,
+              166.0,
+              142.0,
+              147.0,
+              130.0,
+              153.0,
+              159.0,
+              158.0,
+              149.0,
+              147.0,
+              152.0,
+              138.0,
+              161.0,
+              158.0,
+              148.0,
+              145.0,
+              164.0,
+              140.0
+            ],
+            "solved": false
+          },
+          "learner": {
+            "advantage_mean": 2.7906887531280518,
+            "advantage_std": 6.365799903869629,
+            "approximate_kl": 0.007874922921501718,
+            "clip_fraction": 0.1342664092117525,
+            "entropy": 0.686334618201127,
+            "epochs": 10,
+            "explained_variance": 0.2336998788040373,
+            "loss": 14.794587500215037,
+            "minibatches": 170,
+            "policy_loss": -0.019590098294339584,
+            "transitions": 1036,
+            "value_loss": 29.628355195623566
+          },
+          "timesteps": 4096,
+          "updates": 3
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": {
+            "advantage_mean": 5.786001205444336,
+            "advantage_std": 9.139918327331543,
+            "approximate_kl": 0.01961411324300131,
+            "clip_fraction": 0.24244712999039905,
+            "entropy": 0.5961604638942419,
+            "epochs": 10,
+            "explained_variance": 0.2859625378831897,
+            "loss": 37.08463290638074,
+            "minibatches": 210,
+            "policy_loss": 0.002011218459522661,
+            "transitions": 1324,
+            "value_loss": 74.16524325483155
+          },
+          "timesteps": 8192,
+          "updates": 7
+        },
+        {
+          "evaluation": {
+            "return_mean": 450.25,
+            "return_std": 50.7645493793081,
+            "returns": [
+              497.0,
+              483.0,
+              493.0,
+              488.0,
+              462.0,
+              467.0,
+              427.0,
+              306.0,
+              482.0,
+              467.0,
+              459.0,
+              454.0,
+              454.0,
+              443.0,
+              476.0,
+              482.0,
+              453.0,
+              442.0,
+              318.0,
+              452.0
+            ],
+            "solved": false
+          },
+          "learner": {
+            "advantage_mean": -0.9866577386856079,
+            "advantage_std": 11.680596351623535,
+            "approximate_kl": 0.047850096039646316,
+            "clip_fraction": 0.3482886219181803,
+            "entropy": 0.5540969890648297,
+            "epochs": 10,
+            "explained_variance": 0.5023195054304357,
+            "loss": 34.40492294427976,
+            "minibatches": 170,
+            "policy_loss": 0.01085561602074863,
+            "transitions": 1081,
+            "value_loss": 68.78813450272496
+          },
+          "timesteps": 12288,
+          "updates": 11
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": {
+            "advantage_mean": 6.009373664855957,
+            "advantage_std": 8.237548828125,
+            "approximate_kl": 0.026209097568477904,
+            "clip_fraction": 0.28746031744139533,
+            "entropy": 0.5955032812035272,
+            "epochs": 10,
+            "explained_variance": 0.6584667195762401,
+            "loss": 15.443651649232894,
+            "minibatches": 200,
+            "policy_loss": 0.014646810579985852,
+            "transitions": 1260,
+            "value_loss": 30.85800968896775
+          },
+          "timesteps": 16384,
+          "updates": 14
+        },
+        {
+          "evaluation": {
+            "return_mean": 390.5,
+            "return_std": 18.92784081438601,
+            "returns": [
+              423.0,
+              392.0,
+              403.0,
+              364.0,
+              369.0,
+              366.0,
+              369.0,
+              383.0,
+              400.0,
+              419.0,
+              415.0,
+              396.0,
+              414.0,
+              362.0,
+              392.0,
+              406.0,
+              384.0,
+              384.0,
+              382.0,
+              387.0
+            ],
+            "solved": false
+          },
+          "learner": {
+            "advantage_mean": -1.4275734424591064,
+            "advantage_std": 6.921000957489014,
+            "approximate_kl": 0.022251506387134003,
+            "clip_fraction": 0.3073970035723086,
+            "entropy": 0.5932974542348126,
+            "epochs": 10,
+            "explained_variance": 0.8912650518944847,
+            "loss": 20.39533408125688,
+            "minibatches": 170,
+            "policy_loss": -0.022216843467289478,
+            "transitions": 1068,
+            "value_loss": 40.835101992717846
+          },
+          "timesteps": 20480,
+          "updates": 18
+        },
+        {
+          "evaluation": {
+            "return_mean": 335.3,
+            "return_std": 174.99236073551745,
+            "returns": [
+              490.0,
+              381.0,
+              390.0,
+              310.0,
+              500.0,
+              21.0,
+              500.0,
+              500.0,
+              452.0,
+              424.0,
+              500.0,
+              379.0,
+              443.0,
+              36.0,
+              23.0,
+              366.0,
+              321.0,
+              104.0,
+              106.0,
+              460.0
+            ],
+            "solved": false
+          },
+          "learner": {
+            "advantage_mean": -10.116423606872559,
+            "advantage_std": 16.1680850982666,
+            "approximate_kl": 0.12134911196983673,
+            "clip_fraction": 0.42026515151515154,
+            "entropy": 0.3735641409050335,
+            "epochs": 10,
+            "explained_variance": 0.4975031150199103,
+            "loss": 109.92386814464223,
+            "minibatches": 170,
+            "policy_loss": 0.0641008310302189,
+            "transitions": 1056,
+            "value_loss": 219.71953478726473
+          },
+          "timesteps": 24576,
+          "updates": 21
+        },
+        {
+          "evaluation": {
+            "return_mean": 206.3,
+            "return_std": 246.03510660922055,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              10.0,
+              500.0,
+              11.0,
+              10.0,
+              10.0,
+              11.0,
+              11.0,
+              500.0,
+              500.0,
+              10.0,
+              500.0,
+              11.0,
+              11.0,
+              11.0,
+              10.0,
+              10.0
+            ],
+            "solved": false
+          },
+          "learner": {
+            "advantage_mean": -3.0926852226257324,
+            "advantage_std": 11.434981346130371,
+            "approximate_kl": 0.06764897921909262,
+            "clip_fraction": 0.2683495145920411,
+            "entropy": 0.41008940237239727,
+            "epochs": 10,
+            "explained_variance": 0.4711930637968348,
+            "loss": 55.48333997383858,
+            "minibatches": 170,
+            "policy_loss": 0.021526190224781777,
+            "transitions": 1030,
+            "value_loss": 110.92362705601072
+          },
+          "timesteps": 28672,
+          "updates": 25
+        },
+        {
+          "evaluation": {
+            "return_mean": 197.4,
+            "return_std": 22.200995710244975,
+            "returns": [
+              177.0,
+              212.0,
+              199.0,
+              204.0,
+              170.0,
+              220.0,
+              238.0,
+              152.0,
+              166.0,
+              190.0,
+              216.0,
+              205.0,
+              185.0,
+              231.0,
+              214.0,
+              176.0,
+              192.0,
+              211.0,
+              199.0,
+              191.0
+            ],
+            "solved": false
+          },
+          "learner": {
+            "advantage_mean": 2.5868308544158936,
+            "advantage_std": 8.267021179199219,
+            "approximate_kl": 0.01700804950104285,
+            "clip_fraction": 0.20271844663087604,
+            "entropy": 0.5325885496903392,
+            "epochs": 10,
+            "explained_variance": 0.7112882548890209,
+            "loss": 28.803665716810134,
+            "minibatches": 170,
+            "policy_loss": -0.010334613998104068,
+            "transitions": 1030,
+            "value_loss": 57.62800061522178
+          },
+          "timesteps": 32768,
+          "updates": 29
+        },
+        {
+          "evaluation": {
+            "return_mean": 245.75,
+            "return_std": 28.112321703817837,
+            "returns": [
+              220.0,
+              227.0,
+              188.0,
+              232.0,
+              255.0,
+              239.0,
+              301.0,
+              250.0,
+              237.0,
+              228.0,
+              249.0,
+              280.0,
+              255.0,
+              264.0,
+              224.0,
+              235.0,
+              262.0,
+              242.0,
+              220.0,
+              307.0
+            ],
+            "solved": false
+          },
+          "learner": {
+            "advantage_mean": 1.8019102811813354,
+            "advantage_std": 4.315507411956787,
+            "approximate_kl": 0.03291698759081383,
+            "clip_fraction": 0.27825311957634385,
+            "entropy": 0.5371406307673072,
+            "epochs": 10,
+            "explained_variance": 0.9498308030398543,
+            "loss": 6.847046133838661,
+            "minibatches": 180,
+            "policy_loss": 0.006196676108342016,
+            "transitions": 1122,
+            "value_loss": 13.681698896625676
+          },
+          "timesteps": 36864,
+          "updates": 33
+        },
+        {
+          "evaluation": {
+            "return_mean": 369.3,
+            "return_std": 166.08815034255312,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              171.0,
+              500.0,
+              200.0,
+              500.0,
+              500.0,
+              229.0,
+              145.0,
+              227.0,
+              122.0,
+              500.0,
+              500.0,
+              149.0,
+              143.0,
+              500.0,
+              500.0
+            ],
+            "solved": false
+          },
+          "learner": {
+            "advantage_mean": 3.4840705394744873,
+            "advantage_std": 6.22146463394165,
+            "approximate_kl": 0.11932954403541741,
+            "clip_fraction": 0.5049193546488401,
+            "entropy": 0.5406771298570018,
+            "epochs": 10,
+            "explained_variance": 0.909737317831749,
+            "loss": 11.887651586686411,
+            "minibatches": 200,
+            "policy_loss": 0.062418521617449096,
+            "transitions": 1240,
+            "value_loss": 23.650466104322863
+          },
+          "timesteps": 40960,
+          "updates": 36
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": {
+            "advantage_mean": 2.9346821308135986,
+            "advantage_std": 6.270422458648682,
+            "approximate_kl": 0.016181151558346343,
+            "clip_fraction": 0.2136792452998881,
+            "entropy": 0.5528182656585046,
+            "epochs": 10,
+            "explained_variance": 0.8813708300358499,
+            "loss": 4.447681994303218,
+            "minibatches": 170,
+            "policy_loss": 0.008087572711607758,
+            "transitions": 1060,
+            "value_loss": 8.879188814073238
+          },
+          "timesteps": 45056,
+          "updates": 40
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": {
+            "advantage_mean": 2.9831433296203613,
+            "advantage_std": 3.7487950325012207,
+            "approximate_kl": 0.01929441637745718,
+            "clip_fraction": 0.21189024390243902,
+            "entropy": 0.5598699699087841,
+            "epochs": 10,
+            "explained_variance": 0.9579597807262991,
+            "loss": 3.642244840540537,
+            "minibatches": 210,
+            "policy_loss": 0.016896490913974802,
+            "transitions": 1312,
+            "value_loss": 7.250696707644114
+          },
+          "timesteps": 49152,
+          "updates": 43
+        }
+      ],
+      "elapsed_seconds": 125.39293412701227,
+      "identity": {
+        "checkpoint_restore_action_match": true,
+        "max_semantic_logit_difference": 4.172325134277344e-07,
+        "max_value_difference": 7.62939453125e-06,
+        "semantic_actions_match_under_permutation": true,
+        "tolerance": 1e-05,
+        "wire_identity_match": true
+      },
+      "parameter_count": 20674,
+      "participant": "jormungandr_structured",
+      "run": 0,
+      "seed": 20260804,
+      "unused_incomplete_steps": 901
+    },
+    {
+      "curve": [
+        {
+          "evaluation": {
+            "return_mean": 9.45,
+            "return_std": 0.6048053188292994,
+            "returns": [
+              10.0,
+              10.0,
+              10.0,
+              10.0,
+              9.0,
+              10.0,
+              9.0,
+              9.0,
+              9.0,
+              9.0,
+              9.0,
+              10.0,
+              10.0,
+              9.0,
+              10.0,
+              10.0,
+              9.0,
+              8.0,
+              10.0,
+              9.0
+            ],
+            "solved": false
+          },
+          "learner": null,
+          "timesteps": 0,
+          "updates": 0
+        },
+        {
+          "evaluation": {
+            "return_mean": 81.3,
+            "return_std": 23.599955396924845,
+            "returns": [
+              90.0,
+              93.0,
+              91.0,
+              90.0,
+              88.0,
+              88.0,
+              86.0,
+              90.0,
+              88.0,
+              91.0,
+              87.0,
+              13.0,
+              12.0,
+              86.0,
+              89.0,
+              91.0,
+              88.0,
+              87.0,
+              90.0,
+              88.0
+            ],
+            "solved": false
+          },
+          "learner": {
+            "advantage_mean": 1.7239093780517578,
+            "advantage_std": 4.42113733291626,
+            "approximate_kl": 0.01170470163645942,
+            "clip_fraction": 0.13050193047891712,
+            "entropy": 0.6884466574459003,
+            "epochs": 10,
+            "explained_variance": 0.554881350884932,
+            "loss": 9.028117566311222,
+            "minibatches": 170,
+            "policy_loss": -0.019529965975138442,
+            "transitions": 1036,
+            "value_loss": 18.09529502566717
+          },
+          "timesteps": 4096,
+          "updates": 3
+        },
+        {
+          "evaluation": {
+            "return_mean": 119.6,
+            "return_std": 159.29595098432353,
+            "returns": [
+              64.0,
+              38.0,
+              500.0,
+              360.0,
+              24.0,
+              35.0,
+              19.0,
+              26.0,
+              261.0,
+              27.0,
+              29.0,
+              40.0,
+              40.0,
+              29.0,
+              385.0,
+              393.0,
+              32.0,
+              24.0,
+              38.0,
+              28.0
+            ],
+            "solved": false
+          },
+          "learner": {
+            "advantage_mean": 4.416611671447754,
+            "advantage_std": 7.15941047668457,
+            "approximate_kl": 0.017799124566164674,
+            "clip_fraction": 0.2162112932903302,
+            "entropy": 0.6478466218395095,
+            "epochs": 10,
+            "explained_variance": 0.48223330928322405,
+            "loss": 21.67611949899809,
+            "minibatches": 180,
+            "policy_loss": 0.023701768941865157,
+            "transitions": 1098,
+            "value_loss": 43.304835370590126
+          },
+          "timesteps": 8192,
+          "updates": 7
+        },
+        {
+          "evaluation": {
+            "return_mean": 149.55,
+            "return_std": 120.43057620143867,
+            "returns": [
+              242.0,
+              132.0,
+              219.0,
+              97.0,
+              71.0,
+              90.0,
+              42.0,
+              144.0,
+              323.0,
+              484.0,
+              55.0,
+              38.0,
+              59.0,
+              48.0,
+              213.0,
+              281.0,
+              77.0,
+              62.0,
+              261.0,
+              53.0
+            ],
+            "solved": false
+          },
+          "learner": {
+            "advantage_mean": -1.5915782451629639,
+            "advantage_std": 5.435726165771484,
+            "approximate_kl": 0.01458301104270207,
+            "clip_fraction": 0.24033041790605633,
+            "entropy": 0.6427424810544395,
+            "epochs": 10,
+            "explained_variance": 0.6200293680584077,
+            "loss": 13.123790743758773,
+            "minibatches": 170,
+            "policy_loss": -0.02877008239652661,
+            "transitions": 1029,
+            "value_loss": 26.30512172478397
+          },
+          "timesteps": 12288,
+          "updates": 11
+        },
+        {
+          "evaluation": {
+            "return_mean": 117.85,
+            "return_std": 29.967131116748913,
+            "returns": [
+              99.0,
+              111.0,
+              99.0,
+              97.0,
+              105.0,
+              122.0,
+              137.0,
+              114.0,
+              108.0,
+              106.0,
+              105.0,
+              227.0,
+              102.0,
+              163.0,
+              107.0,
+              108.0,
+              118.0,
+              106.0,
+              100.0,
+              123.0
+            ],
+            "solved": false
+          },
+          "learner": {
+            "advantage_mean": 4.355473041534424,
+            "advantage_std": 5.359022617340088,
+            "approximate_kl": 0.011053687302171024,
+            "clip_fraction": 0.14970817120622568,
+            "entropy": 0.6121954043783566,
+            "epochs": 10,
+            "explained_variance": 0.7876192467552222,
+            "loss": 12.175941049820718,
+            "minibatches": 170,
+            "policy_loss": 0.0012620164614156294,
+            "transitions": 1028,
+            "value_loss": 24.349358031258046
+          },
+          "timesteps": 16384,
+          "updates": 15
+        },
+        {
+          "evaluation": {
+            "return_mean": 201.95,
+            "return_std": 33.83003181540891,
+            "returns": [
+              181.0,
+              201.0,
+              194.0,
+              168.0,
+              188.0,
+              190.0,
+              223.0,
+              272.0,
+              190.0,
+              167.0,
+              157.0,
+              195.0,
+              164.0,
+              258.0,
+              202.0,
+              209.0,
+              192.0,
+              267.0,
+              180.0,
+              241.0
+            ],
+            "solved": false
+          },
+          "learner": {
+            "advantage_mean": 2.7435801029205322,
+            "advantage_std": 4.255070686340332,
+            "approximate_kl": 0.029148717180433856,
+            "clip_fraction": 0.3343891404336529,
+            "entropy": 0.6132349557089051,
+            "epochs": 10,
+            "explained_variance": 0.921779639558978,
+            "loss": 8.105318225713877,
+            "minibatches": 180,
+            "policy_loss": 0.015417968817898052,
+            "transitions": 1105,
+            "value_loss": 16.17980051603792
+          },
+          "timesteps": 20480,
+          "updates": 19
+        },
+        {
+          "evaluation": {
+            "return_mean": 450.1,
+            "return_std": 103.70550409186278,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              204.0,
+              500.0,
+              231.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              298.0,
+              500.0,
+              500.0,
+              500.0,
+              269.0,
+              500.0,
+              500.0
+            ],
+            "solved": false
+          },
+          "learner": {
+            "advantage_mean": 0.1755659133195877,
+            "advantage_std": 10.84717845916748,
+            "approximate_kl": 0.12108149265235887,
+            "clip_fraction": 0.5897153351698806,
+            "entropy": 0.4879817484776234,
+            "epochs": 10,
+            "explained_variance": 0.646041353265423,
+            "loss": 27.12530543789938,
+            "minibatches": 180,
+            "policy_loss": 0.05037713031685604,
+            "transitions": 1089,
+            "value_loss": 54.14985651443366
+          },
+          "timesteps": 24576,
+          "updates": 22
+        },
+        {
+          "evaluation": {
+            "return_mean": 119.25,
+            "return_std": 6.8815160508346365,
+            "returns": [
+              129.0,
+              126.0,
+              130.0,
+              127.0,
+              109.0,
+              113.0,
+              104.0,
+              116.0,
+              119.0,
+              118.0,
+              123.0,
+              119.0,
+              122.0,
+              113.0,
+              122.0,
+              126.0,
+              119.0,
+              114.0,
+              123.0,
+              113.0
+            ],
+            "solved": false
+          },
+          "learner": {
+            "advantage_mean": 3.008657693862915,
+            "advantage_std": 12.756762504577637,
+            "approximate_kl": 0.0651881028459082,
+            "clip_fraction": 0.4006469501943333,
+            "entropy": 0.5361276786671108,
+            "epochs": 10,
+            "explained_variance": 0.3261691817646786,
+            "loss": 34.05503824836886,
+            "minibatches": 170,
+            "policy_loss": 0.022045548154857153,
+            "transitions": 1082,
+            "value_loss": 68.06598526466355
+          },
+          "timesteps": 28672,
+          "updates": 26
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": {
+            "advantage_mean": -5.450501918792725,
+            "advantage_std": 9.264005661010742,
+            "approximate_kl": 0.02624075174958686,
+            "clip_fraction": 0.31676698201243875,
+            "entropy": 0.5397624361340793,
+            "epochs": 10,
+            "explained_variance": 0.8573903336087949,
+            "loss": 33.11521029800356,
+            "minibatches": 190,
+            "policy_loss": -0.010434550979204303,
+            "transitions": 1163,
+            "value_loss": 66.25128980154429
+          },
+          "timesteps": 32768,
+          "updates": 29
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": {
+            "advantage_mean": 1.479901909828186,
+            "advantage_std": 10.872469902038574,
+            "approximate_kl": 0.04306022897437215,
+            "clip_fraction": 0.3924000001748403,
+            "entropy": 0.5743444533348083,
+            "epochs": 10,
+            "explained_variance": -0.14354057627607753,
+            "loss": 51.137105805333455,
+            "minibatches": 240,
+            "policy_loss": 0.022006749015549817,
+            "transitions": 1500,
+            "value_loss": 102.23019804382324
+          },
+          "timesteps": 36864,
+          "updates": 32
+        },
+        {
+          "evaluation": {
+            "return_mean": 157.2,
+            "return_std": 13.736620284557088,
+            "returns": [
+              173.0,
+              170.0,
+              173.0,
+              174.0,
+              141.0,
+              170.0,
+              131.0,
+              155.0,
+              158.0,
+              160.0,
+              152.0,
+              153.0,
+              164.0,
+              138.0,
+              173.0,
+              164.0,
+              147.0,
+              141.0,
+              167.0,
+              140.0
+            ],
+            "solved": false
+          },
+          "learner": {
+            "advantage_mean": -5.129436492919922,
+            "advantage_std": 15.59333324432373,
+            "approximate_kl": 0.12528519613398514,
+            "clip_fraction": 0.5741710293875523,
+            "entropy": 0.47418700289143734,
+            "epochs": 10,
+            "explained_variance": 0.3284463621454299,
+            "loss": 64.52869675454878,
+            "minibatches": 180,
+            "policy_loss": 0.03504763968080854,
+            "transitions": 1146,
+            "value_loss": 128.98729810265345
+          },
+          "timesteps": 40960,
+          "updates": 36
+        },
+        {
+          "evaluation": {
+            "return_mean": 494.0,
+            "return_std": 26.832815729997478,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              380.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": {
+            "advantage_mean": -1.2987161874771118,
+            "advantage_std": 13.023633003234863,
+            "approximate_kl": 0.03998214834320702,
+            "clip_fraction": 0.3035361842105263,
+            "entropy": 0.5121800372475072,
+            "epochs": 10,
+            "explained_variance": 0.46683637325011373,
+            "loss": 56.41640716351961,
+            "minibatches": 190,
+            "policy_loss": 0.012997455684174049,
+            "transitions": 1216,
+            "value_loss": 112.80681975515265
+          },
+          "timesteps": 45056,
+          "updates": 40
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": {
+            "advantage_mean": -1.4448484182357788,
+            "advantage_std": 12.01159381866455,
+            "approximate_kl": 0.046818973520445374,
+            "clip_fraction": 0.29790092378942334,
+            "entropy": 0.4963987166219955,
+            "epochs": 10,
+            "explained_variance": 0.6670536837931693,
+            "loss": 40.53464467299275,
+            "minibatches": 190,
+            "policy_loss": 0.012499436243545924,
+            "transitions": 1191,
+            "value_loss": 81.04429025497885
+          },
+          "timesteps": 49152,
+          "updates": 43
+        }
+      ],
+      "elapsed_seconds": 113.01484655297827,
+      "identity": {
+        "checkpoint_restore_action_match": true,
+        "max_semantic_logit_difference": 1.0728836059570312e-06,
+        "max_value_difference": 7.62939453125e-06,
+        "semantic_actions_match_under_permutation": true,
+        "tolerance": 1e-05,
+        "wire_identity_match": true
+      },
+      "parameter_count": 20674,
+      "participant": "jormungandr_structured",
+      "run": 1,
+      "seed": 21260807,
+      "unused_incomplete_steps": 533
+    },
+    {
+      "curve": [
+        {
+          "evaluation": {
+            "return_mean": 9.4,
+            "return_std": 0.6805570473787206,
+            "returns": [
+              9.0,
+              8.0,
+              8.0,
+              9.0,
+              10.0,
+              9.0,
+              10.0,
+              10.0,
+              10.0,
+              10.0,
+              10.0,
+              9.0,
+              9.0,
+              10.0,
+              9.0,
+              9.0,
+              10.0,
+              10.0,
+              9.0,
+              10.0
+            ],
+            "solved": false
+          },
+          "learner": null,
+          "timesteps": 0,
+          "updates": 0
+        },
+        {
+          "evaluation": {
+            "return_mean": 19.3,
+            "return_std": 1.625455401774498,
+            "returns": [
+              20.0,
+              17.0,
+              20.0,
+              18.0,
+              21.0,
+              17.0,
+              20.0,
+              21.0,
+              21.0,
+              21.0,
+              21.0,
+              16.0,
+              19.0,
+              18.0,
+              17.0,
+              19.0,
+              19.0,
+              21.0,
+              20.0,
+              20.0
+            ],
+            "solved": false
+          },
+          "learner": {
+            "advantage_mean": 2.8686912059783936,
+            "advantage_std": 4.762459754943848,
+            "approximate_kl": 0.005272236334689988,
+            "clip_fraction": 0.02456978969204722,
+            "entropy": 0.6884521896479007,
+            "epochs": 10,
+            "explained_variance": 0.46536577343274477,
+            "loss": 10.143916518191306,
+            "minibatches": 170,
+            "policy_loss": -0.00889857255107586,
+            "transitions": 1046,
+            "value_loss": 20.305630122452804
+          },
+          "timesteps": 4096,
+          "updates": 3
+        },
+        {
+          "evaluation": {
+            "return_mean": 9.9,
+            "return_std": 0.7181848464596079,
+            "returns": [
+              10.0,
+              11.0,
+              11.0,
+              10.0,
+              9.0,
+              11.0,
+              9.0,
+              10.0,
+              9.0,
+              9.0,
+              9.0,
+              10.0,
+              10.0,
+              10.0,
+              11.0,
+              10.0,
+              10.0,
+              9.0,
+              10.0,
+              10.0
+            ],
+            "solved": false
+          },
+          "learner": {
+            "advantage_mean": 2.298238754272461,
+            "advantage_std": 7.920546054840088,
+            "approximate_kl": 0.0188412019058748,
+            "clip_fraction": 0.24818007665404415,
+            "entropy": 0.61608641366849,
+            "epochs": 10,
+            "explained_variance": 0.5477958948389454,
+            "loss": 26.478678197604943,
+            "minibatches": 170,
+            "policy_loss": 0.02653200251417827,
+            "transitions": 1044,
+            "value_loss": 52.90429231490212
+          },
+          "timesteps": 8192,
+          "updates": 7
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": {
+            "advantage_mean": 2.566922903060913,
+            "advantage_std": 7.863228797912598,
+            "approximate_kl": 0.009883219602307832,
+            "clip_fraction": 0.12649325632951391,
+            "entropy": 0.6088459505511157,
+            "epochs": 10,
+            "explained_variance": 0.49236234978949667,
+            "loss": 27.93759390614166,
+            "minibatches": 170,
+            "policy_loss": -0.01947761407886454,
+            "transitions": 1038,
+            "value_loss": 55.91414287508338
+          },
+          "timesteps": 12288,
+          "updates": 11
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": {
+            "advantage_mean": 4.226170063018799,
+            "advantage_std": 7.972019672393799,
+            "approximate_kl": 0.019288054845460197,
+            "clip_fraction": 0.2261029411764706,
+            "entropy": 0.5765457433812758,
+            "epochs": 10,
+            "explained_variance": 0.6199254071026323,
+            "loss": 28.256061110777015,
+            "minibatches": 170,
+            "policy_loss": -0.011097691345083363,
+            "transitions": 1088,
+            "value_loss": 56.53431757758646
+          },
+          "timesteps": 16384,
+          "updates": 15
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": {
+            "advantage_mean": 6.232500076293945,
+            "advantage_std": 8.931164741516113,
+            "approximate_kl": 0.029415703503904968,
+            "clip_fraction": 0.3045454545973348,
+            "entropy": 0.5973057578910481,
+            "epochs": 10,
+            "explained_variance": 0.07439204542335798,
+            "loss": 34.33133845993352,
+            "minibatches": 170,
+            "policy_loss": 0.018204602083043562,
+            "transitions": 1034,
+            "value_loss": 68.62626788196526
+          },
+          "timesteps": 20480,
+          "updates": 18
+        },
+        {
+          "evaluation": {
+            "return_mean": 353.4,
+            "return_std": 229.7528191225014,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              11.0,
+              500.0,
+              11.0,
+              500.0,
+              12.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              12.0,
+              500.0,
+              500.0,
+              11.0,
+              11.0,
+              500.0,
+              500.0
+            ],
+            "solved": false
+          },
+          "learner": {
+            "advantage_mean": 2.722029685974121,
+            "advantage_std": 11.31363296508789,
+            "approximate_kl": 0.06467404752568119,
+            "clip_fraction": 0.3584889645689817,
+            "entropy": 0.5474171451781521,
+            "epochs": 10,
+            "explained_variance": 0.44592756757377994,
+            "loss": 48.92827061845815,
+            "minibatches": 190,
+            "policy_loss": 0.05426068632106071,
+            "transitions": 1178,
+            "value_loss": 97.7480196177251
+          },
+          "timesteps": 24576,
+          "updates": 22
+        },
+        {
+          "evaluation": {
+            "return_mean": 279.95,
+            "return_std": 249.59471886282074,
+            "returns": [
+              500.0,
+              10.0,
+              500.0,
+              500.0,
+              11.0,
+              500.0,
+              11.0,
+              10.0,
+              12.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              12.0,
+              500.0,
+              11.0,
+              11.0,
+              11.0,
+              500.0,
+              500.0
+            ],
+            "solved": false
+          },
+          "learner": {
+            "advantage_mean": -1.0478299856185913,
+            "advantage_std": 14.97645378112793,
+            "approximate_kl": 0.08406085208591564,
+            "clip_fraction": 0.39231508183404873,
+            "entropy": 0.4250893895180608,
+            "epochs": 10,
+            "explained_variance": 0.6152785031978331,
+            "loss": 79.45711287132944,
+            "minibatches": 170,
+            "policy_loss": 0.05439637881962226,
+            "transitions": 1041,
+            "value_loss": 158.80543284054335
+          },
+          "timesteps": 28672,
+          "updates": 26
+        },
+        {
+          "evaluation": {
+            "return_mean": 108.05,
+            "return_std": 201.06675377516842,
+            "returns": [
+              500.0,
+              10.0,
+              11.0,
+              500.0,
+              10.0,
+              9.0,
+              10.0,
+              10.0,
+              10.0,
+              11.0,
+              500.0,
+              10.0,
+              500.0,
+              10.0,
+              9.0,
+              11.0,
+              10.0,
+              10.0,
+              10.0,
+              10.0
+            ],
+            "solved": false
+          },
+          "learner": {
+            "advantage_mean": -5.0243754386901855,
+            "advantage_std": 15.358792304992676,
+            "approximate_kl": 0.06904866983831832,
+            "clip_fraction": 0.3214962121212121,
+            "entropy": 0.4093154287699497,
+            "epochs": 10,
+            "explained_variance": 0.44956156342030806,
+            "loss": 89.63407429781827,
+            "minibatches": 170,
+            "policy_loss": 0.04190541904871211,
+            "transitions": 1056,
+            "value_loss": 179.18433763908618
+          },
+          "timesteps": 32768,
+          "updates": 29
+        },
+        {
+          "evaluation": {
+            "return_mean": 451.15,
+            "return_std": 150.35721500900166,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              11.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              12.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": false
+          },
+          "learner": {
+            "advantage_mean": 4.1748127937316895,
+            "advantage_std": 9.65892505645752,
+            "approximate_kl": 0.01687408618411613,
+            "clip_fraction": 0.1886346864018493,
+            "entropy": 0.5349564045909586,
+            "epochs": 10,
+            "explained_variance": 0.665990736499934,
+            "loss": 41.29551437800221,
+            "minibatches": 220,
+            "policy_loss": 0.004976667256757782,
+            "transitions": 1355,
+            "value_loss": 82.58107552482633
+          },
+          "timesteps": 36864,
+          "updates": 33
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": {
+            "advantage_mean": 1.030981421470642,
+            "advantage_std": 13.026346206665039,
+            "approximate_kl": 0.03272706458611148,
+            "clip_fraction": 0.2802678571428571,
+            "entropy": 0.49705258658954077,
+            "epochs": 10,
+            "explained_variance": 0.32621021850063714,
+            "loss": 64.52936242239817,
+            "minibatches": 180,
+            "policy_loss": 0.017780472551073345,
+            "transitions": 1120,
+            "value_loss": 129.02316368103027
+          },
+          "timesteps": 40960,
+          "updates": 36
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": {
+            "advantage_mean": -2.574326992034912,
+            "advantage_std": 15.615975379943848,
+            "approximate_kl": 0.08052744401146227,
+            "clip_fraction": 0.44524253722447066,
+            "entropy": 0.4958532364955589,
+            "epochs": 10,
+            "explained_variance": 0.3613799479945885,
+            "loss": 62.19884156469089,
+            "minibatches": 170,
+            "policy_loss": 0.02790646286709095,
+            "transitions": 1072,
+            "value_loss": 124.34187071501319
+          },
+          "timesteps": 45056,
+          "updates": 39
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": {
+            "advantage_mean": 0.644839346408844,
+            "advantage_std": 9.946596145629883,
+            "approximate_kl": 0.03426546508769998,
+            "clip_fraction": 0.35383304944690286,
+            "entropy": 0.553948041324518,
+            "epochs": 10,
+            "explained_variance": 0.7988332257657974,
+            "loss": 41.37265300360814,
+            "minibatches": 190,
+            "policy_loss": -0.018560480721551906,
+            "transitions": 1174,
+            "value_loss": 82.78242695433114
+          },
+          "timesteps": 49152,
+          "updates": 42
+        }
+      ],
+      "elapsed_seconds": 125.28609300102107,
+      "identity": {
+        "checkpoint_restore_action_match": true,
+        "max_semantic_logit_difference": 5.960464477539062e-07,
+        "max_value_difference": 0.0,
+        "semantic_actions_match_under_permutation": true,
+        "tolerance": 1e-05,
+        "wire_identity_match": true
+      },
+      "parameter_count": 20674,
+      "participant": "jormungandr_structured",
+      "run": 2,
+      "seed": 22260810,
+      "unused_incomplete_steps": 1288
+    }
+  ],
+  "schema": "jormungandr.structured_cartpole_parity.v1",
+  "versions": {
+    "gymnasium": "1.3.0",
+    "numpy": "2.4.6",
+    "python": "3.11.15",
+    "torch": "2.8.0+cpu"
+  }
+}

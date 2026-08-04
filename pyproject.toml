@@ -35,10 +35,14 @@ record = [
 plot = [
     "matplotlib>=3.8",
 ]
+benchmark = [
+    "gymnasium>=1.1,<2",
+]
 
 [project.scripts]
 jormungandr-service = "jormungandr.service:main"
 jormungandr-export = "jormungandr.cli_export:main"
+jormungandr-monitor = "jormungandr.cli_monitor:main"
 
 [project.urls]
 Repository = "https://github.com/ingvor-restrat/jormungandr"

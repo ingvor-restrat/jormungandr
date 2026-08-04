@@ -85,12 +85,67 @@ trajectory plugins exclude stale fragments using `policy_version` and
 consumes GAE targets; IMPALA and APPO consume behavior probabilities through
 V-trace; APPO also retains a target policy and bounded circular replay.
 
-The replay buffer stores action indices. Experience may supply an explicit
+The v1 vector replay buffer stores action indices. Experience may supply an explicit
 `action_idx` or a unique value from the model's `action_values`. Public
 responses include both forms. Every legal-action mask must match that fixed
 vocabulary and admit at least one action. Masks are applied to action
 selection, behavior probabilities, policy objectives, and next-state value
 backups as required by the selected plugin.
+
+The v2 entity/candidate replay profile instead stores the actor-owned semantic
+`candidate_id` together with the complete variable observation and next
+observation. Ingestion verifies that the ID belongs to the recorded local
+candidate set and was legal at that point. Structured Double-DQN is the first
+off-policy v2 learner; replay sampling, importance weights, target-network
+updates, policy versions, and checkpoints remain central service concerns.
+
+The v2 trajectory profile stores one `StructuredJointTrajectoryStep` per
+environment turn. Factor IDs, their local candidates, selected semantic IDs,
+and conditional behavior log probabilities are nested inside that step; they
+do not become separate rewards. Actors request aligned logits and a central
+value through `policy/score`, then apply environment-owned masks sequentially.
+Mask updates may restrict the current or later factors but cannot alter a
+previous factor's recorded distribution. Complete train trajectories enter a
+bounded FIFO on-policy queue, while validation trajectories enter an isolated
+store. Duplicate identity, ordering, semantic membership, and policy lag are
+checked before admission.
+
+The public trajectory endpoint accepts either the original array of complete
+step records or a compact observation-chain sequence. The latter stores one
+ordered array of `N + 1` observations beside `N` action/reward records, so an
+intermediate observation is not serialized twice. The standard client
+gzip-compresses large JSON requests and the server validates the content
+encoding before decoding. Both wires reconstruct the identical
+`StructuredJointTrajectoryStep` sequence and pass through the same duplicate,
+split, semantic, ordering, and policy-lag checks; this is a transport change,
+not a learning change.
+
+The trajectory learner measures the raw signal before applying GAE. Its
+standard metrics include episode-return mean, standard deviation, minimum,
+maximum, unique-value count, mean episode length, and nonzero-reward fraction.
+This matters for sparse objectives: high critic explained variance can mean
+that the value head predicts one common losing return and its distance to
+termination. It is not, by itself, evidence that sampled actions received a
+discriminating policy signal.
+
+The v2 supervision profile stores one semantic target for one state-local
+factor. Its candidate IDs are the legal alternatives for that conditional
+choice, and its target is an ID rather than a row index. Samples may carry a
+positive weight plus generic source and factor groups. Training and validation
+use different bounded buffers; only training labels enter weighted categorical
+negative log likelihood. Accuracy, NLL, entropy, calibration, and group metrics
+are evaluated without consulting reward. A structured-BC checkpoint uses the
+same entity/candidate transformer state as structured PPO, so PPO may initialize
+its policy directly while starting with a fresh optimizer, update counter, and
+trajectory stores. The value head receives no BC loss and begins PPO as an
+untrained critic.
+
+`ConstrainedWorkbench-v0` is the generic end-to-end diagnostic for these two
+profiles. Its Gymnasium interface exposes variable worker/job sets, while its
+structured adapter supplies semantic factors and a sequential mask callback.
+An exact enumerator provides terminal-return and supervision controls. It lives
+behind the optional `benchmark` dependency and is not part of the service
+runtime or an application adapter.
 
 ## Auxiliary objective
 
@@ -137,6 +192,10 @@ jormungandr_model_spec.hpp
 New manifests use `jormungandr.inference_bundle.v1`. The reader retains
 support for the earlier unversioned service checkpoint shape so existing
 internal artifacts can be migrated.
+
+Structured plugins use `jormungandr.structured_inference_bundle.v1`, containing
+the feature-width schema, plugin identity/version, agent construction config,
+hashed policy state, and the semantic row-alignment contract.
 
 Replay contents and validation contents are not checkpointed. A restored
 learner resumes model, optimizer, version, and preprocessing state but actors
@@ -190,10 +249,17 @@ through the fixed-vector interface and select any compatible algorithm. Deep Set
 default because it is smaller and materially faster in the generated Volt
 benchmark; the typed graph remains selectable under the same experiment
 contract. Volt emits a multi-expiry runtime graph with action descriptors and
-account-refined masks. The service transports fixed-slot masks today. Dynamic
-descriptors still require a graph/action batch codec. The fifth stage
-additionally requires graph-shaped service replay and inference plus a learner
-that can update the selected encoder with policy and value heads.
+account-refined masks. The service transports fixed-slot masks today.
+`jormungandr.structured` defines variable typed entity features, state-local
+candidate identifiers and descriptors, padded collation, masks, and a generic
+transformer policy baseline. The v2 service now provides structured replay,
+HTTP inference, background Double-DQN learning, policy versions, and
+structured checkpoints. Factorized joint-action transport and structured
+deployment export are now available through the complete-trajectory PPO
+profile and structured bundle. The fifth stage still requires the application
+actor to supply its graph/entity encoder inputs and dynamic feasibility masks;
+partial-fragment bootstrapping and durable graph references remain to be
+integrated.
 Scenario-level split assignment and immutable actor provenance apply unchanged
 at every stage.
 
@@ -208,6 +274,14 @@ copy graph tensors into the generic package. A Volt in-process trainer can
 resolve those references and backpropagate through its Deep Sets or GNN now.
 Durable graph replay and graph-native service transport remain to be
 implemented.
+
+`jormungandr.structured` removes the global-action-vocabulary assumption from
+the in-process policy layer. Candidate indices are local batching coordinates,
+not domain identity: each observation carries semantic candidate IDs and
+numeric descriptors, and selection maps the chosen padded slot back to the
+actor-owned ID. The actor remains authoritative for candidate semantics and
+hard feasibility. Feature widths are declared by a representation profile;
+entity and candidate counts vary by state.
 
 ## Native evolution
 

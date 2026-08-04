@@ -153,18 +153,20 @@ validation, because that would leak the same path into both stores.
 
 Volt's current candidate grammar includes actions such as adding, removing, or
 resizing a leg, waiting, and exercising. Volt's runtime graph retains every
-action slot and its composed legal mask. Jörmungandr's inference and
-experience contracts now apply masks to a fixed discrete vocabulary. The next
-service integration still needs one explicit choice:
+action slot and its composed legal mask. Jörmungandr's v1 HTTP inference and
+experience contracts apply masks to a fixed discrete vocabulary. The generic
+in-process policy layer now also supports state-dependent action descriptors
+and candidate scoring through `jormungandr.structured`. A service integration
+still needs one explicit choice:
 
 - define a bounded, fixed set of option-strategy action templates and masks;
   or
-- extend Jörmungandr with state-dependent action descriptors and candidate
-  scoring.
+- use the structured entity/candidate contract and extend replay, inference,
+  and export transport around it.
 
-The fixed-template route is the smaller first experiment. Dynamic candidate
-scoring is the more general architecture and should be designed as a public
-contract rather than hidden in a Volt-specific actor.
+The fixed-template route remains the smaller compatibility experiment.
+Dynamic candidate scoring is the general architecture and is a public generic
+contract rather than a Volt-specific actor convention.
 
 Variable-size portfolio graphs present a similar boundary. Offline Volt
 research trains both Deep Sets and typed graph encoders. Deep Sets is the
@@ -176,9 +178,9 @@ experience contract. This supports staged entry, hold/close, and bounded
 hedge/resize experiments with a fixed action vocabulary.
 
 Roll and replacement actions depend on the contracts available in each state.
-Aligned legal masks are transported now; dynamic action descriptors and
-graph-native batches still require an explicit codec and shared action
-scoring. End-to-end graph-encoder updates can use the same actor provenance
+Aligned legal masks are transported now; dynamic descriptors and typed entity
+batches exist in-process, while the v1 service still needs a structured wire
+codec and replay store. End-to-end graph-encoder updates can use the same actor provenance
 and split rules, but require a graph-shaped inference and replay contract
 rather than hiding variable action semantics inside a fixed observation
 vector.

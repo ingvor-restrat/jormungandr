@@ -1,0 +1,3245 @@
+{
+  "aggregate": {
+    "jormungandr": [
+      {
+        "return_mean": 10.366666666666667,
+        "return_std_across_runs": 1.6312060977489429,
+        "run_means": [
+          12.25,
+          9.4,
+          9.45
+        ],
+        "solved_fraction": 0.0,
+        "timesteps": 0
+      },
+      {
+        "return_mean": 271.25,
+        "return_std_across_runs": 140.18887259693616,
+        "run_means": [
+          203.45,
+          432.45,
+          177.85
+        ],
+        "solved_fraction": 0.0,
+        "timesteps": 4096
+      },
+      {
+        "return_mean": 332.3666666666666,
+        "return_std_across_runs": 107.34342473264645,
+        "run_means": [
+          304.15,
+          451.0,
+          241.95
+        ],
+        "solved_fraction": 0.0,
+        "timesteps": 8192
+      },
+      {
+        "return_mean": 378.15000000000003,
+        "return_std_across_runs": 122.49412230797034,
+        "run_means": [
+          430.05,
+          238.25,
+          466.15
+        ],
+        "solved_fraction": 0.0,
+        "timesteps": 12288
+      },
+      {
+        "return_mean": 395.56666666666666,
+        "return_std_across_runs": 114.77730974950289,
+        "run_means": [
+          460.0,
+          263.05,
+          463.65
+        ],
+        "solved_fraction": 0.0,
+        "timesteps": 16384
+      },
+      {
+        "return_mean": 497.1166666666666,
+        "return_std_across_runs": 4.99407982849025,
+        "run_means": [
+          491.35,
+          500.0,
+          500.0
+        ],
+        "solved_fraction": 1.0,
+        "timesteps": 20480
+      },
+      {
+        "return_mean": 500.0,
+        "return_std_across_runs": 0.0,
+        "run_means": [
+          500.0,
+          500.0,
+          500.0
+        ],
+        "solved_fraction": 1.0,
+        "timesteps": 24576
+      },
+      {
+        "return_mean": 476.51666666666665,
+        "return_std_across_runs": 40.67432646440913,
+        "run_means": [
+          500.0,
+          429.55,
+          500.0
+        ],
+        "solved_fraction": 0.6666666666666666,
+        "timesteps": 28672
+      },
+      {
+        "return_mean": 500.0,
+        "return_std_across_runs": 0.0,
+        "run_means": [
+          500.0,
+          500.0,
+          500.0
+        ],
+        "solved_fraction": 1.0,
+        "timesteps": 32768
+      },
+      {
+        "return_mean": 500.0,
+        "return_std_across_runs": 0.0,
+        "run_means": [
+          500.0,
+          500.0,
+          500.0
+        ],
+        "solved_fraction": 1.0,
+        "timesteps": 36864
+      },
+      {
+        "return_mean": 495.51666666666665,
+        "return_std_across_runs": 7.042075924990686,
+        "run_means": [
+          499.15,
+          487.4,
+          500.0
+        ],
+        "solved_fraction": 1.0,
+        "timesteps": 40960
+      },
+      {
+        "return_mean": 481.3666666666666,
+        "return_std_across_runs": 32.27388004770007,
+        "run_means": [
+          444.1,
+          500.0,
+          500.0
+        ],
+        "solved_fraction": 0.6666666666666666,
+        "timesteps": 45056
+      },
+      {
+        "return_mean": 500.0,
+        "return_std_across_runs": 0.0,
+        "run_means": [
+          500.0,
+          500.0,
+          500.0
+        ],
+        "solved_fraction": 1.0,
+        "timesteps": 49152
+      }
+    ],
+    "sb3": [
+      {
+        "return_mean": 36.5,
+        "return_std_across_runs": 40.74392592767663,
+        "run_means": [
+          9.35,
+          83.35,
+          16.8
+        ],
+        "solved_fraction": 0.0,
+        "timesteps": 0
+      },
+      {
+        "return_mean": 340.01666666666665,
+        "return_std_across_runs": 94.2569670280841,
+        "run_means": [
+          231.75,
+          403.8,
+          384.5
+        ],
+        "solved_fraction": 0.0,
+        "timesteps": 4096
+      },
+      {
+        "return_mean": 435.05,
+        "return_std_across_runs": 56.327413397030746,
+        "run_means": [
+          477.3,
+          456.75,
+          371.1
+        ],
+        "solved_fraction": 0.3333333333333333,
+        "timesteps": 8192
+      },
+      {
+        "return_mean": 472.5,
+        "return_std_across_runs": 39.92981342305522,
+        "run_means": [
+          500.0,
+          426.7,
+          490.8
+        ],
+        "solved_fraction": 0.6666666666666666,
+        "timesteps": 12288
+      },
+      {
+        "return_mean": 381.95,
+        "return_std_across_runs": 174.84628248836177,
+        "run_means": [
+          492.2,
+          180.35,
+          473.3
+        ],
+        "solved_fraction": 0.3333333333333333,
+        "timesteps": 16384
+      },
+      {
+        "return_mean": 420.6166666666666,
+        "return_std_across_runs": 81.36002294329406,
+        "run_means": [
+          327.75,
+          454.75,
+          479.35
+        ],
+        "solved_fraction": 0.3333333333333333,
+        "timesteps": 20480
+      },
+      {
+        "return_mean": 428.59999999999997,
+        "return_std_across_runs": 123.66842766041783,
+        "run_means": [
+          285.8,
+          500.0,
+          500.0
+        ],
+        "solved_fraction": 0.6666666666666666,
+        "timesteps": 24576
+      },
+      {
+        "return_mean": 408.4666666666667,
+        "return_std_across_runs": 158.54038391947122,
+        "run_means": [
+          225.4,
+          500.0,
+          500.0
+        ],
+        "solved_fraction": 0.6666666666666666,
+        "timesteps": 28672
+      },
+      {
+        "return_mean": 500.0,
+        "return_std_across_runs": 0.0,
+        "run_means": [
+          500.0,
+          500.0,
+          500.0
+        ],
+        "solved_fraction": 1.0,
+        "timesteps": 32768
+      },
+      {
+        "return_mean": 500.0,
+        "return_std_across_runs": 0.0,
+        "run_means": [
+          500.0,
+          500.0,
+          500.0
+        ],
+        "solved_fraction": 1.0,
+        "timesteps": 36864
+      },
+      {
+        "return_mean": 500.0,
+        "return_std_across_runs": 0.0,
+        "run_means": [
+          500.0,
+          500.0,
+          500.0
+        ],
+        "solved_fraction": 1.0,
+        "timesteps": 40960
+      },
+      {
+        "return_mean": 500.0,
+        "return_std_across_runs": 0.0,
+        "run_means": [
+          500.0,
+          500.0,
+          500.0
+        ],
+        "solved_fraction": 1.0,
+        "timesteps": 45056
+      },
+      {
+        "return_mean": 500.0,
+        "return_std_across_runs": 0.0,
+        "run_means": [
+          500.0,
+          500.0,
+          500.0
+        ],
+        "solved_fraction": 1.0,
+        "timesteps": 49152
+      }
+    ]
+  },
+  "benchmark": "CartPole-v1 PPO implementation diagnostic",
+  "config": {
+    "base_seed": 20260804,
+    "clip_ratio": 0.2,
+    "entropy_coefficient": 0.0,
+    "epochs": 10,
+    "evaluation_episodes": 20,
+    "evaluation_every_timesteps": 4096,
+    "gae_lambda": 0.95,
+    "gamma": 0.99,
+    "hidden": 64,
+    "learning_rate": 0.0003,
+    "max_grad_norm": 0.5,
+    "minibatch_size": 64,
+    "participants": [
+      "jormungandr",
+      "sb3"
+    ],
+    "rollout_steps": 1024,
+    "runs": 3,
+    "total_timesteps": 49152,
+    "value_coefficient": 0.5
+  },
+  "contract": {
+    "action_space": "Discrete(2)",
+    "evaluation": "deterministic policy on fixed held-out seeds",
+    "note": "Matched interface and major PPO controls; optimizer/loss implementation details remain library-specific.",
+    "observation_space": "Box(4)",
+    "policy_value_architecture": "separate 64x64 MLPs by default",
+    "solved_threshold": 475.0
+  },
+  "runs": [
+    {
+      "curve": [
+        {
+          "evaluation": {
+            "return_mean": 12.25,
+            "return_std": 1.4823523268955432,
+            "returns": [
+              11.0,
+              10.0,
+              10.0,
+              11.0,
+              14.0,
+              11.0,
+              14.0,
+              13.0,
+              13.0,
+              14.0,
+              14.0,
+              11.0,
+              12.0,
+              12.0,
+              11.0,
+              12.0,
+              13.0,
+              15.0,
+              11.0,
+              13.0
+            ],
+            "solved": false
+          },
+          "learner": null,
+          "timesteps": 0,
+          "updates": 0
+        },
+        {
+          "evaluation": {
+            "return_mean": 203.45,
+            "return_std": 50.11720473576231,
+            "returns": [
+              166.0,
+              157.0,
+              150.0,
+              172.0,
+              311.0,
+              154.0,
+              227.0,
+              182.0,
+              190.0,
+              198.0,
+              198.0,
+              177.0,
+              299.0,
+              192.0,
+              151.0,
+              168.0,
+              233.0,
+              279.0,
+              270.0,
+              195.0
+            ],
+            "solved": false
+          },
+          "learner": {
+            "approx_kl": 0.0033829930325737223,
+            "behavior_logp_fallback_rate": 0.0,
+            "behavior_value_fallback_rate": 0.0,
+            "clip_fraction": 0.01376953125,
+            "importance_ratio_mean": 1.0,
+            "loss": 3.317844969034195,
+            "policy_entropy": 0.6506720934063196,
+            "policy_loss": -0.00624995258403942,
+            "value_loss": 6.648189830780029
+          },
+          "timesteps": 4096,
+          "updates": 4
+        },
+        {
+          "evaluation": {
+            "return_mean": 304.15,
+            "return_std": 103.19693742905766,
+            "returns": [
+              305.0,
+              387.0,
+              329.0,
+              304.0,
+              212.0,
+              322.0,
+              211.0,
+              412.0,
+              500.0,
+              500.0,
+              215.0,
+              235.0,
+              236.0,
+              229.0,
+              276.0,
+              500.0,
+              231.0,
+              197.0,
+              273.0,
+              209.0
+            ],
+            "solved": false
+          },
+          "learner": {
+            "approx_kl": 0.0039026636877679266,
+            "behavior_logp_fallback_rate": 0.0,
+            "behavior_value_fallback_rate": 0.0,
+            "clip_fraction": 0.02138671875,
+            "importance_ratio_mean": 1.0,
+            "loss": 3.3749715708196164,
+            "policy_entropy": 0.6013882901519537,
+            "policy_loss": -0.008556947915349156,
+            "value_loss": 6.767057055234909
+          },
+          "timesteps": 8192,
+          "updates": 8
+        },
+        {
+          "evaluation": {
+            "return_mean": 430.05,
+            "return_std": 89.57118603893248,
+            "returns": [
+              436.0,
+              302.0,
+              256.0,
+              420.0,
+              331.0,
+              261.0,
+              500.0,
+              500.0,
+              482.0,
+              432.0,
+              443.0,
+              500.0,
+              493.0,
+              500.0,
+              287.0,
+              458.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": false
+          },
+          "learner": {
+            "approx_kl": 0.004896943617495708,
+            "behavior_logp_fallback_rate": 0.0,
+            "behavior_value_fallback_rate": 0.0,
+            "clip_fraction": 0.0724609375,
+            "importance_ratio_mean": 1.0,
+            "loss": 1.2367845091968774,
+            "policy_entropy": 0.5824945043772459,
+            "policy_loss": -0.0077755694539519025,
+            "value_loss": 2.4891201496124267
+          },
+          "timesteps": 12288,
+          "updates": 12
+        },
+        {
+          "evaluation": {
+            "return_mean": 460.0,
+            "return_std": 62.09500361288507,
+            "returns": [
+              338.0,
+              371.0,
+              360.0,
+              486.0,
+              500.0,
+              384.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              499.0,
+              500.0,
+              500.0,
+              401.0,
+              361.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": false
+          },
+          "learner": {
+            "approx_kl": 0.004334983298031147,
+            "behavior_logp_fallback_rate": 0.0,
+            "behavior_value_fallback_rate": 0.0,
+            "clip_fraction": 0.03720703125,
+            "importance_ratio_mean": 1.0,
+            "loss": 0.6897673549130559,
+            "policy_entropy": 0.5683922573924065,
+            "policy_loss": -0.0035274321562610567,
+            "value_loss": 1.38658957593143
+          },
+          "timesteps": 16384,
+          "updates": 16
+        },
+        {
+          "evaluation": {
+            "return_mean": 491.35,
+            "return_std": 27.03657366955868,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              428.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              399.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": {
+            "approx_kl": 0.004625241965186433,
+            "behavior_logp_fallback_rate": 0.0,
+            "behavior_value_fallback_rate": 0.0,
+            "clip_fraction": 0.05244140625,
+            "importance_ratio_mean": 1.0,
+            "loss": 0.7423881510272622,
+            "policy_entropy": 0.5446489010006189,
+            "policy_loss": -0.006456535763572901,
+            "value_loss": 1.4976893704384566
+          },
+          "timesteps": 20480,
+          "updates": 20
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": {
+            "approx_kl": 0.006357547170409816,
+            "behavior_logp_fallback_rate": 0.0,
+            "behavior_value_fallback_rate": 0.0,
+            "clip_fraction": 0.0673828125,
+            "importance_ratio_mean": 1.0,
+            "loss": 1.61798198223114,
+            "policy_entropy": 0.5280217103660106,
+            "policy_loss": -0.00306377891683951,
+            "value_loss": 3.242091527953744
+          },
+          "timesteps": 24576,
+          "updates": 24
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": {
+            "approx_kl": 0.004908406069080229,
+            "behavior_logp_fallback_rate": 0.0,
+            "behavior_value_fallback_rate": 0.0,
+            "clip_fraction": 0.0271484375,
+            "importance_ratio_mean": 1.0,
+            "loss": 1.471987225394696,
+            "policy_entropy": 0.5030004411935807,
+            "policy_loss": -0.003934769378975034,
+            "value_loss": 2.9518439818173645
+          },
+          "timesteps": 28672,
+          "updates": 28
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": {
+            "approx_kl": 0.002387026994347252,
+            "behavior_logp_fallback_rate": 0.0,
+            "behavior_value_fallback_rate": 0.0,
+            "clip_fraction": 0.0125,
+            "importance_ratio_mean": 1.0,
+            "loss": 1.6049035066738724,
+            "policy_entropy": 0.5225270338356495,
+            "policy_loss": -0.0010278717672917992,
+            "value_loss": 3.2118627596646547
+          },
+          "timesteps": 32768,
+          "updates": 32
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": {
+            "approx_kl": 0.0043215702982706715,
+            "behavior_logp_fallback_rate": 0.0,
+            "behavior_value_fallback_rate": 0.0,
+            "clip_fraction": 0.07978515625,
+            "importance_ratio_mean": 1.0,
+            "loss": 1.5867419691756368,
+            "policy_entropy": 0.5217750335112215,
+            "policy_loss": -0.004393383747083135,
+            "value_loss": 3.182270723953843
+          },
+          "timesteps": 36864,
+          "updates": 36
+        },
+        {
+          "evaluation": {
+            "return_mean": 499.15,
+            "return_std": 3.8013155617496426,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              483.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": {
+            "approx_kl": 0.0019486556280753574,
+            "behavior_logp_fallback_rate": 0.0,
+            "behavior_value_fallback_rate": 0.0,
+            "clip_fraction": 0.01474609375,
+            "importance_ratio_mean": 1.0,
+            "loss": 1.4599930478259922,
+            "policy_entropy": 0.5296869985759258,
+            "policy_loss": -0.0009515269121038727,
+            "value_loss": 2.9218891602009536
+          },
+          "timesteps": 40960,
+          "updates": 40
+        },
+        {
+          "evaluation": {
+            "return_mean": 444.1,
+            "return_std": 62.8748966725111,
+            "returns": [
+              340.0,
+              374.0,
+              362.0,
+              489.0,
+              500.0,
+              387.0,
+              444.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              403.0,
+              362.0,
+              500.0,
+              366.0,
+              473.0,
+              382.0,
+              500.0
+            ],
+            "solved": false
+          },
+          "learner": {
+            "approx_kl": 0.0027360431444321876,
+            "behavior_logp_fallback_rate": 0.0,
+            "behavior_value_fallback_rate": 0.0,
+            "clip_fraction": 0.005859375,
+            "importance_ratio_mean": 1.0,
+            "loss": 1.4367334662005304,
+            "policy_entropy": 0.5429980060085654,
+            "policy_loss": -0.0035266559454612432,
+            "value_loss": 2.8805202350020407
+          },
+          "timesteps": 45056,
+          "updates": 44
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": {
+            "approx_kl": 0.008706803557288367,
+            "behavior_logp_fallback_rate": 0.0,
+            "behavior_value_fallback_rate": 0.0,
+            "clip_fraction": 0.0482421875,
+            "importance_ratio_mean": 1.0,
+            "loss": 1.4670053374022245,
+            "policy_entropy": 0.5745439257472753,
+            "policy_loss": -0.005916859381250106,
+            "value_loss": 2.945844394620508
+          },
+          "timesteps": 49152,
+          "updates": 48
+        }
+      ],
+      "elapsed_seconds": 29.238814261043444,
+      "parameter_count": 9155,
+      "participant": "jormungandr",
+      "run": 0,
+      "seed": 20260804
+    },
+    {
+      "curve": [
+        {
+          "evaluation": {
+            "return_mean": 9.35,
+            "return_std": 0.6708203932499369,
+            "returns": [
+              10.0,
+              8.0,
+              8.0,
+              10.0,
+              10.0,
+              9.0,
+              10.0,
+              9.0,
+              9.0,
+              9.0,
+              9.0,
+              9.0,
+              10.0,
+              10.0,
+              9.0,
+              10.0,
+              10.0,
+              10.0,
+              9.0,
+              9.0
+            ],
+            "solved": false
+          },
+          "learner": null,
+          "timesteps": 0,
+          "updates": 0
+        },
+        {
+          "evaluation": {
+            "return_mean": 231.75,
+            "return_std": 102.228781095201,
+            "returns": [
+              155.0,
+              175.0,
+              150.0,
+              170.0,
+              280.0,
+              164.0,
+              484.0,
+              182.0,
+              172.0,
+              204.0,
+              200.0,
+              199.0,
+              255.0,
+              232.0,
+              154.0,
+              170.0,
+              304.0,
+              500.0,
+              166.0,
+              319.0
+            ],
+            "solved": false
+          },
+          "learner": null,
+          "timesteps": 4096,
+          "updates": 4
+        },
+        {
+          "evaluation": {
+            "return_mean": 477.3,
+            "return_std": 41.22863082858804,
+            "returns": [
+              500.0,
+              415.0,
+              382.0,
+              500.0,
+              500.0,
+              432.0,
+              500.0,
+              415.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              402.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": null,
+          "timesteps": 8192,
+          "updates": 8
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": null,
+          "timesteps": 12288,
+          "updates": 12
+        },
+        {
+          "evaluation": {
+            "return_mean": 492.2,
+            "return_std": 30.107876220788402,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              366.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              478.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": null,
+          "timesteps": 16384,
+          "updates": 16
+        },
+        {
+          "evaluation": {
+            "return_mean": 327.75,
+            "return_std": 28.793045578476246,
+            "returns": [
+              309.0,
+              267.0,
+              329.0,
+              307.0,
+              380.0,
+              271.0,
+              311.0,
+              349.0,
+              322.0,
+              340.0,
+              328.0,
+              322.0,
+              323.0,
+              358.0,
+              324.0,
+              318.0,
+              337.0,
+              382.0,
+              344.0,
+              334.0
+            ],
+            "solved": false
+          },
+          "learner": null,
+          "timesteps": 20480,
+          "updates": 20
+        },
+        {
+          "evaluation": {
+            "return_mean": 285.8,
+            "return_std": 33.87065178929362,
+            "returns": [
+              250.0,
+              275.0,
+              268.0,
+              249.0,
+              306.0,
+              230.0,
+              318.0,
+              288.0,
+              338.0,
+              352.0,
+              271.0,
+              265.0,
+              270.0,
+              290.0,
+              268.0,
+              262.0,
+              351.0,
+              313.0,
+              270.0,
+              282.0
+            ],
+            "solved": false
+          },
+          "learner": null,
+          "timesteps": 24576,
+          "updates": 24
+        },
+        {
+          "evaluation": {
+            "return_mean": 225.4,
+            "return_std": 27.652733756547946,
+            "returns": [
+              192.0,
+              212.0,
+              200.0,
+              195.0,
+              249.0,
+              206.0,
+              266.0,
+              220.0,
+              211.0,
+              262.0,
+              244.0,
+              203.0,
+              234.0,
+              221.0,
+              200.0,
+              201.0,
+              248.0,
+              289.0,
+              208.0,
+              247.0
+            ],
+            "solved": false
+          },
+          "learner": null,
+          "timesteps": 28672,
+          "updates": 28
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": null,
+          "timesteps": 32768,
+          "updates": 32
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": null,
+          "timesteps": 36864,
+          "updates": 36
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": null,
+          "timesteps": 40960,
+          "updates": 40
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": null,
+          "timesteps": 45056,
+          "updates": 44
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": null,
+          "timesteps": 49152,
+          "updates": 48
+        }
+      ],
+      "elapsed_seconds": 29.72934154001996,
+      "parameter_count": 9155,
+      "participant": "sb3",
+      "run": 0,
+      "seed": 20260804
+    },
+    {
+      "curve": [
+        {
+          "evaluation": {
+            "return_mean": 9.4,
+            "return_std": 0.6805570473787206,
+            "returns": [
+              9.0,
+              8.0,
+              8.0,
+              9.0,
+              10.0,
+              9.0,
+              10.0,
+              10.0,
+              10.0,
+              10.0,
+              10.0,
+              9.0,
+              9.0,
+              10.0,
+              9.0,
+              9.0,
+              10.0,
+              10.0,
+              9.0,
+              10.0
+            ],
+            "solved": false
+          },
+          "learner": null,
+          "timesteps": 0,
+          "updates": 0
+        },
+        {
+          "evaluation": {
+            "return_mean": 432.45,
+            "return_std": 83.71724025425989,
+            "returns": [
+              427.0,
+              297.0,
+              267.0,
+              408.0,
+              313.0,
+              316.0,
+              435.0,
+              500.0,
+              474.0,
+              441.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              309.0,
+              462.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": false
+          },
+          "learner": {
+            "approx_kl": 0.002529598773980979,
+            "behavior_logp_fallback_rate": 0.0,
+            "behavior_value_fallback_rate": 0.0,
+            "clip_fraction": 0.0296875,
+            "importance_ratio_mean": 1.0,
+            "loss": 3.297024670243263,
+            "policy_entropy": 0.6513097327202558,
+            "policy_loss": -0.011750329000642523,
+            "value_loss": 6.617549979686737
+          },
+          "timesteps": 4096,
+          "updates": 4
+        },
+        {
+          "evaluation": {
+            "return_mean": 451.0,
+            "return_std": 77.97300477526957,
+            "returns": [
+              500.0,
+              348.0,
+              333.0,
+              500.0,
+              300.0,
+              479.0,
+              414.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              355.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              291.0,
+              500.0,
+              500.0
+            ],
+            "solved": false
+          },
+          "learner": {
+            "approx_kl": 0.00750832462690596,
+            "behavior_logp_fallback_rate": 0.0,
+            "behavior_value_fallback_rate": 0.0,
+            "clip_fraction": 0.03671875,
+            "importance_ratio_mean": 1.0,
+            "loss": 3.6393272906541823,
+            "policy_entropy": 0.5909932643175125,
+            "policy_loss": -0.007634582964237779,
+            "value_loss": 7.293923753499985
+          },
+          "timesteps": 8192,
+          "updates": 8
+        },
+        {
+          "evaluation": {
+            "return_mean": 238.25,
+            "return_std": 58.45814967271796,
+            "returns": [
+              263.0,
+              304.0,
+              389.0,
+              237.0,
+              206.0,
+              261.0,
+              181.0,
+              372.0,
+              224.0,
+              205.0,
+              188.0,
+              200.0,
+              202.0,
+              230.0,
+              252.0,
+              246.0,
+              208.0,
+              177.0,
+              236.0,
+              184.0
+            ],
+            "solved": false
+          },
+          "learner": {
+            "approx_kl": 0.002040165894868551,
+            "behavior_logp_fallback_rate": 0.0,
+            "behavior_value_fallback_rate": 0.0,
+            "clip_fraction": 0.026953125,
+            "importance_ratio_mean": 1.0,
+            "loss": 2.4699965924024583,
+            "policy_entropy": 0.5886496644467115,
+            "policy_loss": -0.006299792916979641,
+            "value_loss": 4.952592775225639
+          },
+          "timesteps": 12288,
+          "updates": 12
+        },
+        {
+          "evaluation": {
+            "return_mean": 263.05,
+            "return_std": 40.93701837804276,
+            "returns": [
+              229.0,
+              241.0,
+              227.0,
+              229.0,
+              320.0,
+              224.0,
+              313.0,
+              265.0,
+              243.0,
+              270.0,
+              259.0,
+              254.0,
+              353.0,
+              266.0,
+              230.0,
+              242.0,
+              259.0,
+              352.0,
+              215.0,
+              270.0
+            ],
+            "solved": false
+          },
+          "learner": {
+            "approx_kl": 0.002751203140724101,
+            "behavior_logp_fallback_rate": 0.0,
+            "behavior_value_fallback_rate": 0.0,
+            "clip_fraction": 0.015234375,
+            "importance_ratio_mean": 1.0,
+            "loss": 0.8183013802394271,
+            "policy_entropy": 0.5640473295003176,
+            "policy_loss": -0.0019441054988419636,
+            "value_loss": 1.640490971505642
+          },
+          "timesteps": 16384,
+          "updates": 16
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": {
+            "approx_kl": 0.008704617721377872,
+            "behavior_logp_fallback_rate": 0.0,
+            "behavior_value_fallback_rate": 0.0,
+            "clip_fraction": 0.06181640625,
+            "importance_ratio_mean": 1.0,
+            "loss": 0.7635854875668884,
+            "policy_entropy": 0.5856712497770786,
+            "policy_loss": -0.005608358379686251,
+            "value_loss": 1.5383876912295817
+          },
+          "timesteps": 20480,
+          "updates": 20
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": {
+            "approx_kl": 0.004991472743859049,
+            "behavior_logp_fallback_rate": 0.0,
+            "behavior_value_fallback_rate": 0.0,
+            "clip_fraction": 0.03544921875,
+            "importance_ratio_mean": 1.0,
+            "loss": 1.4524192055687308,
+            "policy_entropy": 0.5717671133577824,
+            "policy_loss": -0.0020098226523259655,
+            "value_loss": 2.9088580610230563
+          },
+          "timesteps": 24576,
+          "updates": 24
+        },
+        {
+          "evaluation": {
+            "return_mean": 429.55,
+            "return_std": 53.83549504105808,
+            "returns": [
+              438.0,
+              484.0,
+              440.0,
+              423.0,
+              500.0,
+              465.0,
+              340.0,
+              375.0,
+              500.0,
+              407.0,
+              500.0,
+              400.0,
+              500.0,
+              368.0,
+              396.0,
+              413.0,
+              387.0,
+              355.0,
+              500.0,
+              400.0
+            ],
+            "solved": false
+          },
+          "learner": {
+            "approx_kl": 0.006412542175712588,
+            "behavior_logp_fallback_rate": 0.0,
+            "behavior_value_fallback_rate": 0.0,
+            "clip_fraction": 0.0537109375,
+            "importance_ratio_mean": 1.0,
+            "loss": 1.3985549565404654,
+            "policy_entropy": 0.5613011859357357,
+            "policy_loss": -0.008450269285822288,
+            "value_loss": 2.814010440558195
+          },
+          "timesteps": 28672,
+          "updates": 28
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": {
+            "approx_kl": 0.013594823358835129,
+            "behavior_logp_fallback_rate": 0.0,
+            "behavior_value_fallback_rate": 0.0,
+            "clip_fraction": 0.155078125,
+            "importance_ratio_mean": 1.0,
+            "loss": 0.6392189019359649,
+            "policy_entropy": 0.5439188364893198,
+            "policy_loss": -0.02394189148908481,
+            "value_loss": 1.3263215836137534
+          },
+          "timesteps": 32768,
+          "updates": 32
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": {
+            "approx_kl": 0.00521456880524056,
+            "behavior_logp_fallback_rate": 0.0,
+            "behavior_value_fallback_rate": 0.0,
+            "clip_fraction": 0.03583984375,
+            "importance_ratio_mean": 1.0,
+            "loss": 1.7451624462381006,
+            "policy_entropy": 0.5985951129347086,
+            "policy_loss": -0.003747368062613532,
+            "value_loss": 3.4978196382522584
+          },
+          "timesteps": 36864,
+          "updates": 36
+        },
+        {
+          "evaluation": {
+            "return_mean": 487.4,
+            "return_std": 27.45599349772957,
+            "returns": [
+              500.0,
+              435.0,
+              406.0,
+              500.0,
+              500.0,
+              461.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              446.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": {
+            "approx_kl": 0.007834913109400076,
+            "behavior_logp_fallback_rate": 0.0,
+            "behavior_value_fallback_rate": 0.0,
+            "clip_fraction": 0.03330078125,
+            "importance_ratio_mean": 1.0,
+            "loss": 1.3195172902196646,
+            "policy_entropy": 0.5716436684131623,
+            "policy_loss": -0.0015432126703672111,
+            "value_loss": 2.6421210177242758
+          },
+          "timesteps": 40960,
+          "updates": 40
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": {
+            "approx_kl": 0.0057118525568512265,
+            "behavior_logp_fallback_rate": 0.0,
+            "behavior_value_fallback_rate": 0.0,
+            "clip_fraction": 0.028125,
+            "importance_ratio_mean": 1.0,
+            "loss": 1.5579089387319982,
+            "policy_entropy": 0.5889449451118708,
+            "policy_loss": -0.0015124162833672016,
+            "value_loss": 3.118842708691955
+          },
+          "timesteps": 45056,
+          "updates": 44
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": {
+            "approx_kl": 0.004927818003488937,
+            "behavior_logp_fallback_rate": 0.0,
+            "behavior_value_fallback_rate": 0.0,
+            "clip_fraction": 0.037109375,
+            "importance_ratio_mean": 1.0,
+            "loss": 2.0582352260127665,
+            "policy_entropy": 0.5915332261472941,
+            "policy_loss": -0.0038896998506970704,
+            "value_loss": 4.124249849840998
+          },
+          "timesteps": 49152,
+          "updates": 48
+        }
+      ],
+      "elapsed_seconds": 29.222871812991798,
+      "parameter_count": 9155,
+      "participant": "jormungandr",
+      "run": 1,
+      "seed": 21260807
+    },
+    {
+      "curve": [
+        {
+          "evaluation": {
+            "return_mean": 83.35,
+            "return_std": 23.560169331890812,
+            "returns": [
+              62.0,
+              71.0,
+              57.0,
+              80.0,
+              90.0,
+              74.0,
+              58.0,
+              95.0,
+              78.0,
+              110.0,
+              77.0,
+              95.0,
+              114.0,
+              103.0,
+              64.0,
+              74.0,
+              154.0,
+              64.0,
+              79.0,
+              68.0
+            ],
+            "solved": false
+          },
+          "learner": null,
+          "timesteps": 0,
+          "updates": 0
+        },
+        {
+          "evaluation": {
+            "return_mean": 403.8,
+            "return_std": 109.09754206310299,
+            "returns": [
+              500.0,
+              307.0,
+              278.0,
+              500.0,
+              243.0,
+              375.0,
+              299.0,
+              500.0,
+              500.0,
+              500.0,
+              251.0,
+              500.0,
+              283.0,
+              373.0,
+              500.0,
+              500.0,
+              464.0,
+              225.0,
+              478.0,
+              500.0
+            ],
+            "solved": false
+          },
+          "learner": null,
+          "timesteps": 4096,
+          "updates": 4
+        },
+        {
+          "evaluation": {
+            "return_mean": 456.75,
+            "return_std": 81.05026055998898,
+            "returns": [
+              500.0,
+              340.0,
+              268.0,
+              500.0,
+              411.0,
+              284.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              332.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": false
+          },
+          "learner": null,
+          "timesteps": 8192,
+          "updates": 8
+        },
+        {
+          "evaluation": {
+            "return_mean": 426.7,
+            "return_std": 75.79480609896002,
+            "returns": [
+              329.0,
+              359.0,
+              348.0,
+              459.0,
+              500.0,
+              282.0,
+              430.0,
+              500.0,
+              349.0,
+              491.0,
+              469.0,
+              493.0,
+              500.0,
+              389.0,
+              349.0,
+              328.0,
+              500.0,
+              459.0,
+              500.0,
+              500.0
+            ],
+            "solved": false
+          },
+          "learner": null,
+          "timesteps": 12288,
+          "updates": 12
+        },
+        {
+          "evaluation": {
+            "return_mean": 180.35,
+            "return_std": 78.06763262170753,
+            "returns": [
+              183.0,
+              234.0,
+              500.0,
+              171.0,
+              140.0,
+              182.0,
+              143.0,
+              152.0,
+              166.0,
+              156.0,
+              152.0,
+              160.0,
+              158.0,
+              147.0,
+              173.0,
+              172.0,
+              155.0,
+              140.0,
+              168.0,
+              155.0
+            ],
+            "solved": false
+          },
+          "learner": null,
+          "timesteps": 16384,
+          "updates": 16
+        },
+        {
+          "evaluation": {
+            "return_mean": 454.75,
+            "return_std": 79.91039389611078,
+            "returns": [
+              500.0,
+              317.0,
+              296.0,
+              500.0,
+              309.0,
+              346.0,
+              491.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              336.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": false
+          },
+          "learner": null,
+          "timesteps": 20480,
+          "updates": 20
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": null,
+          "timesteps": 24576,
+          "updates": 24
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": null,
+          "timesteps": 28672,
+          "updates": 28
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": null,
+          "timesteps": 32768,
+          "updates": 32
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": null,
+          "timesteps": 36864,
+          "updates": 36
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": null,
+          "timesteps": 40960,
+          "updates": 40
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": null,
+          "timesteps": 45056,
+          "updates": 44
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": null,
+          "timesteps": 49152,
+          "updates": 48
+        }
+      ],
+      "elapsed_seconds": 30.528361525037326,
+      "parameter_count": 9155,
+      "participant": "sb3",
+      "run": 1,
+      "seed": 21260807
+    },
+    {
+      "curve": [
+        {
+          "evaluation": {
+            "return_mean": 9.45,
+            "return_std": 0.6048053188292994,
+            "returns": [
+              10.0,
+              10.0,
+              10.0,
+              10.0,
+              9.0,
+              10.0,
+              9.0,
+              9.0,
+              9.0,
+              9.0,
+              9.0,
+              10.0,
+              10.0,
+              9.0,
+              10.0,
+              10.0,
+              9.0,
+              8.0,
+              10.0,
+              9.0
+            ],
+            "solved": false
+          },
+          "learner": null,
+          "timesteps": 0,
+          "updates": 0
+        },
+        {
+          "evaluation": {
+            "return_mean": 177.85,
+            "return_std": 123.33833441733395,
+            "returns": [
+              151.0,
+              272.0,
+              240.0,
+              140.0,
+              96.0,
+              129.0,
+              85.0,
+              269.0,
+              135.0,
+              500.0,
+              108.0,
+              126.0,
+              116.0,
+              98.0,
+              148.0,
+              500.0,
+              104.0,
+              92.0,
+              151.0,
+              97.0
+            ],
+            "solved": false
+          },
+          "learner": {
+            "approx_kl": 0.00570033535186667,
+            "behavior_logp_fallback_rate": 0.0,
+            "behavior_value_fallback_rate": 0.0,
+            "clip_fraction": 0.03388671875,
+            "importance_ratio_mean": 1.0,
+            "loss": 2.814744432270527,
+            "policy_entropy": 0.6533265125006438,
+            "policy_loss": -0.011314064072212204,
+            "value_loss": 5.652116978168488
+          },
+          "timesteps": 4096,
+          "updates": 4
+        },
+        {
+          "evaluation": {
+            "return_mean": 241.95,
+            "return_std": 100.67324685128094,
+            "returns": [
+              167.0,
+              182.0,
+              157.0,
+              177.0,
+              288.0,
+              185.0,
+              500.0,
+              190.0,
+              177.0,
+              211.0,
+              222.0,
+              209.0,
+              269.0,
+              241.0,
+              174.0,
+              176.0,
+              312.0,
+              500.0,
+              183.0,
+              319.0
+            ],
+            "solved": false
+          },
+          "learner": {
+            "approx_kl": 0.009451073368109065,
+            "behavior_logp_fallback_rate": 0.0,
+            "behavior_value_fallback_rate": 0.0,
+            "clip_fraction": 0.0369140625,
+            "importance_ratio_mean": 1.0,
+            "loss": 3.7940837003290655,
+            "policy_entropy": 0.6134432777762413,
+            "policy_loss": -0.011405264749191702,
+            "value_loss": 7.610977929830551
+          },
+          "timesteps": 8192,
+          "updates": 8
+        },
+        {
+          "evaluation": {
+            "return_mean": 466.15,
+            "return_std": 70.99983320958911,
+            "returns": [
+              500.0,
+              317.0,
+              292.0,
+              491.0,
+              309.0,
+              500.0,
+              428.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              486.0,
+              500.0,
+              500.0
+            ],
+            "solved": false
+          },
+          "learner": {
+            "approx_kl": 0.0031255503872671397,
+            "behavior_logp_fallback_rate": 0.0,
+            "behavior_value_fallback_rate": 0.0,
+            "clip_fraction": 0.04111328125,
+            "importance_ratio_mean": 1.0,
+            "loss": 1.8307973403483628,
+            "policy_entropy": 0.595999090000987,
+            "policy_loss": -0.009153271472314373,
+            "value_loss": 3.6799012295901776
+          },
+          "timesteps": 12288,
+          "updates": 12
+        },
+        {
+          "evaluation": {
+            "return_mean": 463.65,
+            "return_std": 54.0879157629405,
+            "returns": [
+              500.0,
+              422.0,
+              382.0,
+              500.0,
+              500.0,
+              335.0,
+              500.0,
+              410.0,
+              397.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              437.0,
+              390.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": false
+          },
+          "learner": {
+            "approx_kl": 0.0028706700570182873,
+            "behavior_logp_fallback_rate": 0.0,
+            "behavior_value_fallback_rate": 0.0,
+            "clip_fraction": 0.02998046875,
+            "importance_ratio_mean": 1.0,
+            "loss": 1.6259243154898286,
+            "policy_entropy": 0.5837939262390137,
+            "policy_loss": -0.006365254582487978,
+            "value_loss": 3.2645791307091714
+          },
+          "timesteps": 16384,
+          "updates": 16
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": {
+            "approx_kl": 0.004468476948204625,
+            "behavior_logp_fallback_rate": 0.0,
+            "behavior_value_fallback_rate": 0.0,
+            "clip_fraction": 0.04619140625,
+            "importance_ratio_mean": 1.0,
+            "loss": 1.4911613397300243,
+            "policy_entropy": 0.5693068224936724,
+            "policy_loss": -0.004838524054503068,
+            "value_loss": 2.99199972525239
+          },
+          "timesteps": 20480,
+          "updates": 20
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": {
+            "approx_kl": 0.011766146119771292,
+            "behavior_logp_fallback_rate": 0.0,
+            "behavior_value_fallback_rate": 0.0,
+            "clip_fraction": 0.0888671875,
+            "importance_ratio_mean": 1.0,
+            "loss": 0.9151436360552907,
+            "policy_entropy": 0.5612370558083057,
+            "policy_loss": -0.006259785941801965,
+            "value_loss": 1.8428068369627
+          },
+          "timesteps": 24576,
+          "updates": 24
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": {
+            "approx_kl": 0.0014265596146287862,
+            "behavior_logp_fallback_rate": 0.0,
+            "behavior_value_fallback_rate": 0.0,
+            "clip_fraction": 0.0095703125,
+            "importance_ratio_mean": 1.0,
+            "loss": 2.2431693160906434,
+            "policy_entropy": 0.573719409480691,
+            "policy_loss": -0.0018525100487750024,
+            "value_loss": 4.490043644234538
+          },
+          "timesteps": 28672,
+          "updates": 28
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": {
+            "approx_kl": 0.0013993952798045939,
+            "behavior_logp_fallback_rate": 0.0,
+            "behavior_value_fallback_rate": 0.0,
+            "clip_fraction": 0.007421875,
+            "importance_ratio_mean": 1.0,
+            "loss": 1.538296114653349,
+            "policy_entropy": 0.5733373664319515,
+            "policy_loss": -0.0026903068996034563,
+            "value_loss": 3.0819728478789328
+          },
+          "timesteps": 32768,
+          "updates": 32
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": {
+            "approx_kl": -0.0014471204038272844,
+            "behavior_logp_fallback_rate": 0.0,
+            "behavior_value_fallback_rate": 0.0,
+            "clip_fraction": 0.0630859375,
+            "importance_ratio_mean": 1.0,
+            "loss": 1.53957910342142,
+            "policy_entropy": 0.574929291382432,
+            "policy_loss": -0.004148067452479154,
+            "value_loss": 3.087454344332218
+          },
+          "timesteps": 36864,
+          "updates": 36
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": {
+            "approx_kl": 0.0001809013414003857,
+            "behavior_logp_fallback_rate": 0.0,
+            "behavior_value_fallback_rate": 0.0,
+            "clip_fraction": 0.00810546875,
+            "importance_ratio_mean": 1.0,
+            "loss": 1.5741492979228497,
+            "policy_entropy": 0.5608628567308187,
+            "policy_loss": -0.0004929298607748933,
+            "value_loss": 3.1492844592779874
+          },
+          "timesteps": 40960,
+          "updates": 40
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": {
+            "approx_kl": 0.005171366586000659,
+            "behavior_logp_fallback_rate": 0.0,
+            "behavior_value_fallback_rate": 0.0,
+            "clip_fraction": 0.0466796875,
+            "importance_ratio_mean": 1.0,
+            "loss": 1.071628746856004,
+            "policy_entropy": 0.5781215839087963,
+            "policy_loss": -0.0034303175925742835,
+            "value_loss": 2.1501181311905384
+          },
+          "timesteps": 45056,
+          "updates": 44
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": {
+            "approx_kl": 0.004893159378843848,
+            "behavior_logp_fallback_rate": 0.0,
+            "behavior_value_fallback_rate": 0.0,
+            "clip_fraction": 0.0341796875,
+            "importance_ratio_mean": 1.0,
+            "loss": 1.1647856391500682,
+            "policy_entropy": 0.5816799115389586,
+            "policy_loss": -0.0025009489036165178,
+            "value_loss": 2.3345731885172425
+          },
+          "timesteps": 49152,
+          "updates": 48
+        }
+      ],
+      "elapsed_seconds": 29.28968138899654,
+      "parameter_count": 9155,
+      "participant": "jormungandr",
+      "run": 2,
+      "seed": 22260810
+    },
+    {
+      "curve": [
+        {
+          "evaluation": {
+            "return_mean": 16.8,
+            "return_std": 7.215480434090085,
+            "returns": [
+              15.0,
+              11.0,
+              38.0,
+              16.0,
+              10.0,
+              15.0,
+              15.0,
+              10.0,
+              14.0,
+              12.0,
+              29.0,
+              11.0,
+              13.0,
+              20.0,
+              27.0,
+              18.0,
+              20.0,
+              10.0,
+              17.0,
+              15.0
+            ],
+            "solved": false
+          },
+          "learner": null,
+          "timesteps": 0,
+          "updates": 0
+        },
+        {
+          "evaluation": {
+            "return_mean": 384.5,
+            "return_std": 106.25366866731312,
+            "returns": [
+              366.0,
+              248.0,
+              181.0,
+              358.0,
+              241.0,
+              267.0,
+              311.0,
+              500.0,
+              439.0,
+              390.0,
+              500.0,
+              500.0,
+              457.0,
+              416.0,
+              237.0,
+              425.0,
+              500.0,
+              354.0,
+              500.0,
+              500.0
+            ],
+            "solved": false
+          },
+          "learner": null,
+          "timesteps": 4096,
+          "updates": 4
+        },
+        {
+          "evaluation": {
+            "return_mean": 371.1,
+            "return_std": 95.10930000461795,
+            "returns": [
+              500.0,
+              500.0,
+              382.0,
+              332.0,
+              274.0,
+              361.0,
+              304.0,
+              435.0,
+              500.0,
+              500.0,
+              285.0,
+              286.0,
+              295.0,
+              277.0,
+              444.0,
+              500.0,
+              284.0,
+              256.0,
+              434.0,
+              273.0
+            ],
+            "solved": false
+          },
+          "learner": null,
+          "timesteps": 8192,
+          "updates": 8
+        },
+        {
+          "evaluation": {
+            "return_mean": 490.8,
+            "return_std": 25.47568500189523,
+            "returns": [
+              500.0,
+              476.0,
+              438.0,
+              500.0,
+              402.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": null,
+          "timesteps": 12288,
+          "updates": 12
+        },
+        {
+          "evaluation": {
+            "return_mean": 473.3,
+            "return_std": 48.426939001475525,
+            "returns": [
+              500.0,
+              386.0,
+              363.0,
+              500.0,
+              397.0,
+              421.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              399.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": false
+          },
+          "learner": null,
+          "timesteps": 16384,
+          "updates": 16
+        },
+        {
+          "evaluation": {
+            "return_mean": 479.35,
+            "return_std": 35.649278430728145,
+            "returns": [
+              481.0,
+              500.0,
+              500.0,
+              476.0,
+              414.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              452.0,
+              500.0,
+              465.0,
+              500.0,
+              500.0,
+              500.0,
+              417.0,
+              382.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": null,
+          "timesteps": 20480,
+          "updates": 20
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": null,
+          "timesteps": 24576,
+          "updates": 24
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": null,
+          "timesteps": 28672,
+          "updates": 28
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": null,
+          "timesteps": 32768,
+          "updates": 32
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": null,
+          "timesteps": 36864,
+          "updates": 36
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": null,
+          "timesteps": 40960,
+          "updates": 40
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": null,
+          "timesteps": 45056,
+          "updates": 44
+        },
+        {
+          "evaluation": {
+            "return_mean": 500.0,
+            "return_std": 0.0,
+            "returns": [
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0,
+              500.0
+            ],
+            "solved": true
+          },
+          "learner": null,
+          "timesteps": 49152,
+          "updates": 48
+        }
+      ],
+      "elapsed_seconds": 31.210542727960274,
+      "parameter_count": 9155,
+      "participant": "sb3",
+      "run": 2,
+      "seed": 22260810
+    }
+  ],
+  "schema": "jormungandr.gym_ppo_reference_benchmark.v1",
+  "versions": {
+    "gymnasium": "1.3.0",
+    "numpy": "2.4.6",
+    "python": "3.11.15",
+    "stable_baselines3": "2.9.0",
+    "torch": "2.8.0+cpu"
+  }
+}

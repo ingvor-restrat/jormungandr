@@ -42,8 +42,31 @@ class AlgorithmRegistry:
             raise ValueError("algorithm plugin name is required")
         if plugin.default_export_module not in {"q", "policy", "heads"}:
             raise ValueError("default_export_module must be q, policy, or heads")
-        if plugin.replay_mode not in {"transition", "trajectory"}:
-            raise ValueError("replay_mode must be transition or trajectory")
+        if plugin.replay_mode not in {"transition", "trajectory", "supervision"}:
+            raise ValueError(
+                "replay_mode must be transition, trajectory, or supervision"
+            )
+        supported_representations = {"vector_discrete", "entity_candidates"}
+        if (
+            not plugin.representation_modes
+            or len(set(plugin.representation_modes)) != len(plugin.representation_modes)
+            or not set(plugin.representation_modes).issubset(supported_representations)
+        ):
+            raise ValueError(
+                "representation_modes must contain unique supported modes"
+            )
+        if (
+            "vector_discrete" in plugin.representation_modes
+            and plugin.build is None
+        ):
+            raise ValueError("vector_discrete plugins require build")
+        if (
+            "entity_candidates" in plugin.representation_modes
+            and plugin.build_structured is None
+        ):
+            raise ValueError(
+                "entity_candidates plugins require build_structured"
+            )
         keys = {name, *(canonical_algorithm_name(x) for x in plugin.aliases)}
         with self._lock:
             if name in self._plugins and not replace:

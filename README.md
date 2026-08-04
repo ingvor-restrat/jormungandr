@@ -33,14 +33,45 @@ The current release provides:
 - an optional auxiliary classification head with delayed-label attachment;
 - running observation normalization learned only from training data;
 - model lifecycle, metrics, runtime statistics, and checkpoints over HTTP;
+- variable-size typed entity observations, state-local semantic action
+  candidates, padded collation, central HTTP inference, prioritized replay,
+  complete joint-trajectory ingress, exact conditional-log-probability PPO,
+  de-duplicated observation-chain trajectory sequences with transparent gzip
+  HTTP transport,
+  reward-free weighted structured supervision, transformer PPO, behavior
+  cloning, and Double-DQN profiles, and an optional large-margin loss for
+  explicitly marked demonstration transitions;
+- actor-owned sequential constraint masking with one reward per joint
+  environment turn, policy-lag validation, direct structured-BC-to-PPO policy
+  initialization, and structured inference bundles;
 - TorchScript bundles with manifests and generated C++ model specifications;
   and
 - TensorBoard namespaces and internal APIs for comparing algorithm runs.
 
+The v2 structured metrics endpoint retains learner-update history and accepts
+external held-out scalars at an explicit step. Both are written to TensorBoard,
+so application runners can persist checkpoint-linked learning curves without
+putting application semantics into Jörmungandr.
+
 All built-ins share the service lifecycle through a stable plugin contract.
-The profiles currently use fixed discrete action values. The DreamerV3
-profile is a compact vector-control implementation, not full image/RSSM
-benchmark parity.
+The v1 HTTP learner profile retains fixed vectors and fixed discrete action
+values for compatibility.  The v2 profile transports variable entity sets and
+state-dependent semantic candidates, performs inference through one versioned
+central model, and stores semantic candidate identities in prioritized replay.
+Trajectory-mode structured PPO instead stores nested factor choices, one
+central value and reward per environment turn, and the exact joint behavior
+probability. Long structured episodes may use the compact sequence wire: an
+N-step trajectory transmits N+1 observations instead of repeating every
+intermediate observation as both `next` and `current`; requests above the
+client threshold are gzip-compressed transparently. Supervision-mode
+structured BC stores semantic factor labels in
+separate training and validation buffers and never accepts a reward field.
+Before GAE, structured PPO also reports episode-return mean, spread, range,
+unique-value count, mean episode length, and the fraction of transitions with
+nonzero reward. These distinguish a critic fitting an all-identical return
+batch from a policy receiving useful outcome diversity.
+The DreamerV3 profile is a compact vector-control
+implementation, not full image/RSSM benchmark parity.
 
 ## Quick start
 
@@ -58,6 +89,18 @@ python examples/distributed_actor.py
 
 The example creates one model and submits a batch whose training and validation
 transitions are interleaved in arrival order.
+
+To watch any running v2 learner from another terminal, use its public URL. If
+exactly one structured model is active, `--model-id` may be omitted:
+
+```bash
+jormungandr-monitor --url http://127.0.0.1:8811 --model-id my-model
+```
+
+The monitor is read-only. It reports replay occupancy, experience and inference
+counts, learner updates, policy version, TD error, algorithm-specific metrics,
+and the last learner error. `Ctrl-C` stops the monitor without stopping the
+service.
 
 For a complete learner run with two concurrent actors:
 
@@ -98,6 +141,32 @@ held-out path cohort fixed for DQN, C51, QR-DQN, maximum-entropy Soft-Q, and
 categorical SAC. Offline and trajectory algorithms are intentionally evaluated
 in separate cohorts. The complete protocol and numeric intervals are in
 [reproducible results](docs/results.md).
+
+The independent trajectory diagnostic compares Jörmungandr PPO with a pinned
+Stable-Baselines3 reference on CartPole-v1. Both matched 9,155 trainable
+parameters and reached the maximum held-out return in all three 49,152-step
+runs. See the exact environment, curves, and limitations in
+[reproducible results](docs/results.md#independent-cartpole-ppo-reference).
+
+The structured CartPole parity control holds that same environment and budget
+fixed while replacing the flat MLP interface with typed entities and
+state-local candidates. All three structured runs also finish at 500, and the
+declared representation gate passes. See
+[structured parity](docs/results.md#structured-cartpole-representation-parity).
+
+The masked Taxi-v4 control gives Jörmungandr PPO, its deliberately unmasked
+twin, SB3-contrib MaskablePPO, and masked tabular Q-learning the same fixed
+budget. Every masked policy selected zero invalid actions; the unmasked PPO
+selected 462,511 and never completed a held-out task. The full stability result
+and caveats are in [reproducible results](docs/results.md#masked-taxi-constraint-control).
+
+The generic `ConstrainedWorkbench` gate then tests the complete structured
+stack with two to four workers, state-local jobs, shared capacities, conflicts,
+and terminal-only reward. An exact solver supplies oracle actions and labels.
+Across three 12,288-turn runs, random-start joint PPO finishes at 0.875 of
+oracle versus 0.469 for random legal play; BC followed by PPO finishes at
+0.923. See the fixed protocol and uncertainty calculation in
+[reproducible results](docs/results.md#constrained-joint-action-learning-gate).
 
 ![QUBO applied to successive expanded branch frontiers](docs/markup/qubo-frontier.gif)
 

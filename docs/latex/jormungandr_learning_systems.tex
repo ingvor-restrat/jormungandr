@@ -1,4 +1,4 @@
-\documentclass[11pt]{article}
+\documentclass[8pt]{article}
 
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
@@ -88,7 +88,18 @@ cloning, MARWIL, PPO, IMPALA, an IMPACT-style APPO profile, categorical SAC,
 and a compact vector-observation DreamerV3 profile.  Training and validation
 stores remain isolated; legal masks, behavior probabilities, policy versions,
 checkpoints, TorchScript artifacts, TensorBoard series, and internal comparison
-metrics share one lifecycle.  A QUBO selector makes auditable yes/no decisions
+metrics share one lifecycle.  A second service profile transports variable-size
+typed entity sets and state-local semantic action candidates through central
+inference, prioritized transition replay, or policy-lag-aware joint PPO
+trajectories, plus reward-free weighted supervision over semantic factor
+choices.  Structured behavior-cloning checkpoints initialize the compatible
+PPO transformer directly while keeping new optimizer and rollout state.  Each
+joint record carries one reward per environment turn,
+nested factor choices, and the exact sum of the conditional behavior log
+probabilities.  Structured PPO reports episode-return spread, range, unique
+count, episode length, and reward sparsity before GAE, so a critic fitting one
+common outcome is not mistaken for a policy receiving useful return diversity.
+A QUBO selector makes auditable yes/no decisions
 over prioritized transitions, contiguous rollout fragments, or a bounded
 search frontier by trading utility against redundancy.  Quantile critics expose mean, lower-quantile,
 and lower-tail CVaR decisions for noisy outcomes.  \VOLT{} can use frozen set
@@ -99,8 +110,20 @@ profiled replay, selection, collation, and numerical kernels while policy
 modules remain in Torch.  A seeded synthetic comparison evaluates five
 compatible online transition learners on clean and sensor-noise cohorts; it
 demonstrates the comparison protocol rather than an environment-general
-ranking.  This paper defines the implemented contracts and their limits;
-lifecycle smoke tests are not learning-performance claims.
+ranking.  An independent three-seed CartPole diagnostic gives the built-in PPO
+and Stable-Baselines3 PPO equal 9,155-parameter networks and 49,152 interactions;
+both finish at the maximum held-out return in every run.  This paper defines
+the implemented contracts and their limits.  A representation-parity control
+then gives the entity/candidate transformer the same CartPole seeds, PPO
+controls, and interaction budget; all three runs also finish at 500.  A
+four-way masked Taxi control
+then records zero invalid choices for all masked policies while the otherwise
+identical unmasked PPO control accumulates 462,511.  A generic exact-oracle
+constrained workbench then gives variable-factor joint PPO 12,288 terminal-only
+reward turns per run: random-start PPO finishes at 0.875 of oracle versus 0.469
+for random legal play, while behavior cloning followed by PPO finishes at
+0.923.  These bounded diagnostics do not imply application-general
+performance.
 \end{abstract}
 
 \section{Introduction}
@@ -283,9 +306,10 @@ interchange format.
 
 \section{Implemented algorithm profiles}
 
-The service currently uses a fixed discrete action vocabulary for every
-built-in.  Table~\ref{tab:algorithms} states the implemented profiles rather
-than extending paper results to unimplemented observation or action spaces.
+The compatibility service uses a fixed discrete action vocabulary.  Its
+profiles and the three implemented entity/candidate counterparts are listed in
+Table~\ref{tab:algorithms}; the table does not extend results to unimplemented
+observation or action spaces.
 
 \begin{table}[H]
 \centering
@@ -306,6 +330,9 @@ Plugin & Data mode & Implemented profile \\
 \texttt{appo} & trajectory & IMPACT-style V-trace, target-policy clipping, and bounded circular replay. \\
 \texttt{sac} & off-policy & Categorical SAC with twin critics, soft targets, and automatic temperature. \\
 \texttt{dreamerv3} & model-based & Compact vector latent dynamics, symlog targets, imagination, and slow value target. \\
+\texttt{structured\_dqn} & semantic transition & Double-DQN over variable state-local candidates. \\
+\texttt{structured\_bc} & semantic supervision & Weighted reward-free likelihood over legal factor candidates. \\
+\texttt{structured\_ppo} & joint trajectory & PPO over the exact sum of sequential conditional factor log probabilities. \\
 \bottomrule
 \end{tabularx}
 \caption{Built-in algorithm profiles.  The entries are service capabilities,
@@ -348,7 +375,10 @@ combination of a target policy, circular replay, and truncated importance
 sampling rather than treating asynchronous PPO as ordinary shuffled replay
 \cite{impact}.
 
-Behavior cloning ignores reward and provides the demonstration baseline.
+Behavior cloning ignores reward and provides the demonstration baseline.  The
+structured profile predicts semantic candidate identity within one factor's
+current legal alternatives and accepts generic example weights and source or
+factor groups rather than application-specific labels.
 MARWIL estimates trajectory returns and a learned value, normalizes the
 advantage scale with a moving statistic, and weights action likelihood by a
 clipped exponential advantage \cite{marwil}.  CQL, BC, and MARWIL address
@@ -783,11 +813,58 @@ policy versions, then computes GAE targets.  A Volt in-process research driver
 resolves references to Deep Sets or GNN batches and backpropagates through the
 encoder.
 
-The public service still stores fixed NumPy observations.  It does not define
-a graph codec, batch variable numbers of nodes and actions through HTTP, or
-checkpoint the graph artifact store.  Graph-native service training therefore
-remains future work.  Hiding variable action semantics in an undocumented
-fixed vector would make replay, masks, and checkpoints ambiguous.
+The compatibility service stores fixed NumPy observations.  The implemented
+v2 profile instead transports a global feature vector, a variable typed-entity
+matrix, state-local candidate descriptors and identifiers, and a legal mask.
+It pads only at the model collation boundary, serves one centrally versioned
+policy, and supports three explicit data modes.  Structured Double-DQN records
+one semantic candidate in prioritized transition replay.  Structured PPO
+records a complete joint trajectory: one observation, centralized value,
+scalar reward, and next observation per environment turn, with factor choices
+nested inside rather than expanded into separate reward-bearing samples.
+
+For joint sampling, \texttt{policy/score} returns candidate-aligned logits and
+one value.  The actor applies environment-owned masks in factor order and
+records the conditional log probability actually used at each choice.  Their
+sum is the joint behavior log probability used by PPO.  A later constraint
+update may restrict the current or future factors but cannot rewrite an
+earlier factor's distribution; post-hoc projection is therefore rejected
+rather than mislabeled as on-policy data.  The service validates complete
+episode ordering, semantic identity, split, policy lag, and duplicate
+provenance before queueing a trajectory.  Training and validation queues stay
+separate.
+
+Long structured episodes need not repeat every intermediate observation on the
+wire.  The compact sequence schema sends an ordered chain of (N+1)
+observations beside (N) factor/action/reward records; the decoder reconstructs
+the same immutable step sequence and applies the same semantic, ordering,
+split, duplicate, and policy-lag checks.  The standard client transparently
+gzip-compresses requests above a configurable byte threshold, and the HTTP
+handler rejects unsupported or malformed content encodings.  This changes
+transport size, not PPO semantics.  Complete episodes are implemented;
+correctly bootstrapped partial
+fragments and durable graph artifact references remain future extensions.
+
+Structured behavior cloning uses a third, explicitly reward-free contract.
+For label $i$, the application supplies state $s_i$, the current legal
+candidate identities $C_i$ for one factor, semantic target $a_i\in C_i$, and
+positive sample weight $w_i$.  The generic learner minimizes
+
+\[
+  \mathcal L_{\mathrm{BC}} =
+  \frac{\sum_i w_i[-\log \pi_\theta(a_i\mid s_i,C_i)]}
+       {\sum_i w_i}.
+\]
+
+Training and validation labels occupy separate bounded buffers.  Validation
+calculates accuracy, negative log likelihood, entropy, calibration error, and
+source/factor-group summaries without gradients.  Candidate IDs, rather than
+row positions, define the target, so a candidate permutation does not relabel
+the example.  The BC and PPO profiles share the entity/candidate transformer
+schema.  A service-owned initialization operation therefore copies a
+schema-compatible BC policy into a new PPO learner while resetting optimizer,
+update/version, and trajectory state; the value head receives no BC objective
+and remains an untrained starting critic.
 
 \subsection{Quantile tree baselines}
 
@@ -810,6 +887,14 @@ under algorithm-qualified paths.  The selector has a separate namespace.  A
 runtime comparison endpoint aligns the latest rows for all model identifiers,
 including externally logged held-out performance measures, and a per-model
 endpoint retains recent history and the latest selection audit.
+
+The v2 structured profile exposes the same observability contract rather than
+only its latest scalar.  Its metrics endpoint retains learner update history,
+accepts externally computed held-out measures at an explicit step, and writes
+learner and evaluation series to TensorBoard.  Environment-specific runners
+can therefore keep an append-only curve whose every evaluation row names the
+exact checkpoint, while the public service remains unaware of the business
+case.
 
 Objective losses from CQL, PPO, SAC, and Dreamer are not on one performance
 scale.  Model selection uses predeclared held-out environment measures at equal
@@ -879,6 +964,224 @@ The committed animation reveals convergence checkpoints, and a separate
 same-path playback shows final median-run actions and accumulated reward.  The
 single playback path is explanatory rather than additional evidence.
 
+\subsection{Independent PPO reference diagnostic}
+
+The trajectory cohort begins with CartPole-v1 because a familiar environment
+separates PPO mechanics from application representation.  The reference is
+Stable-Baselines3 2.9.0 \cite{sb3} in an isolated CPU environment with
+Gymnasium 1.3.0 and Torch 2.8.0.  Both participants use separate policy and
+value MLPs with two width-64 hidden layers---exactly 9,155 trainable parameters
+in each implementation---and share learning rate $3\times10^{-4}$, discount
+$0.99$, GAE $\lambda=0.95$, clip ratio $0.2$, rollout length 1,024, minibatch
+size 64, ten epochs, zero entropy bonus, value coefficient $0.5$, and gradient
+norm $0.5$.  Three initialization seeds receive 49,152 environment steps.
+Every 4,096 steps, deterministic policies are measured on the same twenty
+held-out reset seeds; 475 is the declared solved threshold.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.82\textwidth]{figures/cartpole_ppo_reference.pdf}
+  \caption{Matched-capacity CartPole PPO diagnostic.  Lines are the mean of
+  three independent training seeds and shading is one standard deviation of
+  the three held-out run means.  The curve is a wiring benchmark, not a
+  library-wide performance ranking.}
+  \label{fig:cartpole-ppo-reference}
+\end{figure}
+
+\begin{table}[H]
+\centering
+\small
+\caption{First solved checkpoint and final held-out return by training seed.}
+\label{tab:cartpole-ppo-reference}
+\begin{tabular}{lrrrr}
+\toprule
+Implementation & Run 0 & Run 1 & Run 2 & Final means \\
+\midrule
+\JORM{} PPO & 20,480 & 20,480 & 20,480 & 500 / 500 / 500 \\
+Stable-Baselines3 PPO & 8,192 & 24,576 & 12,288 & 500 / 500 / 500 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The reference often crosses the threshold earlier, while both curves are
+non-monotone at intermediate checkpoints.  The result establishes that the
+generic \JORM{} PPO policy, value bootstrap, GAE ordering, behavior-policy
+metadata, clipping, and optimizer path can solve this control problem at the
+same capacity and budget as an independent implementation.  In all final
+\JORM{} updates, both behavior-log-probability and behavior-value fallback
+rates are zero.  It does not validate the Kagriculture reward, joint-action
+trajectory, variable representation, or opponent protocol; those remain
+separate gates.
+
+\subsection{Entity/candidate representation parity}
+
+The S0 control changes only the CartPole representation and compatible policy
+encoder.  Each four-coordinate vector becomes four typed entities with stable
+identifiers; left and right become two state-local candidates.  The structured
+policy is a two-layer, width-32 entity/candidate transformer with 20,674
+parameters.  Environment, reward, three initialization seeds, held-out reset
+seeds, PPO controls, evaluation cadence, and 49,152-turn budget are identical
+to the flat \JORM{} cohort above.  The predeclared gate requires at least 90\%
+of the flat final median and no more than twice its median time to 475.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.82\textwidth]{figures/structured_cartpole_parity.pdf}
+  \caption{Flat versus entity/candidate CartPole PPO.  Both lines are means of
+  the same three training seeds evaluated on the same twenty held-out resets.
+  This isolates representation and collation from application dynamics.}
+  \label{fig:structured-cartpole-parity}
+\end{figure}
+
+\begin{table}[H]
+\centering
+\small
+\caption{Representation-parity first solved checkpoint and final held-out return.}
+\label{tab:structured-cartpole-parity}
+\begin{tabular}{lrrrr}
+\toprule
+Representation & Run 0 & Run 1 & Run 2 & Final means \\
+\midrule
+Flat MLP & 20,480 & 20,480 & 20,480 & 500 / 500 / 500 \\
+Entity/candidate transformer & 8,192 & 32,768 & 12,288 & 500 / 500 / 500 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+S0 passes: both final medians are 500 and the structured median first-solved
+checkpoint is 12,288 versus 20,480 flat.  Permuting entity and candidate rows
+while retaining IDs changes semantic logits by at most
+$1.08\times10^{-6}$ and values by at most $7.63\times10^{-6}$ in the recorded
+runs, below the $10^{-5}$ tolerance.  Wire round trip, trajectory storage,
+checkpoint restore, and the versioned structured inference bundle preserve the
+selected semantic candidate.  This rules out a gross variable-representation
+failure; it does not show that a particular application's features, reward, or
+joint constraints are sufficient.
+
+\subsection{Structured supervision diagnostic}
+
+The BC0 functional gate uses eight weighted labels from two factor families
+and four independent candidate permutations.  The structured learner reaches
+100\% accuracy on the held-out copy of this tiny corpus.  Candidate-row
+permutation preserves semantic logits within $10^{-5}$, and validation
+evaluation leaves all parameters unchanged.  The wire record contains no
+reward, requires every supplied factor alternative to be currently legal, and
+reports overall and source/factor-group accuracy, negative log likelihood,
+entropy, calibration error, and gradient norm.
+
+A central-service test interleaves the eight training and eight validation
+labels, retains them in separate bounded buffers, and updates only from the
+training split.  Its checkpoint initializes a frozen structured PPO model with
+identical candidate logits, a new optimizer, and update and policy-version
+counters at zero.  BC0 therefore validates reward-free semantic imitation and
+the BC-to-PPO handoff; it does not establish that a demonstration source is
+optimal or that imitation improves terminal return.
+
+\subsection{Constrained joint-action learning diagnostic}
+
+\texttt{ConstrainedWorkbench-v0} is a Gymnasium-compatible generic task with
+no application concepts.  On each of three turns, two to four typed workers
+choose a state-local job or PASS.  A job may be used once; jobs consume shared
+capacity and members of one conflict group cannot coexist.  Utility accumulates
+internally, but learner reward is zero until termination and is then divided by
+the exact enumerated episode optimum.  The oracle return is therefore one by
+construction.  Changing worker count changes nested factor count, not the
+three trajectory records or the single nonzero reward.
+
+All learned arms use the same 12,770-parameter width-32, one-layer transformer.
+Behavior cloning receives 256 exact-oracle training episodes and 500 updates.
+Random-start and BC-initialized PPO each receive 12,288 environment turns in
+each of three training runs.  Deterministic evaluation uses the same 64 held-out
+episode seeds.  Figure~\ref{fig:constrained-workbench} and
+Table~\ref{tab:constrained-workbench} report the recorded cohort.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.82\textwidth]{figures/constrained_workbench_j1.pdf}
+  \caption{Terminal return relative to the exact workbench oracle.  Lines are
+  means of three training runs; shading is one between-run standard deviation.
+  Random legal and BC-only policies are fixed held-out references.}
+  \label{fig:constrained-workbench}
+\end{figure}
+
+\begin{table}[H]
+\centering
+\small
+\caption{Constrained-workbench held-out terminal return.}
+\label{tab:constrained-workbench}
+\begin{tabular}{lrr}
+\toprule
+Policy & Before PPO & At 12,288 turns \\
+\midrule
+Exact oracle & 1.0000 & 1.0000 \\
+Random legal & 0.4689 & 0.4689 \\
+Structured BC & 0.9080 & --- \\
+Joint PPO, random initialization & 0.5050 & 0.8750 \\
+Structured BC then joint PPO & 0.9080 & 0.9227 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+BC accuracy is 0.8228 and 0.8159 for the two worker kinds, versus respective
+action-frequency baselines of 0.4875 and 0.4755.  All three tiny deterministic
+corpora reach 100\%.  Final PPO improves over paired random legal episodes by
+0.4061 on average.  A hierarchical paired bootstrap resampling training runs
+and common evaluation seeds gives a 95\% interval $[0.3581,0.4533]$.
+BC-to-PPO median return is 0.9337 of oracle, above the predeclared 0.80 gate,
+and no evaluated arm emits an infeasible action.  J1 passes.  The task is small
+enough for complete enumeration and isolates the structured formulation; it is
+not evidence for larger combinatorial environments.
+
+\subsection{Masked-action representation diagnostic}
+
+Taxi-v4 isolates the legal-mask contract on 500 discrete states and six
+actions.  The neural policies receive a one-hot state and two separate
+width-64 MLPs, giving 72,903 trainable parameters to both \JORM{} PPO and
+SB3-contrib MaskablePPO.  Four participants receive 131,072 interactions over
+three seeds: masked \JORM{} PPO, the same \JORM{} PPO with masking deliberately
+disabled, SB3-contrib MaskablePPO, and a 3,000-entry masked tabular Q-learning
+reference.  Evaluation uses fifty fixed reset seeds every 16,384 steps.  The
+primary gate requires zero environment-invalid actions for every masked
+participant and masked \JORM{} success-area-under-curve no worse than its
+unmasked twin.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{figures/masked_taxi_ppo_reference.pdf}
+  \caption{Taxi-v4 return and task-completion learning curves.  Every masked
+  participant uses the environment-supplied mask; the red control alone may
+  select masked actions.  Curves are means across three training seeds.}
+  \label{fig:masked-taxi-reference}
+\end{figure}
+
+\begin{table}[H]
+\centering
+\small
+\caption{Final Taxi-v4 held-out results by seed.  Each cell is success rate / mean return.}
+\label{tab:masked-taxi-reference}
+\begin{tabular}{lccc}
+\toprule
+Implementation & Run 0 & Run 1 & Run 2 \\
+\midrule
+\JORM{} PPO, masked & .96 / 0.18 & 1.00 / 8.20 & .92 / $-8.34$ \\
+\JORM{} PPO, unmasked & .00 / $-200$ & .00 / $-200$ & .00 / $-200$ \\
+SB3-contrib MaskablePPO & 1.00 / 8.44 & 1.00 / 8.24 & 1.00 / 8.44 \\
+Masked tabular Q-learning & 1.00 / 8.44 & 1.00 / 8.44 & 1.00 / 8.44 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+All masked participants record zero invalid choices in both training and every
+evaluation.  The unmasked control accumulates 462,511 invalid choices over the
+same interaction and evaluation schedule and never completes a held-out task.
+Masked \JORM{} success AUC is 0.7042 versus zero unmasked, so the declared B2
+mask gate passes.  Its final seed variance remains material: the independent
+masked references finish at 100\% on all seeds, whereas \JORM{} finishes at
+96\%, 100\%, and 92\%.  The masked policy had reached 97.3\% mean success at
+65,536 steps before later regression.  This supports hard constraint handling
+and also motivates checkpoint selection and stability diagnostics; it is not
+evidence that masks alone solve a complex application.
+
 \section{Python, Torch, and a future Rust path}
 
 Python is appropriate for orchestration and research iteration, while Torch
@@ -904,21 +1207,41 @@ declare \texttt{rust-pyo3-torch} without changing actor messages.
 
 \section{Current implementation and limits}
 
-The public implementation registers twelve profiles: C51, QR-DQN, DQN, CQL,
+The public implementation registers fixed-vector and structured profiles for
+C51, QR-DQN, DQN, CQL,
 maximum-entropy soft Q, BC, MARWIL, PPO, IMPALA, APPO, categorical SAC, and the
 compact DreamerV3 profile.  The HTTP service lists plugins, applies legal masks
 at inference and backup, stores behavior metadata, assembles contiguous
 trajectories, filters excessive policy lag for online trajectory learners,
 selects ordinary or QUBO batches, logs algorithm-qualified metrics,
 checkpoints arbitrary plugin state, restores it, and exports each plugin's
-declared Torch module.
+declared Torch module.  The v2 structured service additionally provides
+central entity/candidate inference, prioritized transition replay, complete
+joint-trajectory ingress, policy-lag checks, exact conditional-log-probability
+PPO, reward-free weighted structured supervision, direct BC-to-PPO policy
+initialization, structured checkpointing and inference bundles, recent learner
+history, external held-out metrics, and TensorBoard persistence.
+Complete joint trajectories may use either the original step-array wire or a
+de-duplicated observation-chain sequence with transparent gzip request
+compression.
+Each structured-PPO update also records raw episode-return mean, standard
+deviation, minimum, maximum, unique-value count, mean episode length, and
+nonzero-reward fraction before GAE.  This is a diagnostic distinction: high
+explained variance may describe a critic that predicts one common loss and its
+distance to termination, while the policy still has almost no evidence for
+ranking action sequences.
 
-The recorded functional suite contains 48 passing cases.  It includes direct
+The recorded functional suite contains 92 passing cases.  It includes direct
 finite updates and state round trips for every built-in, C51 projection and
 mask checks, graph-reference GAE, validation isolation, HTTP ingress, masked
 SAC entropy, QR-DQN tail output, QUBO cardinality and fragment audit, checkpoint
 restore, frontier accounting and local-swap checks, replayable visualization
-audits, the seeded online comparison harness, and artifact manifests.  A
+audits, structured metrics history and TensorBoard persistence, exact joint
+sampling and PPO updates, multiprocess structured-trajectory ingress,
+compact sequence round trip and compressed HTTP ingress,
+policy-lag/duplicate/order rejection, structured export, supervised split
+isolation, semantic candidate permutation, BC-to-PPO initialization, the seeded
+online comparisons, and artifact manifests.  A
 separate threaded matrix gave every built-in eight mask-aware transitions;
 each completed an update, checkpoint, TorchScript export, restore, and masked
 inference.
@@ -926,10 +1249,14 @@ inference.
 These are lifecycle tests.  They do not reproduce Atari, continuous-control,
 Minecraft, offline-RL, or Volt trading benchmarks.  The built-in CQL and SAC
 profiles are discrete.  The Dreamer profile is smaller than the reference.
-Replay data are not durable across restart.  Graph-native HTTP transport,
-dynamic action descriptors, multi-learner synchronization, authentication,
-binary high-throughput transport, exact QUBO solving, native kernels, and a
-Volt-scale empirical QUBO advantage remain outside the release.
+Replay data are not durable across restart.  Structured PPO currently consumes
+complete episodes rather than bootstrapped partial fragments.  The constrained
+workbench is a small exact-oracle benchmark and does not establish scaling to a
+large action system.  Application actors still own dynamic feasibility
+callbacks and action execution.
+Multi-learner synchronization, authentication, binary high-throughput
+transport, exact QUBO solving, native kernels, and a Volt-scale empirical QUBO
+advantage remain outside the release.
 
 \section{Conclusion}
 
@@ -993,6 +1320,12 @@ International Conference on Learning Representations, 2016,
 J. Schulman, F. Wolski, P. Dhariwal, A. Radford, and O. Klimov,
 \emph{Proximal Policy Optimization Algorithms}, 2017,
 \url{https://arxiv.org/abs/1707.06347}.
+
+\bibitem{sb3}
+J. Raffin, A. Hill, A. Gleave, A. Kanervisto, M. Ernestus, and N. Dormann,
+\emph{Stable-Baselines3: Reliable Reinforcement Learning Implementations},
+Journal of Machine Learning Research, 22(268):1--8, 2021,
+\url{https://jmlr.org/papers/v22/20-1364.html}.
 
 \bibitem{impala}
 L. Espeholt et al.,

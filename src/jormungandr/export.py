@@ -381,6 +381,10 @@ def _build_agent_from_checkpoint(
                 f"installed plugin is {plugin.checkpoint_id}; install a compatible "
                 "plugin or migrate the checkpoint"
             )
+    if plugin.build is None:
+        raise ValueError(
+            f"algorithm {plugin.name!r} does not support vector checkpoint export"
+        )
     agent = plugin.build(int(spec.obs_dim), learner_config, device)
     agent_state = dict(ckpt["agent"])
     if not load_optimizer:
