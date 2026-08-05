@@ -18,10 +18,11 @@ Result:
 | core algorithm, replay, and artifact lifecycle | 32 | passed |
 | runtime, actors, monitor, trainer, and OU example | 13 | passed |
 | search, joint-action composition, and constrained environment | 13 | passed |
-| structured representation, transition/PPO service, export, and parity | 15 | passed |
-| structured joint trajectory and multiprocess service | 13 | passed |
-| structured reward-free supervision and behavior cloning | 6 | passed |
-| **Total** | **92** | **passed** |
+| structured representation, transition/PPO service, export, and parity | 20 | passed |
+| structured joint trajectory and multiprocess service | 14 | passed |
+| structured reward-free supervision and behavior cloning | 13 | passed |
+| independent terminal-credit and supervision-sampling gates | 4 | passed |
+| **Total** | **109** | **passed** |
 
 The tests cover zero-priority replay safety, probability preservation in the
 C51 projection, legal masking, graph-reference GAE, held-out evaluation
@@ -260,8 +261,9 @@ first-solved checkpoint is 12,288, below twice the flat 20,480 reference.
 Semantic logits and values are invariant to entity/candidate permutations
 within the declared `1e-5` tolerance. Wire round trip, trajectory storage,
 checkpoint restore, and the versioned structured inference bundle preserve
-candidate identity. This localizes any later Kaggriculture failure away from a
-gross entity/candidate representation defect.
+candidate identity. This rules out a gross entity/candidate implementation
+defect for this controlled task; it does not establish parity for an unrelated
+application representation or action grammar.
 
 ## Structured joint-trajectory service contract
 
@@ -282,13 +284,38 @@ loopback service test sends gzip-compressed requests and admits a compact
 validation trajectory through the public endpoint without routing it into
 training.
 
-Structured PPO 1.2 adds pre-GAE signal diagnostics to every update. The unit
+Structured PPO 1.6 adds pre-GAE signal and temporal-reach diagnostics to every update. The unit
 control with two terminal returns, `1.0` and `-0.5`, reports mean `0.25`,
 standard deviation `0.75`, range `[-0.5, 1.0]`, two unique returns, mean length
 three, and a one-third nonzero-reward fraction. The exact-joint control with
 one two-step episode reports return `1.0`, zero spread, one unique return, and
 a one-half nonzero-reward fraction. These metrics are descriptive; they do not
 modify advantages or the PPO objective.
+
+A 719-step delayed-reward regression fixes `gamma = 1` and GAE `lambda = 0.98`.
+The terminal residual reaches the opening advantage with weight
+`0.98 ** 718 = 5.0156e-7`; the update reports that value as
+`gae_oldest_delta_weight_mean`. This makes an otherwise silent long-horizon
+credit problem visible without imposing an application-specific reward.
+
+`DelayedTerminalCredit-v0` extends that regression into an independent
+two-arm reference gate. Two balanced 719-step structured trajectories have
+zero behavior values and only terminal rewards of -1 and +1. Jormungandr and
+Stable-Baselines3 2.9.0 compute every raw advantage and return for
+`lambda = 0.98` and `lambda = 1.0`; both are checked against the closed form
+`z * (gamma * lambda) ** d`. Maximum Jormungandr/SB3 disagreement is
+`4.7684e-7`, below the frozen `2e-6` tolerance. With the same batch
+normalization used by PPO, the positive opening advantage is `2.6763e-6` for
+the current arm and `1.0` for the episodic arm. The gate therefore selects
+`lambda = 1.0` for a terminal-only 719-step child experiment. This is an
+estimator decision, not evidence of policy learning or reduced variance.
+
+```bash
+env -u PYTHONPATH -u VIRTUAL_ENV PYTHONPATH="$PWD/src:$PWD" \
+  /path/to/sb3-reference/bin/python \
+  examples/benchmark_delayed_terminal_credit.py \
+  --json-output docs/latex/figures/delayed_terminal_credit.json
+```
 
 ## Structured behavior-cloning contract
 
@@ -308,6 +335,57 @@ checkpoints the learned entity/candidate transformer. A frozen
 candidate logits while beginning at update and policy version zero. BC0 passes;
 this validates the generic imitation and initialization contract, not expert
 quality or downstream return.
+
+## Conditional supervision-sampling gate
+
+`ConditionalSupervisionSampling-v0` isolates minibatch exposure from model
+capacity and application semantics. Its 1,020 records contain one common
+balance stratum with 1,000 examples and two rare strata with ten examples
+each. Square-root inverse-frequency balancing gives mean-one weights `0.85`
+and `8.5`; both arms therefore target the same exact weighted diagnostic
+objective, `0.2916667`.
+
+Across 3,000 deterministic 64-record batches, uniform draws followed by
+weighted loss contain 1.2617 rare examples on average and omit them entirely
+in 26.07% of batches. Their objective estimate has mean absolute error
+`0.150488`. Sampling in proportion to the declared weights, with unit loss
+weights after sampling, contains 10.6707 rare examples on average, never omits
+them, and reduces mean absolute error to `0.056728`; absolute bias from the
+exact objective is `0.000639`. Every predeclared condition passes.
+
+```bash
+PYTHONPATH=src python examples/benchmark_conditional_supervision_sampling.py \
+  --json-output docs/latex/figures/conditional_supervision_sampling.json
+```
+
+The gate proves the generic estimator and bounded-buffer wiring. It does not
+claim that any particular balance-group definition is correct or that more
+frequent rare examples improve an external task.
+
+## Prefix-conditioned preference gate
+
+`PrefixPreferenceGate-v0` isolates a choice whose legal mask, current
+candidate set, and observation are identical in two balanced examples. The
+correct quantity is `small` after the prefix `wait` and `large` after the
+prefix `produce`. Consequently, a prefix-independent candidate scorer has no
+input that can distinguish the labels.
+
+Across five fixed model seeds, the prefix-independent arm remains at exactly
+0.5 accuracy and median NLL `0.693147`, the binary information limit. The
+width-16 model with a four-dimensional prefix head reaches 1.0 accuracy on
+every seed and median NLL `0.009255`. Every arm has the same legal actions;
+there is no reward or environment in this test. The gate therefore attributes
+the difference specifically to learned prefix-dependent preference, not mask
+changes, PPO credit, or game duration.
+
+```bash
+python examples/benchmark_prefix_conditioning.py
+```
+
+The recorded audit is
+`docs/latex/figures/prefix_preference_gate.json`. This proves the narrow
+conditional-representation capability, not performance on a particular joint
+action task.
 
 ## Constrained joint-action learning gate
 

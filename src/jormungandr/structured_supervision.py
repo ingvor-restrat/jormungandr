@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from collections import Counter
+from dataclasses import dataclass, field, replace
 import math
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from jormungandr.structured import (
     EntityCandidateObservation,
@@ -19,7 +20,15 @@ STRUCTURED_SUPERVISION_SCHEMA = "jormungandr.structured_supervision.v1"
 
 @dataclass(frozen=True)
 class StructuredSupervisionExample:
-    """One weighted semantic label for one state-local action factor."""
+    """One weighted semantic label for one state-local action factor.
+
+    ``target_group`` is the reporting class.  ``balance_group`` is an
+    optional, finer training stratum such as a target plus its conditional
+    choice set and autoregressive prefix.  Keeping the two names separate
+    prevents a coarse metric class from hiding a rare decision boundary.
+    Legacy payloads omit ``balance_group`` and therefore balance by
+    ``target_group`` exactly as before.
+    """
 
     actor_id: str
     episode_id: str
@@ -28,10 +37,12 @@ class StructuredSupervisionExample:
     factor_id: str
     candidate_ids: tuple[str, ...]
     target_candidate_id: str
+    selected_prefix_candidate_ids: tuple[str, ...] = ()
     split: str = "train"
     source_group: str = "default"
     factor_group: str = "default"
     target_group: str = "default"
+    balance_group: str = ""
     sample_weight: float = 1.0
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
@@ -67,15 +78,43 @@ class StructuredSupervisionExample:
         target = str(self.target_candidate_id).strip()
         if target not in candidates:
             raise ValueError("supervision target is absent from its factor")
+        selected_prefix = tuple(
+            str(value).strip()
+            for value in self.selected_prefix_candidate_ids
+        )
+        if any(not value for value in selected_prefix) or (
+            len(set(selected_prefix)) != len(selected_prefix)
+        ):
+            raise ValueError(
+                "selected supervision prefix entries must be non-empty and unique"
+            )
+        if not set(selected_prefix).issubset(observation_candidates):
+            raise ValueError("selected supervision prefix is absent from observation")
+        if set(selected_prefix).intersection(candidates):
+            raise ValueError("selected supervision prefix must precede its factor")
+        illegal_prefix = [
+            candidate_id
+            for candidate_id in selected_prefix
+            if not bool(
+                self.observation.legal_action_mask[
+                    self.observation.candidate_ids.index(candidate_id)
+                ]
+            )
+        ]
+        if illegal_prefix:
+            raise ValueError("selected supervision prefix must remain legal")
         split = "validation" if str(self.split) == "val" else str(self.split)
         if split not in {"train", "validation"}:
             raise ValueError("split must be train or validation")
         source_group = str(self.source_group).strip()
         factor_group = str(self.factor_group).strip()
         target_group = str(self.target_group).strip()
+        balance_group = str(self.balance_group).strip() or target_group
         weight = float(self.sample_weight)
-        if not source_group or not factor_group or not target_group:
-            raise ValueError("source, factor, and target groups are required")
+        if not source_group or not factor_group or not target_group or not balance_group:
+            raise ValueError(
+                "source, factor, target, and balance groups are required"
+            )
         if not math.isfinite(weight) or weight <= 0.0:
             raise ValueError("sample weight must be finite and positive")
         object.__setattr__(self, "actor_id", actor_id)
@@ -83,12 +122,70 @@ class StructuredSupervisionExample:
         object.__setattr__(self, "factor_id", factor_id)
         object.__setattr__(self, "candidate_ids", candidates)
         object.__setattr__(self, "target_candidate_id", target)
+        object.__setattr__(
+            self, "selected_prefix_candidate_ids", selected_prefix
+        )
         object.__setattr__(self, "split", split)
         object.__setattr__(self, "source_group", source_group)
         object.__setattr__(self, "factor_group", factor_group)
         object.__setattr__(self, "target_group", target_group)
+        object.__setattr__(self, "balance_group", balance_group)
         object.__setattr__(self, "sample_weight", weight)
         object.__setattr__(self, "metadata", dict(self.metadata))
+
+
+def structured_supervision_balance_weights(
+    examples: Sequence[StructuredSupervisionExample],
+    *,
+    exponent: float = 0.5,
+) -> Mapping[str, float]:
+    """Return mean-one inverse-frequency weights for declared balance groups.
+
+    The caller owns the semantics of ``balance_group``.  Jormungandr only
+    implements the generic objective ``count(group) ** -exponent`` and derives
+    weights from the supplied training split.  ``exponent=0`` is unweighted;
+    ``exponent=1`` gives every group equal total mass.
+    """
+
+    items = tuple(examples)
+    power = float(exponent)
+    if not items:
+        raise ValueError("at least one supervision example is required")
+    if not 0.0 <= power <= 1.0:
+        raise ValueError("supervision balance exponent must be in [0, 1]")
+    counts = Counter(item.balance_group for item in items)
+    total = len(items)
+    raw = {
+        group: (total / count) ** power for group, count in counts.items()
+    }
+    normalization = sum(raw[item.balance_group] for item in items) / total
+    return {
+        group: float(value / normalization)
+        for group, value in sorted(raw.items())
+    }
+
+
+def apply_structured_supervision_balance_weights(
+    examples: Sequence[StructuredSupervisionExample],
+    weights: Mapping[str, float],
+) -> tuple[StructuredSupervisionExample, ...]:
+    """Apply training-derived balance weights to one split.
+
+    Validation may reuse training weights but cannot introduce a new balance
+    group silently.  Weight validity is enforced by the supervision record.
+    """
+
+    items = tuple(examples)
+    missing = {item.balance_group for item in items}.difference(weights)
+    if missing:
+        raise ValueError(
+            "supervision contains unseen balance groups: "
+            + ", ".join(sorted(missing))
+        )
+    return tuple(
+        replace(item, sample_weight=float(weights[item.balance_group]))
+        for item in items
+    )
 
 
 def structured_supervision_to_payload(
@@ -106,9 +203,13 @@ def structured_supervision_to_payload(
         "factor_id": example.factor_id,
         "candidate_ids": list(example.candidate_ids),
         "target_candidate_id": example.target_candidate_id,
+        "selected_prefix_candidate_ids": list(
+            example.selected_prefix_candidate_ids
+        ),
         "source_group": example.source_group,
         "factor_group": example.factor_group,
         "target_group": example.target_group,
+        "balance_group": example.balance_group,
         "sample_weight": example.sample_weight,
         "metadata": dict(example.metadata),
     }
@@ -138,10 +239,14 @@ def structured_supervision_from_payload(
         factor_id=str(payload.get("factor_id", "")),
         candidate_ids=tuple(payload.get("candidate_ids", ())),
         target_candidate_id=str(payload.get("target_candidate_id", "")),
+        selected_prefix_candidate_ids=tuple(
+            payload.get("selected_prefix_candidate_ids", ())
+        ),
         split=str(payload.get("split", "train")),
         source_group=str(payload.get("source_group", "default")),
         factor_group=str(payload.get("factor_group", "default")),
         target_group=str(payload.get("target_group", "default")),
+        balance_group=str(payload.get("balance_group", "")),
         sample_weight=float(payload.get("sample_weight", 1.0)),
         metadata=metadata,
     )

@@ -82,8 +82,11 @@ stored separately and do not produce gradients. Current ingress requires
 complete episodes; partial fragments need an explicit bootstrap contract.
 Each learner-history point exposes the raw batch's episode-return mean,
 standard deviation, minimum, maximum, unique-value count, mean episode length,
-and nonzero-reward fraction. These fields are computed before GAE and are
-therefore the direct check for an all-identical sparse-reward batch.
+length range, and nonzero-reward fraction. It also exposes `gae_decay` and the
+minimum, mean, and maximum oldest-delta weight
+`(gamma * lambda) ** (episode_length - 1)`. These fields are computed before
+GAE and are therefore direct checks for both an all-identical sparse-reward
+batch and a terminal signal whose direct reach is negligible at early steps.
 
 ### Structured supervision mode
 
@@ -96,7 +99,16 @@ provenance, an entity/candidate observation, `factor_id`, the factor's current
 legal `candidate_ids`, a semantic `target_candidate_id`, and a `train` or
 `validation` split. Optional `sample_weight`, `source_group`, and
 `factor_group` fields support application-owned balancing and diagnostics.
-There is deliberately no reward field.
+`target_group` is the reporting class. The optional `balance_group` is an
+independent, finer training stratum; when omitted it defaults to
+`target_group` for wire compatibility. There is deliberately no reward field.
+
+The learner field `supervision_sampling` is `uniform` by default.
+`sample_weight` draws training records with replacement in proportion to their
+positive declared weights and presents unit-weight copies to the learner. This
+is importance resampling of the same normalized weighted objective, not an
+additional multiplication by the weights. The model response reports the
+active choice as `supervision.sampling`.
 
 Duplicate factor labels are rejected. Validation labels enter a distinct
 bounded store and never update parameters or optimizer state. Learner metrics

@@ -1,0 +1,149 @@
+{
+  "aggregates": {
+    "conditioned_accuracy_median": 1.0,
+    "conditioned_nll_median": 0.009254932403564453,
+    "flat_accuracy_median": 0.5,
+    "flat_nll_median": 0.6931471824645996
+  },
+  "case": {
+    "current_candidate_set_is_identical": true,
+    "labels": {
+      "intent:produce": "quantity:large",
+      "intent:wait": "quantity:small"
+    },
+    "legal_mask_is_identical": true,
+    "observation_is_identical": true,
+    "only_input_difference": "selected intent prefix"
+  },
+  "config": {
+    "base_seed": 20260804,
+    "feedforward_dim": 32,
+    "heads": 4,
+    "layers": 1,
+    "learning_rate": 0.02,
+    "model_dim": 16,
+    "prefix_dim": 4,
+    "runs": 5,
+    "updates": 400
+  },
+  "decision": {
+    "conditioned_arm_fits_both_labels": true,
+    "conditioning_improves_nll_every_run": true,
+    "flat_arm_at_information_limit": true,
+    "passed": true
+  },
+  "recorded_at_unix": 1785878539.9570804,
+  "runs": [
+    {
+      "prefix_conditioned": {
+        "accuracy": 1.0,
+        "entropy": 0.05231637507677078,
+        "nll": 0.009254932403564453,
+        "parameter_count": 3410,
+        "prefix_output_dim": 4,
+        "seed": 20260804,
+        "updates": 10
+      },
+      "prefix_independent": {
+        "accuracy": 0.5,
+        "entropy": 0.6931471824645996,
+        "nll": 0.6931471824645996,
+        "parameter_count": 3282,
+        "prefix_output_dim": 0,
+        "seed": 20260804,
+        "updates": 400
+      },
+      "run": 0
+    },
+    {
+      "prefix_conditioned": {
+        "accuracy": 1.0,
+        "entropy": 0.010547718033194542,
+        "nll": 0.0014443397521972656,
+        "parameter_count": 3410,
+        "prefix_output_dim": 4,
+        "seed": 20365533,
+        "updates": 10
+      },
+      "prefix_independent": {
+        "accuracy": 0.5,
+        "entropy": 0.6931471824645996,
+        "nll": 0.6931471824645996,
+        "parameter_count": 3282,
+        "prefix_output_dim": 0,
+        "seed": 20365533,
+        "updates": 400
+      },
+      "run": 1
+    },
+    {
+      "prefix_conditioned": {
+        "accuracy": 1.0,
+        "entropy": 0.08685038238763809,
+        "nll": 0.017356932163238525,
+        "parameter_count": 3410,
+        "prefix_output_dim": 4,
+        "seed": 20470262,
+        "updates": 10
+      },
+      "prefix_independent": {
+        "accuracy": 0.5,
+        "entropy": 0.6931471824645996,
+        "nll": 0.6931471824645996,
+        "parameter_count": 3282,
+        "prefix_output_dim": 0,
+        "seed": 20470262,
+        "updates": 400
+      },
+      "run": 2
+    },
+    {
+      "prefix_conditioned": {
+        "accuracy": 1.0,
+        "entropy": 0.08334235846996307,
+        "nll": 0.016546249389648438,
+        "parameter_count": 3410,
+        "prefix_output_dim": 4,
+        "seed": 20574991,
+        "updates": 10
+      },
+      "prefix_independent": {
+        "accuracy": 0.5,
+        "entropy": 0.6931471824645996,
+        "nll": 0.6931471824645996,
+        "parameter_count": 3282,
+        "prefix_output_dim": 0,
+        "seed": 20574991,
+        "updates": 400
+      },
+      "run": 3
+    },
+    {
+      "prefix_conditioned": {
+        "accuracy": 1.0,
+        "entropy": 2.273380459882901e-06,
+        "nll": 0.0,
+        "parameter_count": 3410,
+        "prefix_output_dim": 4,
+        "seed": 20679720,
+        "updates": 20
+      },
+      "prefix_independent": {
+        "accuracy": 0.5,
+        "entropy": 0.6931471824645996,
+        "nll": 0.6931471824645996,
+        "parameter_count": 3282,
+        "prefix_output_dim": 0,
+        "seed": 20679720,
+        "updates": 400
+      },
+      "run": 4
+    }
+  ],
+  "schema": "jormungandr.prefix_preference_gate.v1",
+  "versions": {
+    "numpy": "1.26.0",
+    "python": "3.11.15",
+    "torch": "2.4.1+cu121"
+  }
+}

@@ -1,39 +1,11 @@
-\documentclass[8pt]{article}
+\documentclass{strategynet-journal}
 
-\usepackage[T1]{fontenc}
-\usepackage[utf8]{inputenc}
-\usepackage[english]{babel}
-\usepackage{mathpazo}
-\usepackage[scaled]{helvet}
-\usepackage{microtype}
-\usepackage[letterpaper,margin=0.88in]{geometry}
-\usepackage{amsmath}
-\usepackage{amssymb}
-\usepackage{booktabs}
-\usepackage{array}
-\usepackage{tabularx}
-\usepackage{enumitem}
-\usepackage{xcolor}
-\usepackage{float}
-\usepackage{graphicx}
-\usepackage{listings}
-\usepackage{tikz}
 \usetikzlibrary{arrows.meta,positioning}
-\usepackage{xurl}
-\usepackage{hyperref}
 
 \hypersetup{
   pdftitle={Jörmungandr: A Plugin Runtime for Distributed Reinforcement Learning},
-  pdfauthor={research@strategynet.ai},
-  colorlinks=true,
-  linkcolor=blue!50!black,
-  citecolor=blue!50!black,
-  urlcolor=blue!60!black
+  pdfauthor={research@strategynet.ai}
 }
-
-\setlength{\parindent}{0pt}
-\setlength{\parskip}{0.52em}
-\setlist{nosep}
 
 \lstdefinestyle{jorm}{
   basicstyle=\ttfamily\footnotesize,
@@ -68,8 +40,9 @@
   jfuture/.style={-{Latex[length=2mm]},draw=blue!55!black,dashed,line width=0.75pt}
 }
 
+\SNHeader{strategynet.ai:Jormungandr}
 \title{\JORM{}: A Plugin Runtime for Distributed Reinforcement Learning}
-\author{research@strategynet.ai}
+\author{\href{mailto:research@strategynet.ai}{research@strategynet.ai}}
 \date{August 2026}
 
 \begin{document}
@@ -92,13 +65,16 @@ metrics share one lifecycle.  A second service profile transports variable-size
 typed entity sets and state-local semantic action candidates through central
 inference, prioritized transition replay, or policy-lag-aware joint PPO
 trajectories, plus reward-free weighted supervision over semantic factor
-choices.  Structured behavior-cloning checkpoints initialize the compatible
+choices and opt-in importance resampling of application-declared balance
+strata.  Structured behavior-cloning checkpoints initialize the compatible
 PPO transformer directly while keeping new optimizer and rollout state.  Each
 joint record carries one reward per environment turn,
 nested factor choices, and the exact sum of the conditional behavior log
 probabilities.  Structured PPO reports episode-return spread, range, unique
-count, episode length, and reward sparsity before GAE, so a critic fitting one
-common outcome is not mistaken for a policy receiving useful return diversity.
+count, episode-length range, reward sparsity, and the direct oldest-residual
+GAE weight before optimization, so a critic fitting one common outcome---or a
+terminal residual with negligible reach at early decisions---is not mistaken
+for a policy receiving useful credit.
 A QUBO selector makes auditable yes/no decisions
 over prioritized transitions, contiguous rollout fragments, or a bounded
 search frontier by trading utility against redundancy.  Quantile critics expose mean, lower-quantile,
@@ -126,7 +102,11 @@ for random legal play, while behavior cloning followed by PPO finishes at
 performance.
 \end{abstract}
 
+\SNtwocolumntableofcontents
+
 \section{Introduction}
+
+\begin{SNcolumns}
 
 As we considered RL frameworks for research and production, we found that 
 many libraries made it difficult to deploy without the overhead: drawing inferences
@@ -177,6 +157,8 @@ The learner may change how experience is valued, but it must not change what
 the experience means, which actions were legal, which policy produced it, or
 whether it was reserved for validation.
 \end{quote}
+
+\end{SNcolumns}
 
 \section{System boundary}
 
@@ -256,6 +238,8 @@ invent continuity across missing rows.
 
 \section{Plugin and artifact model}
 
+\begin{SNcolumns}
+
 \subsection{Algorithm contract}
 
 An algorithm plugin has a semantic name and version, family, replay mode,
@@ -303,6 +287,8 @@ action-by-quantile values and retain the risk rule.  Policy and scalar-Q
 profiles describe action-width outputs.  Torch checkpoints use pickle-based
 loading and are therefore trusted local artifacts, not an untrusted
 interchange format.
+
+\end{SNcolumns}
 
 \section{Implemented algorithm profiles}
 
@@ -413,6 +399,8 @@ external plugin or a separately validated profile.
 
 \section{Noise, disturbance, and risk}
 
+\begin{SNcolumns}
+
 \subsection{A disturbance taxonomy}
 
 Reward outliers change the TD target; observation noise changes the estimated
@@ -453,6 +441,8 @@ categorical SAC or soft Q at fixed temperatures.  Seeds, path cohorts,
 chronological dates, observation perturbations, and reward perturbations are
 separate axes.  Choosing a CVaR level after inspecting held-out outcomes would
 turn the held-out set into training data.
+
+\end{SNcolumns}
 
 \section{QUBO rollout and frontier allocation}
 \label{sec:qubo}
@@ -856,6 +846,18 @@ positive sample weight $w_i$.  The generic learner minimizes
        {\sum_i w_i}.
 \]
 
+The reporting target class and the training balance stratum are independent.
+An application may therefore retain a coarse metric label while declaring a
+finer conditional choice-set or selected-prefix stratum.  Jormungandr can
+derive mean-one weights proportional to
+$\operatorname{count}(g_i)^{-\alpha}$ for $0\leq\alpha\leq1$.  Its historical
+sampler draws records uniformly and applies $w_i$ in the loss.  The opt-in
+importance sampler instead draws $i$ with probability
+$w_i/\sum_j w_j$ and supplies unit loss weights.  The expected batch mean is
+the same normalized objective above, without multiplying by $w_i$ twice, but
+rare high-weight strata are less often absent from finite batches.  Group
+semantics remain application-owned.
+
 Training and validation labels occupy separate bounded buffers.  Validation
 calculates accuracy, negative log likelihood, entropy, calibration error, and
 source/factor-group summaries without gradients.  Candidate IDs, rather than
@@ -1009,9 +1011,9 @@ generic \JORM{} PPO policy, value bootstrap, GAE ordering, behavior-policy
 metadata, clipping, and optimizer path can solve this control problem at the
 same capacity and budget as an independent implementation.  In all final
 \JORM{} updates, both behavior-log-probability and behavior-value fallback
-rates are zero.  It does not validate the Kagriculture reward, joint-action
-trajectory, variable representation, or opponent protocol; those remain
-separate gates.
+rates are zero.  It does not validate an unrelated reward, joint-action
+trajectory, variable representation, or multi-agent protocol; those remain
+separate application gates.
 
 \subsection{Entity/candidate representation parity}
 
@@ -1076,6 +1078,51 @@ identical candidate logits, a new optimizer, and update and policy-version
 counters at zero.  BC0 therefore validates reward-free semantic imitation and
 the BC-to-PPO handoff; it does not establish that a demonstration source is
 optimal or that imitation improves terminal return.
+
+\subsection{Conditional supervision-sampling diagnostic}
+
+\texttt{ConditionalSupervisionSampling-v0} removes policy capacity and domain
+semantics from the minibatch question.  A synthetic corpus has 1,000 records
+in one common balance stratum and ten records in each of two rare strata.
+Square-root inverse-frequency balancing gives mean-one weights 0.85 and 8.5;
+both arms therefore target the same exact weighted diagnostic objective,
+0.2916667.
+
+Across 3,000 deterministic batches of size 64, uniform draws followed by
+weighted loss contain 1.2617 rare records on average and contain none in
+26.07\% of batches.  Their objective estimate has mean absolute error
+0.150488.  Weight-proportional draws with unit post-draw loss weights contain
+10.6707 rare records on average, never omit them, and reduce mean absolute
+error to 0.056728; absolute bias from the exact objective is 0.000639.  All
+predeclared conditions pass.  This validates the generic buffer estimator,
+not any application's balance-group definition or downstream learning gain.
+
+\subsection{Prefix-conditioned preference diagnostic}
+
+The optional structured prefix head separates learned preference conditioning
+from hard feasibility.  One central inference emits a base logit $\ell_j$ and
+key/value vectors $(k_j,v_j)$ for each candidate.  Before factor $i$, the
+conditional logit for current candidate $j$ is
+\[
+  \ell_{j\mid p_{<i}} = \ell_j
+  + \frac{k_j^\top\sum_{a\in p_{<i}}v_a}{\sqrt{d_p}}.
+\]
+The environment-owned callback still supplies the legal mask.  The actor and
+PPO recompute the same expression from the recorded prefix, so conditioning
+does not require repeated service inference or an approximate behavior
+probability.  Setting $d_p=0$ recovers the previous prefix-independent model.
+
+The isolated \texttt{PrefixPreferenceGate-v0} contains two balanced labels
+with an identical observation, identical current candidates, and identical
+legal mask.  The correct quantity is small after a \texttt{wait} prefix and
+large after a \texttt{produce} prefix.  Across five fixed seeds, the
+prefix-independent arm stays at accuracy $0.5$ and median NLL $0.693147$, its
+binary information limit.  A width-16 model with $d_p=4$ reaches accuracy one
+on every seed and median NLL $0.009255$.  Because this case has no reward or
+environment transition, it attributes the difference specifically to learned
+preference conditioning rather than masking, PPO credit, or horizon length.
+This is a narrow capability test, not evidence of performance on a larger
+joint-action problem.
 
 \subsection{Constrained joint-action learning diagnostic}
 
@@ -1182,6 +1229,8 @@ masked references finish at 100\% on all seeds, whereas \JORM{} finishes at
 and also motivates checkpoint selection and stability diagnostics; it is not
 evidence that masks alone solve a complex application.
 
+\begin{SNcolumns}
+
 \section{Python, Torch, and a future Rust path}
 
 Python is appropriate for orchestration and research iteration, while Torch
@@ -1218,20 +1267,39 @@ checkpoints arbitrary plugin state, restores it, and exports each plugin's
 declared Torch module.  The v2 structured service additionally provides
 central entity/candidate inference, prioritized transition replay, complete
 joint-trajectory ingress, policy-lag checks, exact conditional-log-probability
-PPO, reward-free weighted structured supervision, direct BC-to-PPO policy
+PPO, reward-free weighted structured supervision, conditional balance groups,
+importance-resampled supervision batches, direct BC-to-PPO policy
 initialization, structured checkpointing and inference bundles, recent learner
 history, external held-out metrics, and TensorBoard persistence.
 Complete joint trajectories may use either the original step-array wire or a
 de-duplicated observation-chain sequence with transparent gzip request
 compression.
 Each structured-PPO update also records raw episode-return mean, standard
-deviation, minimum, maximum, unique-value count, mean episode length, and
-nonzero-reward fraction before GAE.  This is a diagnostic distinction: high
+deviation, minimum, maximum, unique-value count, episode-length range,
+nonzero-reward fraction, $gamma\lambda$, and the oldest-residual weight
+$(\gamma\lambda)^{N-1}$ before GAE.  This is a diagnostic distinction: high
 explained variance may describe a critic that predicts one common loss and its
 distance to termination, while the policy still has almost no evidence for
 ranking action sequences.
 
-The recorded functional suite contains 92 passing cases.  It includes direct
+The frozen \texttt{DelayedTerminalCredit-v0} gate checks this exact mechanism
+on balanced $-1/+1$ terminal rewards over 719 structured steps with zero
+behavior values.  Jormungandr and Stable-Baselines3 2.9.0 each compute both
+$\lambda=0.98$ and $\lambda=1$.  Every raw target is checked against
+$z(\gamma\lambda)^d$; maximum disagreement between implementations is
+$4.7684\times10^{-7}$, within the declared $2\times10^{-6}$ tolerance.  After
+the same batch normalization used by PPO, the positive opening advantage is
+$2.6763\times10^{-6}$ in the first arm and one in the episodic arm.  This
+selects $\lambda=1$ for a terminal-only child experiment; it is an estimator
+decision, not a learning or variance claim.
+
+The joint sampler can now be autoregressive in both legality and learned
+preference.  Optional low-rank candidate key/value heads condition later
+factor logits on the selected prefix while retaining one central inference per
+turn.  Exact masks remain environment inputs.  The additive prefix summary is
+not a recurrent policy and does not provide temporal memory across turns.
+
+The recorded functional suite contains 109 passing cases.  It includes direct
 finite updates and state round trips for every built-in, C51 projection and
 mask checks, graph-reference GAE, validation isolation, HTTP ingress, masked
 SAC entropy, QR-DQN tail output, QUBO cardinality and fragment audit, checkpoint
@@ -1240,7 +1308,8 @@ audits, structured metrics history and TensorBoard persistence, exact joint
 sampling and PPO updates, multiprocess structured-trajectory ingress,
 compact sequence round trip and compressed HTTP ingress,
 policy-lag/duplicate/order rejection, structured export, supervised split
-isolation, semantic candidate permutation, BC-to-PPO initialization, the seeded
+isolation, semantic candidate permutation, conditional balance compatibility,
+importance-sampling objective checks, BC-to-PPO initialization, the seeded
 online comparisons, and artifact manifests.  A
 separate threaded matrix gave every built-in eight mask-aware transitions;
 each completed an update, checkpoint, TorchScript export, restore, and masked
@@ -1276,6 +1345,8 @@ can later accelerate measured CPU kernels behind the same contracts.  The
 remaining test is empirical: under predeclared disturbances, paths, budgets,
 and controls, do these results survive valid offline, trajectory, model-based,
 and Volt-scale cohorts, and does added complexity repay its compute cost?
+
+\end{SNcolumns}
 
 \begin{thebibliography}{99}
 

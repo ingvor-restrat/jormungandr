@@ -1,0 +1,61 @@
+{
+  "arms": {
+    "sample_weight_importance": {
+      "objective_absolute_bias": 0.0006385416666665478,
+      "objective_mean": 0.29102812499999997,
+      "objective_mean_absolute_error": 0.05672777777777776,
+      "objective_standard_deviation": 0.07150642480968056,
+      "rare_examples_per_batch_mean": 10.670666666666667,
+      "rare_examples_per_batch_min": 1,
+      "rare_zero_batch_rate": 0.0
+    },
+    "uniform_weighted_loss": {
+      "objective_absolute_bias": 0.01983947231582739,
+      "objective_mean": 0.27182719435083913,
+      "objective_mean_absolute_error": 0.15048789895788525,
+      "objective_standard_deviation": 0.18046920840374625,
+      "rare_examples_per_batch_mean": 1.2616666666666667,
+      "rare_examples_per_batch_min": 0,
+      "rare_zero_batch_rate": 0.26066666666666666
+    }
+  },
+  "conditions": {
+    "importance_matches_weighted_objective": true,
+    "importance_reduces_batch_objective_error": true,
+    "importance_regularly_exposes_rare_decisions": true,
+    "uniform_batches_demonstrate_rare_omission": true
+  },
+  "config": {
+    "balance_exponent": 0.5,
+    "batch_size": 64,
+    "batches": 3000,
+    "common_examples": 1000,
+    "maximum_importance_bias": 0.005,
+    "maximum_importance_zero_rate": 0.01,
+    "maximum_relative_mean_absolute_error": 0.5,
+    "minimum_uniform_zero_rate": 0.2,
+    "rare_examples_per_group": 10,
+    "seed_base": 91000
+  },
+  "corpus": {
+    "balance_groups": {
+      "common-easy": 1000,
+      "rare-boundary-a": 10,
+      "rare-boundary-b": 10
+    },
+    "exact_weighted_objective": 0.2916666666666665,
+    "examples": 1020,
+    "mean_one_balance_weights": {
+      "common-easy": 0.8500000000000104,
+      "rare-boundary-a": 8.500000000000103,
+      "rare-boundary-b": 8.500000000000103
+    }
+  },
+  "environment": {
+    "jormungandr": "0.2.0",
+    "numpy": "1.26.0",
+    "python": "3.11.15"
+  },
+  "passed": true,
+  "schema": "jormungandr.conditional_supervision_sampling_benchmark.v1"
+}

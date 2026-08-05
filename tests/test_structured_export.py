@@ -20,6 +20,7 @@ def test_structured_export_preserves_semantic_candidate_selection(tmp_path) -> N
         "structured_heads": 4,
         "structured_layers": 1,
         "structured_feedforward_dim": 32,
+        "structured_prefix_dim": 4,
     }
     agent = algorithm_registry.get("structured_ppo").build_structured(
         spec, config, "cpu"

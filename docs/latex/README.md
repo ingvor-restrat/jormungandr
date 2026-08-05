@@ -97,5 +97,27 @@ env -u PYTHONPATH -u VIRTUAL_ENV PYTHONPATH="$PWD/src:$PWD" \
   --plot-output docs/latex/figures/constrained_workbench_j1.pdf
 ```
 
+Regenerate the isolated prefix-preference gate with:
+
+```bash
+python examples/benchmark_prefix_conditioning.py
+```
+
+Regenerate the conditional supervision-sampling gate with:
+
+```bash
+PYTHONPATH=src python examples/benchmark_conditional_supervision_sampling.py \
+  --json-output docs/latex/figures/conditional_supervision_sampling.json
+```
+
+Regenerate the 719-step terminal-credit reference gate with:
+
+```bash
+env -u PYTHONPATH -u VIRTUAL_ENV PYTHONPATH="$PWD/src:$PWD" \
+  /path/to/sb3-reference/bin/python \
+  examples/benchmark_delayed_terminal_credit.py \
+  --json-output docs/latex/figures/delayed_terminal_credit.json
+```
+
 Plotting uses the optional `plot` dependency group; GIF rendering additionally
 uses `record`.

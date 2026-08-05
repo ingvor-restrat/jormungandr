@@ -114,7 +114,64 @@ def test_structured_bc_memorizes_tiny_corpus_without_reward_and_reports_groups()
     assert "group/factor/market/nll" in evaluated.metrics
     assert "group/target/purchase/accuracy" in evaluated.metrics
     assert "weighted_accuracy" in evaluated.metrics
-    assert "reward" not in {field.name for field in fields(StructuredSupervisionExample)}
+    assert "reward" not in {
+        field.name for field in fields(StructuredSupervisionExample)
+    }
+
+
+def test_structured_bc_learns_opposite_labels_from_selected_prefix() -> None:
+    torch.manual_seed(127)
+    config = {
+        **CONFIG,
+        "structured_prefix_dim": 4,
+        "lr": 2e-2,
+    }
+    agent = algorithm_registry.get("structured_bc").build_structured(
+        SPEC, config, "cpu"
+    )
+    observation = _observation(0)
+
+    def examples(split: str):
+        return (
+            StructuredSupervisionExample(
+                actor_id="expert",
+                episode_id=f"prefix-pass:{split}",
+                timestep=0,
+                observation=observation,
+                factor_id="market",
+                candidate_ids=("market:pass", "market:buy"),
+                target_candidate_id="market:pass",
+                selected_prefix_candidate_ids=("move:pass",),
+                split=split,
+                factor_group="market",
+                target_group="conditional",
+            ),
+            StructuredSupervisionExample(
+                actor_id="expert",
+                episode_id=f"prefix-go:{split}",
+                timestep=0,
+                observation=observation,
+                factor_id="market",
+                candidate_ids=("market:pass", "market:buy"),
+                target_candidate_id="market:buy",
+                selected_prefix_candidate_ids=("move:go",),
+                split=split,
+                factor_group="market",
+                target_group="conditional",
+            ),
+        )
+
+    train = examples("train")
+    validation = examples("validation")
+    for _ in range(300):
+        agent.update_structured_supervision(train)
+        evaluated = agent.evaluate_structured_supervision(validation)
+        if evaluated.accuracy == 1.0 and evaluated.nll < 0.02:
+            break
+
+    assert evaluated.accuracy == 1.0
+    assert evaluated.nll < 0.02
+    assert agent.policy.prefix_dim == 4
 
 
 def test_structured_bc_reports_raw_and_weighted_accuracy_separately() -> None:
@@ -178,8 +235,9 @@ def test_structured_bc_checkpoint_initializes_ppo_without_schema_conversion(
     tmp_path,
 ) -> None:
     torch.manual_seed(131)
+    conditional_config = {**CONFIG, "structured_prefix_dim": 4}
     bc = algorithm_registry.get("structured_bc").build_structured(
-        SPEC, CONFIG, "cpu"
+        SPEC, conditional_config, "cpu"
     )
     for _ in range(60):
         bc.update_structured_supervision(_corpus("train"))
@@ -187,7 +245,7 @@ def test_structured_bc_checkpoint_initializes_ppo_without_schema_conversion(
     torch.save({"agent": bc.state_dict()}, checkpoint)
     payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
     ppo = algorithm_registry.get("structured_ppo").build_structured(
-        SPEC, CONFIG, "cpu"
+        SPEC, conditional_config, "cpu"
     )
 
     ppo.initialize_policy_from_state(payload["agent"])
@@ -197,6 +255,12 @@ def test_structured_bc_checkpoint_initializes_ppo_without_schema_conversion(
 
     assert ppo_scores.candidate_ids == bc_scores.candidate_ids
     assert np.allclose(ppo_scores.candidate_logits, bc_scores.candidate_logits)
+    assert np.allclose(
+        ppo_scores.candidate_prefix_keys, bc_scores.candidate_prefix_keys
+    )
+    assert np.allclose(
+        ppo_scores.candidate_prefix_values, bc_scores.candidate_prefix_values
+    )
 
 
 def test_central_structured_bc_keeps_validation_isolated_and_initializes_ppo(
@@ -220,6 +284,7 @@ def test_central_structured_bc_keeps_validation_isolated_and_initializes_ppo(
         "replay_ratio": 40.0,
         "tick_interval_s": 0.005,
         "checkpoint_every": 0,
+        "supervision_sampling": "sample_weight",
         **CONFIG,
     }
     try:
@@ -251,6 +316,7 @@ def test_central_structured_bc_keeps_validation_isolated_and_initializes_ppo(
         assert model["supervision"]["train_size"] == 8
         assert model["supervision"]["validation_size"] == 8
         assert model["supervision"]["trained_items"] > 0
+        assert model["supervision"]["sampling"] == "sample_weight"
         assert "validation/group/factor/market/accuracy" in model["last_metrics"]
 
         probe = _observation(9, (3, 1, 0, 2))

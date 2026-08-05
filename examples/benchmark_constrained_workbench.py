@@ -67,6 +67,7 @@ class BenchmarkConfig:
     heads: int = 4
     layers: int = 1
     feedforward_dim: int = 64
+    prefix_dim: int = 0
     bc_learning_rate: float = 1e-3
     tiny_corpus_learning_rate: float = 1e-2
     tiny_corpus_max_updates: int = 400
@@ -100,6 +101,8 @@ class BenchmarkConfig:
             raise ValueError("benchmark counts and budgets must be positive")
         if self.model_dim % self.heads:
             raise ValueError("model dimension must be divisible by attention heads")
+        if self.prefix_dim < 0:
+            raise ValueError("prefix dimension cannot be negative")
         if self.ppo_total_turns % self.horizon:
             raise ValueError("PPO turn budget must contain complete episodes")
 
@@ -110,6 +113,7 @@ def _agent_config(config: BenchmarkConfig, *, learning_rate: float) -> dict[str,
         "structured_heads": config.heads,
         "structured_layers": config.layers,
         "structured_feedforward_dim": config.feedforward_dim,
+        "structured_prefix_dim": config.prefix_dim,
         "structured_dropout": 0.0,
         "lr": learning_rate,
         "gamma": config.gamma,
@@ -202,6 +206,7 @@ def collect_oracle_supervision(
                             ),
                             factor_id=factor.factor_id,
                             candidate_ids=legal_candidates,
+                            selected_prefix_candidate_ids=tuple(prefix),
                             target_candidate_id=target,
                             split=split,
                             source_group="exact_solver",
@@ -359,6 +364,8 @@ def evaluate_policy(
                         environment.action_factors(),
                         score.candidate_logits,
                         behavior_value=score.value,
+                        candidate_prefix_keys=score.candidate_prefix_keys,
+                        candidate_prefix_values=score.candidate_prefix_values,
                         deterministic=True,
                         legal_mask_update=environment.legal_mask_update,
                     )
@@ -410,6 +417,8 @@ def collect_ppo_trajectories(
                     environment.action_factors(),
                     score.candidate_logits,
                     behavior_value=score.value,
+                    candidate_prefix_keys=score.candidate_prefix_keys,
+                    candidate_prefix_values=score.candidate_prefix_values,
                     deterministic=False,
                     rng=np.random.default_rng(seed + timestep * 101),
                     legal_mask_update=environment.legal_mask_update,
@@ -756,6 +765,11 @@ def run_benchmark(config: BenchmarkConfig) -> Mapping[str, Any]:
                 "mutually exclusive conflict groups",
             ],
             "oracle": "complete enumeration over the joint assignment",
+            "policy_conditioning": (
+                "low_rank_additive_v1"
+                if config.prefix_dim
+                else "prefix_independent"
+            ),
         },
         "versions": {
             "python": platform.python_version(),
@@ -853,6 +867,7 @@ def main() -> None:
     parser.add_argument("--bc-train-episodes", type=int, default=256)
     parser.add_argument("--bc-validation-episodes", type=int, default=96)
     parser.add_argument("--evaluation-episodes", type=int, default=64)
+    parser.add_argument("--prefix-dim", type=int, default=0)
     parser.add_argument("--worker-counts", default="2,3,4")
     parser.add_argument("--job-counts", default="2,3,4")
     parser.add_argument(
@@ -873,6 +888,7 @@ def main() -> None:
         bc_train_episodes=args.bc_train_episodes,
         bc_validation_episodes=args.bc_validation_episodes,
         evaluation_episodes=args.evaluation_episodes,
+        prefix_dim=args.prefix_dim,
         worker_counts=_parse_counts(args.worker_counts),
         job_counts=_parse_counts(args.job_counts),
     )

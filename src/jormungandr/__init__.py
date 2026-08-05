@@ -38,6 +38,7 @@ __all__ = [
     "masked_actor_critic_loss",
     "select_masked_actions",
     "collate_entity_candidate_observations",
+    "apply_candidate_prefix",
     "select_dynamic_actions",
     "ProcessActorPool",
     "JormungandrClient",
@@ -52,6 +53,7 @@ __all__ = [
     "StructuredActionFactor",
     "StructuredJointActionResult",
     "sample_structured_joint_action",
+    "apply_candidate_prefix_numpy",
     "structured_joint_step_from_payload",
     "structured_joint_step_to_payload",
     "structured_joint_trajectory_from_sequence_payload",
@@ -59,6 +61,8 @@ __all__ = [
     "validate_structured_joint_trajectory",
     "STRUCTURED_SUPERVISION_SCHEMA",
     "StructuredSupervisionExample",
+    "structured_supervision_balance_weights",
+    "apply_structured_supervision_balance_weights",
     "structured_supervision_from_payload",
     "structured_supervision_to_payload",
     "STRUCTURED_BUNDLE_SCHEMA",
@@ -80,6 +84,7 @@ def __getattr__(name: str) -> Any:
         "StructuredActionFactor",
         "StructuredJointActionResult",
         "sample_structured_joint_action",
+        "apply_candidate_prefix_numpy",
         "structured_joint_step_from_payload",
         "structured_joint_step_to_payload",
         "structured_joint_trajectory_from_sequence_payload",
@@ -91,6 +96,8 @@ def __getattr__(name: str) -> Any:
     if name in {
         "STRUCTURED_SUPERVISION_SCHEMA",
         "StructuredSupervisionExample",
+        "structured_supervision_balance_weights",
+        "apply_structured_supervision_balance_weights",
         "structured_supervision_from_payload",
         "structured_supervision_to_payload",
     }:
@@ -132,6 +139,7 @@ def __getattr__(name: str) -> Any:
         "TorchEntityCandidateBatch",
         "StructuredPolicySpec",
         "collate_entity_candidate_observations",
+        "apply_candidate_prefix",
         "select_dynamic_actions",
     }:
         module = import_module("jormungandr.structured")

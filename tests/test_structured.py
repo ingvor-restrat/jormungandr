@@ -4,13 +4,42 @@ import torch
 
 from jormungandr.structured import (
     EntityCandidateObservation,
+    EntityCandidatePolicyOutput,
     EntityCandidateTransformer,
     StructuredPolicySpec,
+    apply_candidate_prefix,
     collate_entity_candidate_observations,
     entity_candidate_observation_from_payload,
     entity_candidate_observation_to_payload,
     select_dynamic_actions,
 )
+
+
+def test_low_rank_prefix_changes_preferences_without_changing_masks() -> None:
+    output = EntityCandidatePolicyOutput(
+        logits=torch.zeros((2, 4), dtype=torch.float32),
+        values=torch.zeros(2),
+        candidate_prefix_keys=torch.tensor(
+            [
+                [[0.0, 0.0], [0.0, 0.0], [1.0, 0.0], [-1.0, 0.0]],
+                [[0.0, 0.0], [0.0, 0.0], [1.0, 0.0], [-1.0, 0.0]],
+            ]
+        ),
+        candidate_prefix_values=torch.tensor(
+            [
+                [[2.0, 0.0], [-2.0, 0.0], [0.0, 0.0], [0.0, 0.0]],
+                [[2.0, 0.0], [-2.0, 0.0], [0.0, 0.0], [0.0, 0.0]],
+            ]
+        ),
+    )
+
+    conditioned = apply_candidate_prefix(
+        output, torch.tensor([[0], [1]], dtype=torch.long)
+    )
+
+    assert conditioned[0, 2] > conditioned[0, 3]
+    assert conditioned[1, 2] < conditioned[1, 3]
+    assert torch.equal(torch.isfinite(conditioned), torch.ones_like(conditioned, dtype=torch.bool))
 
 
 def _observation(

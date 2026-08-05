@@ -14,6 +14,7 @@ from jormungandr.structured import (
     EntityCandidateObservation,
     EntityCandidateTransformer,
     StructuredPolicySpec,
+    apply_candidate_prefix,
     collate_entity_candidate_observations,
     select_dynamic_actions,
 )
@@ -70,6 +71,7 @@ class StructuredBCAgent:
             layers=layers,
             feedforward_dim=feedforward,
             dropout=max(0.0, float(cfg(config, "structured_dropout", 0.0))),
+            prefix_dim=max(0, int(cfg(config, "structured_prefix_dim", 0))),
         ).to(self.device)
         self.max_grad_norm = max(0.0, float(cfg(config, "max_grad", 1.0)))
         self.optimizer = torch.optim.Adam(
@@ -133,6 +135,26 @@ class StructuredBCAgent:
                     .tolist()
                 ),
                 value=float(output.values[row].detach().cpu()),
+                candidate_prefix_keys=(
+                    tuple(
+                        tuple(float(component) for component in vector)
+                        for vector in output.candidate_prefix_keys[
+                            row, : len(observation.candidate_ids)
+                        ].detach().cpu().tolist()
+                    )
+                    if output.candidate_prefix_keys is not None
+                    else ()
+                ),
+                candidate_prefix_values=(
+                    tuple(
+                        tuple(float(component) for component in vector)
+                        for vector in output.candidate_prefix_values[
+                            row, : len(observation.candidate_ids)
+                        ].detach().cpu().tolist()
+                    )
+                    if output.candidate_prefix_values is not None
+                    else ()
+                ),
             )
             for row, observation in enumerate(observations)
         )
@@ -171,6 +193,30 @@ class StructuredBCAgent:
             [item.observation for item in items]
         ).to_torch(self.device)
         output = self.policy(batch)
+        maximum_prefix = max(
+            1, max(len(item.selected_prefix_candidate_ids) for item in items)
+        )
+        prefix_indices = np.full(
+            (len(items), maximum_prefix), -1, dtype=np.int64
+        )
+        for row, item in enumerate(items):
+            by_id = {
+                candidate_id: index
+                for index, candidate_id in enumerate(
+                    item.observation.candidate_ids
+                )
+            }
+            prefix = [
+                by_id[candidate_id]
+                for candidate_id in item.selected_prefix_candidate_ids
+            ]
+            prefix_indices[row, : len(prefix)] = prefix
+        conditioned_logits = apply_candidate_prefix(
+            output,
+            torch.as_tensor(
+                prefix_indices, dtype=torch.long, device=self.device
+            ),
+        )
         nlls = []
         entropies = []
         confidences = []
@@ -186,7 +232,7 @@ class StructuredBCAgent:
                 device=self.device,
             )
             distribution = torch.distributions.Categorical(
-                logits=output.logits[row].index_select(0, indices)
+                logits=conditioned_logits[row].index_select(0, indices)
             )
             target = item.candidate_ids.index(item.target_candidate_id)
             target_tensor = torch.as_tensor(target, device=self.device)
@@ -351,7 +397,7 @@ def _build_structured(spec, config, device):
 
 PLUGIN = AlgorithmPlugin(
     name="structured_bc",
-    version="1.1.0",
+    version="1.2.0",
     family="reward-free structured supervision",
     build=None,
     build_structured=_build_structured,
@@ -361,8 +407,8 @@ PLUGIN = AlgorithmPlugin(
     enforce_policy_lag=False,
     description=(
         "Weighted behavior cloning over factor-local semantic candidates with "
-        "source/factor/target metrics, explicit raw and weighted scores, and "
-        "no reward objective."
+        "source/factor/target metrics, optional selected-prefix conditioning, "
+        "explicit raw and weighted scores, and no reward objective."
     ),
 )
 algorithm_registry.register(PLUGIN)

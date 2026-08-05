@@ -93,12 +93,41 @@ PPO defaults to `max_policy_lag: 0`; IMPALA and APPO default to 64. Offline
 MARWIL uses contiguous returns but does not enforce learner-version age on its
 demonstrations.
 
-Structured PPO version 1.2 records reward diversity before computing GAE:
-episode-return mean, standard deviation, range, unique count, episode length,
-and nonzero-reward fraction. Read these beside policy loss, entropy, KL, and
+Structured PPO version 1.6 records reward diversity and temporal credit reach
+before computing GAE: episode-return mean, standard deviation, range, unique
+count, episode-length range, nonzero-reward fraction, `gamma * lambda`, and the
+weight `(gamma * lambda) ** (N - 1)` linking the newest residual to the oldest
+step of every sampled episode. Read these beside policy loss, entropy, KL, and
 explained variance. A high explained variance with one unique episode return
 means the critic can fit the common outcome; it does not mean PPO has evidence
-for preferring one action sequence.
+for preferring one action sequence. Likewise, a tiny oldest-delta weight makes
+a long episode formally valid without making its opening decisions easy to
+credit.
+
+The `DelayedTerminalCredit-v0` reference gate compares Jormungandr's complete
+structured-trajectory targets with the analytic return and SB3's rollout
+buffer over 719 steps. For `gamma = 1` and terminal reward only, `lambda = 1`
+is the undiscounted Monte-Carlo episodic return and preserves the complete
+terminal residual at every step. It is selected for that specific child arm;
+Jormungandr does not silently change lambda or claim that the higher-variance
+estimator is universally preferable.
+
+Structured PPO 1.6 and structured BC 1.2 also support optional low-rank
+conditioning of each factor's preferences on the already selected joint-action
+prefix. The score API emits candidate key/value vectors once; actors and PPO
+apply the same additive compatibility formula before each categorical choice.
+Hard legal masks remain actor/environment inputs and are not learned. A zero
+prefix dimension is exactly the previous prefix-independent behavior.
+
+Structured BC additionally separates a reporting target group from an
+application-declared training balance group. Generic helpers assign mean-one
+inverse-frequency weights to the latter. With the historical `uniform`
+sampler, the learner applies those weights after drawing records uniformly.
+With `supervision_sampling: sample_weight`, the service instead draws in
+proportion to the weights and resets sampled loss weights to one. Both target
+the same normalized weighted likelihood; the second estimator reduces
+finite-batch omission of rare conditional decisions. It is an estimator
+choice, not a learned constraint or an application-specific curriculum.
 
 ## Quantile policies and probabilistic Torch
 

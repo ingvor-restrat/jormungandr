@@ -1,0 +1,144 @@
+{
+  "benchmark": "DelayedTerminalCredit-v0",
+  "conditions": {
+    "current_opening_weight_below_bound": true,
+    "episodic_opening_weight_preserved": true,
+    "implementations_match": true,
+    "jormungandr_matches_closed_form": true,
+    "sb3_reference_present_and_matches_closed_form": true
+  },
+  "config": {
+    "candidate_lambda": 1.0,
+    "candidate_opening_lower_bound": 0.999999,
+    "current_lambda": 0.98,
+    "current_opening_upper_bound": 1e-06,
+    "gae_lambdas": [
+      0.98,
+      1.0
+    ],
+    "gamma": 1.0,
+    "horizon": 719,
+    "terminal_rewards": [
+      -1.0,
+      1.0
+    ],
+    "tolerance": 2e-06
+  },
+  "decision": {
+    "scope": "terminal-return propagation only; no policy learning or environment-performance claim",
+    "selected_gae_lambda": 1.0
+  },
+  "implementations": {
+    "jormungandr_structured_ppo": {
+      "0.98": {
+        "analytic_opening_weight": 5.01559368859912e-07,
+        "gae_decay": 0.98,
+        "gae_lambda": 0.98,
+        "half_life_steps": 34.309618491520645,
+        "maximum_advantage_absolute_error": 2.8891216974358258e-08,
+        "maximum_return_absolute_error": 2.8891216974358258e-08,
+        "normalized_positive_opening_advantage": 2.67629756248787e-06,
+        "terminal_rewards": {
+          "+1": {
+            "opening_advantage": 5.015593842472299e-07,
+            "opening_return": 5.015593842472299e-07,
+            "terminal_advantage": 1.0,
+            "terminal_return": 1.0
+          },
+          "-1": {
+            "opening_advantage": -5.015593842472299e-07,
+            "opening_return": -5.015593842472299e-07,
+            "terminal_advantage": -1.0,
+            "terminal_return": -1.0
+          }
+        }
+      },
+      "1.0": {
+        "analytic_opening_weight": 1.0,
+        "gae_decay": 1.0,
+        "gae_lambda": 1.0,
+        "half_life_steps": null,
+        "maximum_advantage_absolute_error": 0.0,
+        "maximum_return_absolute_error": 0.0,
+        "normalized_positive_opening_advantage": 1.0,
+        "terminal_rewards": {
+          "+1": {
+            "opening_advantage": 1.0,
+            "opening_return": 1.0,
+            "terminal_advantage": 1.0,
+            "terminal_return": 1.0
+          },
+          "-1": {
+            "opening_advantage": -1.0,
+            "opening_return": -1.0,
+            "terminal_advantage": -1.0,
+            "terminal_return": -1.0
+          }
+        }
+      }
+    },
+    "stable_baselines3_rollout_buffer": {
+      "0.98": {
+        "analytic_opening_weight": 5.01559368859912e-07,
+        "gae_decay": 0.98,
+        "gae_lambda": 0.98,
+        "half_life_steps": 34.309618491520645,
+        "maximum_advantage_absolute_error": 4.6428219846461616e-07,
+        "maximum_return_absolute_error": 4.6428219846461616e-07,
+        "normalized_positive_opening_advantage": 2.676333090126468e-06,
+        "terminal_rewards": {
+          "+1": {
+            "opening_advantage": 5.015663191443309e-07,
+            "opening_return": 5.015663191443309e-07,
+            "terminal_advantage": 1.0,
+            "terminal_return": 1.0
+          },
+          "-1": {
+            "opening_advantage": -5.015663191443309e-07,
+            "opening_return": -5.015663191443309e-07,
+            "terminal_advantage": -1.0,
+            "terminal_return": -1.0
+          }
+        }
+      },
+      "1.0": {
+        "analytic_opening_weight": 1.0,
+        "gae_decay": 1.0,
+        "gae_lambda": 1.0,
+        "half_life_steps": null,
+        "maximum_advantage_absolute_error": 0.0,
+        "maximum_return_absolute_error": 0.0,
+        "normalized_positive_opening_advantage": 1.0,
+        "terminal_rewards": {
+          "+1": {
+            "opening_advantage": 1.0,
+            "opening_return": 1.0,
+            "terminal_advantage": 1.0,
+            "terminal_return": 1.0
+          },
+          "-1": {
+            "opening_advantage": -1.0,
+            "opening_return": -1.0,
+            "terminal_advantage": -1.0,
+            "terminal_return": -1.0
+          }
+        }
+      }
+    }
+  },
+  "maximum_implementation_error": 4.76837158203125e-07,
+  "maximum_reference_error": 4.6428219846461616e-07,
+  "passed": true,
+  "runtime": {
+    "packages": {
+      "gymnasium": "1.3.0",
+      "jormungandr": "0.2.0",
+      "numpy": "2.4.6",
+      "stable_baselines3": "2.9.0",
+      "torch": "2.8.0+cpu"
+    },
+    "platform": "Linux-6.8.0-136-generic-x86_64-with-glibc2.39",
+    "python": "3.11.15"
+  },
+  "schema": "jormungandr.delayed_terminal_credit_benchmark.v1"
+}

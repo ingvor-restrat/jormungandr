@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from copy import deepcopy
+from dataclasses import asdict, dataclass, replace
 import math
 from typing import Any, Mapping, Sequence
 
@@ -12,8 +13,10 @@ import torch
 from jormungandr.structured import (
     DynamicActionResult,
     EntityCandidateObservation,
+    EntityCandidatePolicyOutput,
     EntityCandidateTransformer,
     StructuredPolicySpec,
+    apply_candidate_prefix,
     collate_entity_candidate_observations,
     select_dynamic_actions,
 )
@@ -72,6 +75,7 @@ class StructuredPPOUpdate:
     loss: float
     policy_loss: float
     value_loss: float
+    value_backbone_gradient_scale: float
     entropy: float
     approximate_kl: float
     clip_fraction: float
@@ -89,7 +93,23 @@ class StructuredPPOUpdate:
     episode_return_max: float
     episode_return_unique_count: int
     episode_length_mean: float
+    episode_length_min: int
+    episode_length_max: int
     reward_nonzero_fraction: float
+    gae_decay: float
+    gae_oldest_delta_weight_mean: float
+    gae_oldest_delta_weight_min: float
+    gae_oldest_delta_weight_max: float
+    post_update_approximate_kl: float
+    post_update_importance_ratio_mean: float
+    post_update_importance_ratio_std: float
+    post_update_importance_ratio_min: float
+    post_update_importance_ratio_max: float
+    trust_region_enabled: bool
+    trust_region_update_accepted: bool
+    trust_region_proposal_attempts: int
+    trust_region_backtracks: int
+    effective_learning_rate: float
 
 
 @dataclass(frozen=True)
@@ -99,6 +119,8 @@ class StructuredPolicyScore:
     candidate_ids: tuple[str, ...]
     candidate_logits: tuple[float, ...]
     value: float
+    candidate_prefix_keys: tuple[tuple[float, ...], ...] = ()
+    candidate_prefix_values: tuple[tuple[float, ...], ...] = ()
 
 
 def _resolve_device(value: str) -> torch.device:
@@ -110,8 +132,11 @@ def _resolve_device(value: str) -> torch.device:
 
 def _episode_signal_statistics(
     trajectories: Sequence[Sequence[Any]],
+    *,
+    gamma: float,
+    gae_lambda: float,
 ) -> Mapping[str, float | int]:
-    """Summarize the reward signal before GAE can obscure its diversity."""
+    """Summarize raw rewards and the direct temporal reach of GAE."""
 
     episodes = tuple(tuple(trajectory) for trajectory in trajectories if trajectory)
     if not episodes:
@@ -127,6 +152,12 @@ def _episode_signal_statistics(
         [float(step.reward) for episode in episodes for step in episode],
         dtype=np.float64,
     )
+    gae_decay = float(gamma) * float(gae_lambda)
+    oldest_delta_weights = np.power(
+        gae_decay,
+        np.maximum(0.0, episode_lengths - 1.0),
+        dtype=np.float64,
+    )
     return {
         "episodes": len(episodes),
         "episode_return_mean": float(episode_returns.mean()),
@@ -135,7 +166,13 @@ def _episode_signal_statistics(
         "episode_return_max": float(episode_returns.max()),
         "episode_return_unique_count": int(np.unique(episode_returns).size),
         "episode_length_mean": float(episode_lengths.mean()),
+        "episode_length_min": int(episode_lengths.min()),
+        "episode_length_max": int(episode_lengths.max()),
         "reward_nonzero_fraction": float(np.count_nonzero(rewards) / rewards.size),
+        "gae_decay": gae_decay,
+        "gae_oldest_delta_weight_mean": float(oldest_delta_weights.mean()),
+        "gae_oldest_delta_weight_min": float(oldest_delta_weights.min()),
+        "gae_oldest_delta_weight_max": float(oldest_delta_weights.max()),
     }
 
 
@@ -167,6 +204,7 @@ class StructuredPPOAgent:
             layers=layers,
             feedforward_dim=feedforward,
             dropout=max(0.0, float(cfg(config, "structured_dropout", 0.0))),
+            prefix_dim=max(0, int(cfg(config, "structured_prefix_dim", 0))),
         ).to(self.device)
         self.gamma = float(cfg(config, "gamma", 0.99))
         self.gae_lambda = float(cfg(config, "gae_lambda", 0.95))
@@ -177,17 +215,97 @@ class StructuredPPOAgent:
         self.value_coefficient = max(
             0.0, float(cfg(config, "value_coef", 0.5))
         )
+        self.value_backbone_gradient_scale = float(
+            cfg(config, "value_backbone_gradient_scale", 1.0)
+        )
+        if not 0.0 <= self.value_backbone_gradient_scale <= 1.0:
+            raise ValueError("value_backbone_gradient_scale must be in [0, 1]")
         self.epochs = max(1, int(cfg(config, "epochs", 4)))
         self.minibatch_size = max(
             1,
             int(cfg(config, "minibatch_size", cfg(config, "batch_size", 128))),
         )
         self.max_grad_norm = max(0.0, float(cfg(config, "max_grad", 1.0)))
+        self.policy_ratio_guard_min = float(
+            cfg(config, "policy_ratio_guard_min", 0.0)
+        )
+        self.policy_ratio_guard_max = float(
+            cfg(config, "policy_ratio_guard_max", 0.0)
+        )
+        self.policy_ratio_guard_enabled = bool(
+            self.policy_ratio_guard_min > 0.0
+            or self.policy_ratio_guard_max > 0.0
+        )
+        if self.policy_ratio_guard_enabled and not (
+            0.0 < self.policy_ratio_guard_min <= 1.0
+            <= self.policy_ratio_guard_max
+        ):
+            raise ValueError(
+                "policy ratio guard requires 0 < min <= 1 <= max"
+            )
+        self.policy_ratio_guard_backoff_factor = float(
+            cfg(config, "policy_ratio_guard_backoff_factor", 0.5)
+        )
+        if not 0.0 < self.policy_ratio_guard_backoff_factor < 1.0:
+            raise ValueError(
+                "policy_ratio_guard_backoff_factor must be in (0, 1)"
+            )
+        self.policy_ratio_guard_max_backtracks = int(
+            cfg(config, "policy_ratio_guard_max_backtracks", 0)
+        )
+        if self.policy_ratio_guard_max_backtracks < 0:
+            raise ValueError(
+                "policy_ratio_guard_max_backtracks must be non-negative"
+            )
         self.optimizer = torch.optim.Adam(
             self.policy.parameters(), lr=float(cfg(config, "lr", 3e-4))
         )
         self.update_steps = 0
         self.last_metrics: Mapping[str, float] = {}
+
+    def _backward_minibatch_objective(
+        self,
+        *,
+        policy_loss: torch.Tensor,
+        value_loss: torch.Tensor,
+        entropy: torch.Tensor,
+    ) -> torch.Tensor:
+        """Backpropagate actor and critic objectives with explicit sharing.
+
+        The value head always receives the full configured critic gradient.
+        ``value_backbone_gradient_scale`` controls only the portion that flows
+        through the shared representation.  Its default of one preserves the
+        historical shared-encoder PPO update exactly; zero is useful when a
+        fresh critic is attached to a pretrained policy.
+        """
+
+        actor_objective = (
+            policy_loss - self.entropy_coefficient * entropy
+        )
+        critic_objective = self.value_coefficient * value_loss
+        loss = actor_objective + critic_objective
+        self.optimizer.zero_grad(set_to_none=True)
+        scale = self.value_backbone_gradient_scale
+        if self.value_coefficient == 0.0 or scale == 1.0:
+            loss.backward()
+            return loss
+
+        actor_objective.backward(retain_graph=True)
+        if scale > 0.0:
+            (scale * critic_objective).backward(retain_graph=True)
+        value_parameters = tuple(self.policy.value_head.parameters())
+        head_gradients = torch.autograd.grad(
+            (1.0 - scale) * critic_objective,
+            value_parameters,
+        )
+        for parameter, gradient in zip(
+            value_parameters, head_gradients, strict=True
+        ):
+            if parameter.grad is None:
+                parameter.grad = gradient
+            else:
+                parameter.grad.add_(gradient)
+        return loss
 
     def action_results_structured(
         self,
@@ -246,6 +364,26 @@ class StructuredPPOAgent:
                     candidate_ids=observation.candidate_ids,
                     candidate_logits=tuple(float(value) for value in logits),
                     value=float(output.values[row].detach().cpu()),
+                    candidate_prefix_keys=(
+                        tuple(
+                            tuple(float(component) for component in vector)
+                            for vector in output.candidate_prefix_keys[
+                                row, :count
+                            ].detach().cpu().tolist()
+                        )
+                        if output.candidate_prefix_keys is not None
+                        else ()
+                    ),
+                    candidate_prefix_values=(
+                        tuple(
+                            tuple(float(component) for component in vector)
+                            for vector in output.candidate_prefix_values[
+                                row, :count
+                            ].detach().cpu().tolist()
+                        )
+                        if output.candidate_prefix_values is not None
+                        else ()
+                    ),
                 )
             )
         self.policy.train(was_training)
@@ -301,13 +439,17 @@ class StructuredPPOAgent:
             np.asarray(returns, dtype=np.float32),
         )
 
-    def update_structured(
+    def _update_structured_proposal(
         self,
         trajectories: Sequence[Sequence[StructuredTransition]],
     ) -> StructuredPPOUpdate:
-        """Apply clipped PPO updates to complete variable-candidate episodes."""
+        """Apply one uncommitted PPO proposal to complete episodes."""
 
-        signal = _episode_signal_statistics(trajectories)
+        signal = _episode_signal_statistics(
+            trajectories,
+            gamma=self.gamma,
+            gae_lambda=self.gae_lambda,
+        )
         transitions, raw_advantages, returns = self._targets(trajectories)
         advantage_mean = float(raw_advantages.mean())
         advantage_std = float(raw_advantages.std())
@@ -392,14 +534,11 @@ class StructuredPPOAgent:
                     output.values, target_return
                 )
                 entropy = distribution.entropy().mean()
-                loss = (
-                    policy_loss
-                    + self.value_coefficient * value_loss
-                    - self.entropy_coefficient * entropy
+                loss = self._backward_minibatch_objective(
+                    policy_loss=policy_loss,
+                    value_loss=value_loss,
+                    entropy=entropy,
                 )
-
-                self.optimizer.zero_grad(set_to_none=True)
-                loss.backward()
                 gradient_norm = torch.nn.utils.clip_grad_norm_(
                     self.policy.parameters(),
                     self.max_grad_norm if self.max_grad_norm > 0.0 else float("inf"),
@@ -440,7 +579,6 @@ class StructuredPPOAgent:
                 metric_weight += weight
                 minibatches += 1
 
-        self.update_steps += 1
         averaged = {
             key: value / max(1, metric_weight)
             for key, value in metric_sums.items()
@@ -458,6 +596,9 @@ class StructuredPPOAgent:
             loss=averaged["loss"],
             policy_loss=averaged["policy_loss"],
             value_loss=averaged["value_loss"],
+            value_backbone_gradient_scale=(
+                self.value_backbone_gradient_scale
+            ),
             entropy=averaged["entropy"],
             approximate_kl=averaged["approximate_kl"],
             clip_fraction=averaged["clip_fraction"],
@@ -477,13 +618,32 @@ class StructuredPPOAgent:
                 signal["episode_return_unique_count"]
             ),
             episode_length_mean=float(signal["episode_length_mean"]),
+            episode_length_min=int(signal["episode_length_min"]),
+            episode_length_max=int(signal["episode_length_max"]),
             reward_nonzero_fraction=float(signal["reward_nonzero_fraction"]),
+            gae_decay=float(signal["gae_decay"]),
+            gae_oldest_delta_weight_mean=float(
+                signal["gae_oldest_delta_weight_mean"]
+            ),
+            gae_oldest_delta_weight_min=float(
+                signal["gae_oldest_delta_weight_min"]
+            ),
+            gae_oldest_delta_weight_max=float(
+                signal["gae_oldest_delta_weight_max"]
+            ),
+            post_update_approximate_kl=0.0,
+            post_update_importance_ratio_mean=1.0,
+            post_update_importance_ratio_std=0.0,
+            post_update_importance_ratio_min=1.0,
+            post_update_importance_ratio_max=1.0,
+            trust_region_enabled=self.policy_ratio_guard_enabled,
+            trust_region_update_accepted=True,
+            trust_region_proposal_attempts=1,
+            trust_region_backtracks=0,
+            effective_learning_rate=float(
+                self.optimizer.param_groups[0]["lr"]
+            ),
         )
-        self.last_metrics = {
-            key: float(value)
-            for key, value in asdict(result).items()
-            if key not in {"transitions", "epochs", "minibatches"}
-        }
         return result
 
     def _joint_targets(
@@ -528,11 +688,25 @@ class StructuredPPOAgent:
 
     @staticmethod
     def _joint_statistics(
-        logits: torch.Tensor,
+        output: EntityCandidatePolicyOutput,
         steps: Sequence[StructuredJointTrajectoryStep],
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        log_probabilities = []
-        entropies = []
+        """Return exact per-step joint log probabilities and entropies.
+
+        The trajectory already records each factor's conditionally legal
+        candidate set.  Pack those ragged categorical distributions into one
+        padded tensor so PyTorch performs normalization, entropy, and gradient
+        propagation in bulk.  The only Python work left is resolving semantic
+        candidate IDs to their observation-local columns.
+        """
+
+        if not steps:
+            raise ValueError("at least one joint trajectory step is required")
+        logits = output.logits
+        factor_rows: list[int] = []
+        factor_candidate_indices: list[list[int]] = []
+        factor_prefix_indices: list[list[int]] = []
+        selected_offsets: list[int] = []
         for row, step in enumerate(steps):
             candidate_index = {
                 candidate_id: index
@@ -540,38 +714,111 @@ class StructuredPPOAgent:
                     step.observation.candidate_ids
                 )
             }
-            step_log_probability = torch.zeros((), device=logits.device)
-            step_entropy = torch.zeros((), device=logits.device)
+            selected_prefix: list[int] = []
             for factor in step.factors:
-                indices = torch.as_tensor(
-                    [candidate_index[value] for value in factor.candidate_ids],
-                    dtype=torch.long,
-                    device=logits.device,
+                conditional_candidate_ids = factor.conditional_candidate_ids
+                factor_rows.append(row)
+                factor_candidate_indices.append(
+                    [
+                        candidate_index[value]
+                        for value in conditional_candidate_ids
+                    ]
                 )
-                distribution = torch.distributions.Categorical(
-                    logits=logits[row].index_select(0, indices)
-                )
-                selected = factor.candidate_ids.index(
-                    factor.selected_candidate_id
-                )
-                step_log_probability = (
-                    step_log_probability
-                    + distribution.log_prob(
-                        torch.as_tensor(selected, device=logits.device)
+                selected_offsets.append(
+                    conditional_candidate_ids.index(
+                        factor.selected_candidate_id
                     )
                 )
-                step_entropy = step_entropy + distribution.entropy()
-            log_probabilities.append(step_log_probability)
-            entropies.append(step_entropy)
-        return torch.stack(log_probabilities), torch.stack(entropies)
+                factor_prefix_indices.append(list(selected_prefix))
+                selected_prefix.append(
+                    candidate_index[factor.selected_candidate_id]
+                )
+        if not factor_candidate_indices:
+            raise ValueError("joint trajectory steps require action factors")
 
-    def update_joint_structured(
+        factor_count = len(factor_candidate_indices)
+        maximum_choices = max(len(values) for values in factor_candidate_indices)
+        maximum_prefix = max(1, max(len(values) for values in factor_prefix_indices))
+        padded_indices = np.zeros(
+            (factor_count, maximum_choices), dtype=np.int64
+        )
+        choice_mask = np.zeros(
+            (factor_count, maximum_choices), dtype=np.bool_
+        )
+        padded_prefix = np.full(
+            (factor_count, maximum_prefix), -1, dtype=np.int64
+        )
+        for factor_index, indices in enumerate(factor_candidate_indices):
+            padded_indices[factor_index, : len(indices)] = indices
+            choice_mask[factor_index, : len(indices)] = True
+            prefix = factor_prefix_indices[factor_index]
+            padded_prefix[factor_index, : len(prefix)] = prefix
+
+        row_tensor = torch.as_tensor(
+            factor_rows, dtype=torch.long, device=logits.device
+        )
+        index_tensor = torch.as_tensor(
+            padded_indices, dtype=torch.long, device=logits.device
+        )
+        mask_tensor = torch.as_tensor(choice_mask, device=logits.device)
+        selected_tensor = torch.as_tensor(
+            selected_offsets, dtype=torch.long, device=logits.device
+        )
+        prefix_tensor = torch.as_tensor(
+            padded_prefix, dtype=torch.long, device=logits.device
+        )
+        expanded_output = EntityCandidatePolicyOutput(
+            logits=output.logits.index_select(0, row_tensor),
+            values=output.values.index_select(0, row_tensor),
+            candidate_prefix_keys=(
+                output.candidate_prefix_keys.index_select(0, row_tensor)
+                if output.candidate_prefix_keys is not None
+                else None
+            ),
+            candidate_prefix_values=(
+                output.candidate_prefix_values.index_select(0, row_tensor)
+                if output.candidate_prefix_values is not None
+                else None
+            ),
+        )
+        conditioned_logits = apply_candidate_prefix(
+            expanded_output, prefix_tensor
+        )
+        factor_logits = conditioned_logits[
+            torch.arange(factor_count, device=logits.device)[:, None],
+            index_tensor,
+        ]
+        factor_logits = factor_logits.masked_fill(
+            ~mask_tensor, torch.finfo(logits.dtype).min
+        )
+        factor_log_probabilities = torch.log_softmax(factor_logits, dim=1)
+        selected_log_probabilities = factor_log_probabilities.gather(
+            1, selected_tensor[:, None]
+        ).squeeze(1)
+        factor_probabilities = factor_log_probabilities.exp()
+        factor_entropies = -(
+            factor_probabilities * factor_log_probabilities
+        ).sum(dim=1)
+
+        step_log_probabilities = logits.new_zeros(len(steps))
+        step_entropies = logits.new_zeros(len(steps))
+        step_log_probabilities.index_add_(
+            0, row_tensor, selected_log_probabilities
+        )
+        step_entropies.index_add_(0, row_tensor, factor_entropies)
+        return step_log_probabilities, step_entropies
+
+    def _update_joint_structured_proposal(
         self,
         trajectories: Sequence[Sequence[StructuredJointTrajectoryStep]],
     ) -> StructuredPPOUpdate:
-        """Apply PPO to one reward-bearing record per joint environment turn."""
+        """Apply one uncommitted joint PPO proposal."""
 
-        signal = _episode_signal_statistics(trajectories)
+        signal = _episode_signal_statistics(
+            trajectories,
+            gamma=self.gamma,
+            gae_lambda=self.gae_lambda,
+        )
         transitions, raw_advantages, returns = self._joint_targets(trajectories)
         advantage_mean = float(raw_advantages.mean())
         advantage_std = float(raw_advantages.std())
@@ -618,7 +865,7 @@ class StructuredPPOAgent:
                 ).to_torch(self.device)
                 output = self.policy(batch)
                 log_probability, joint_entropy = self._joint_statistics(
-                    output.logits, selected_steps
+                    output, selected_steps
                 )
                 old_log_probability = torch.as_tensor(
                     [step.joint_behavior_log_probability for step in selected_steps],
@@ -643,14 +890,11 @@ class StructuredPPOAgent:
                     output.values, target_return
                 )
                 entropy = joint_entropy.mean()
-                loss = (
-                    policy_loss
-                    + self.value_coefficient * value_loss
-                    - self.entropy_coefficient * entropy
+                loss = self._backward_minibatch_objective(
+                    policy_loss=policy_loss,
+                    value_loss=value_loss,
+                    entropy=entropy,
                 )
-
-                self.optimizer.zero_grad(set_to_none=True)
-                loss.backward()
                 gradient_norm = torch.nn.utils.clip_grad_norm_(
                     self.policy.parameters(),
                     self.max_grad_norm if self.max_grad_norm > 0.0 else float("inf"),
@@ -691,7 +935,6 @@ class StructuredPPOAgent:
                 metric_weight += weight
                 minibatches += 1
 
-        self.update_steps += 1
         averaged = {
             key: value / max(1, metric_weight)
             for key, value in metric_sums.items()
@@ -709,6 +952,9 @@ class StructuredPPOAgent:
             loss=averaged["loss"],
             policy_loss=averaged["policy_loss"],
             value_loss=averaged["value_loss"],
+            value_backbone_gradient_scale=(
+                self.value_backbone_gradient_scale
+            ),
             entropy=averaged["entropy"],
             approximate_kl=averaged["approximate_kl"],
             clip_fraction=averaged["clip_fraction"],
@@ -728,14 +974,261 @@ class StructuredPPOAgent:
                 signal["episode_return_unique_count"]
             ),
             episode_length_mean=float(signal["episode_length_mean"]),
+            episode_length_min=int(signal["episode_length_min"]),
+            episode_length_max=int(signal["episode_length_max"]),
             reward_nonzero_fraction=float(signal["reward_nonzero_fraction"]),
+            gae_decay=float(signal["gae_decay"]),
+            gae_oldest_delta_weight_mean=float(
+                signal["gae_oldest_delta_weight_mean"]
+            ),
+            gae_oldest_delta_weight_min=float(
+                signal["gae_oldest_delta_weight_min"]
+            ),
+            gae_oldest_delta_weight_max=float(
+                signal["gae_oldest_delta_weight_max"]
+            ),
+            post_update_approximate_kl=0.0,
+            post_update_importance_ratio_mean=1.0,
+            post_update_importance_ratio_std=0.0,
+            post_update_importance_ratio_min=1.0,
+            post_update_importance_ratio_max=1.0,
+            trust_region_enabled=self.policy_ratio_guard_enabled,
+            trust_region_update_accepted=True,
+            trust_region_proposal_attempts=1,
+            trust_region_backtracks=0,
+            effective_learning_rate=float(
+                self.optimizer.param_groups[0]["lr"]
+            ),
         )
+        return result
+
+    def _policy_ratio_statistics(
+        self,
+        transitions: Sequence[Any],
+        *,
+        joint: bool,
+    ) -> Mapping[str, float]:
+        """Measure the committed policy against behavior on the full batch."""
+
+        if not transitions:
+            raise ValueError("policy ratio audit requires transitions")
+        was_training = self.policy.training
+        self.policy.eval()
+        ratio_sum = 0.0
+        ratio_squared_sum = 0.0
+        ratio_count = 0
+        ratio_min = float("inf")
+        ratio_max = float("-inf")
+        approximate_kl_sum = 0.0
+        with torch.no_grad():
+            for start in range(0, len(transitions), self.minibatch_size):
+                selected = transitions[start : start + self.minibatch_size]
+                batch = collate_entity_candidate_observations(
+                    [step.observation for step in selected]
+                ).to_torch(self.device)
+                output = self.policy(batch)
+                if joint:
+                    log_probability, _ = self._joint_statistics(
+                        output, selected
+                    )
+                    old_values = [
+                        step.joint_behavior_log_probability for step in selected
+                    ]
+                else:
+                    distribution = torch.distributions.Categorical(
+                        logits=output.logits
+                    )
+                    actions = torch.as_tensor(
+                        [step.candidate_index for step in selected],
+                        dtype=torch.long,
+                        device=self.device,
+                    )
+                    log_probability = distribution.log_prob(actions)
+                    old_values = [
+                        step.behavior_log_probability for step in selected
+                    ]
+                old_log_probability = torch.as_tensor(
+                    old_values,
+                    dtype=torch.float32,
+                    device=self.device,
+                )
+                log_ratio = log_probability - old_log_probability
+                ratio = torch.exp(log_ratio.clamp(-20.0, 20.0))
+                ratio_sum += float(ratio.sum().cpu())
+                ratio_squared_sum += float(ratio.square().sum().cpu())
+                ratio_count += int(ratio.numel())
+                ratio_min = min(ratio_min, float(ratio.min().cpu()))
+                ratio_max = max(ratio_max, float(ratio.max().cpu()))
+                approximate_kl_sum += float(
+                    ((ratio - 1.0) - log_ratio).sum().cpu()
+                )
+        self.policy.train(was_training)
+        mean = ratio_sum / ratio_count
+        variance = max(
+            0.0,
+            ratio_squared_sum / ratio_count - mean**2,
+        )
+        return {
+            "approximate_kl": approximate_kl_sum / ratio_count,
+            "mean": mean,
+            "std": math.sqrt(variance),
+            "min": ratio_min,
+            "max": ratio_max,
+        }
+
+    def _record_transaction_result(
+        self,
+        result: StructuredPPOUpdate,
+        *,
+        post_update: Mapping[str, float],
+        accepted: bool,
+        attempts: int,
+        backtracks: int,
+    ) -> StructuredPPOUpdate:
+        committed = replace(
+            result,
+            post_update_approximate_kl=float(
+                post_update["approximate_kl"]
+            ),
+            post_update_importance_ratio_mean=float(post_update["mean"]),
+            post_update_importance_ratio_std=float(post_update["std"]),
+            post_update_importance_ratio_min=float(post_update["min"]),
+            post_update_importance_ratio_max=float(post_update["max"]),
+            trust_region_enabled=self.policy_ratio_guard_enabled,
+            trust_region_update_accepted=bool(accepted),
+            trust_region_proposal_attempts=int(attempts),
+            trust_region_backtracks=int(backtracks),
+            effective_learning_rate=float(
+                self.optimizer.param_groups[0]["lr"]
+            ),
+        )
+        self.update_steps += 1
         self.last_metrics = {
             key: float(value)
-            for key, value in asdict(result).items()
+            for key, value in asdict(committed).items()
             if key not in {"transitions", "epochs", "minibatches"}
         }
-        return result
+        return committed
+
+    def _transactional_update(
+        self,
+        trajectories: Sequence[Sequence[Any]],
+        *,
+        joint: bool,
+    ) -> StructuredPPOUpdate:
+        if joint:
+            transitions = self._joint_targets(trajectories)[0]
+            proposal = self._update_joint_structured_proposal
+        else:
+            transitions = self._targets(trajectories)[0]
+            proposal = self._update_structured_proposal
+
+        if not self.policy_ratio_guard_enabled:
+            result = proposal(trajectories)
+            post_update = self._policy_ratio_statistics(
+                transitions, joint=joint
+            )
+            return self._record_transaction_result(
+                result,
+                post_update=post_update,
+                accepted=True,
+                attempts=1,
+                backtracks=0,
+            )
+
+        policy_state = deepcopy(self.policy.state_dict())
+        optimizer_state = deepcopy(self.optimizer.state_dict())
+        base_learning_rates = tuple(
+            float(group["lr"]) for group in self.optimizer.param_groups
+        )
+        cpu_rng_state = torch.random.get_rng_state()
+        cuda_rng_states = (
+            torch.cuda.get_rng_state_all()
+            if self.device.type == "cuda" and torch.cuda.is_available()
+            else None
+        )
+        attempts = 0
+        accepted = False
+        result: StructuredPPOUpdate | None = None
+        post_update: Mapping[str, float] | None = None
+        try:
+            for backtracks in range(
+                self.policy_ratio_guard_max_backtracks + 1
+            ):
+                attempts += 1
+                if backtracks:
+                    self.policy.load_state_dict(policy_state)
+                    self.optimizer.load_state_dict(optimizer_state)
+                    optimizer_to(self.optimizer, self.device)
+                    torch.random.set_rng_state(cpu_rng_state)
+                    if cuda_rng_states is not None:
+                        torch.cuda.set_rng_state_all(cuda_rng_states)
+                scale = self.policy_ratio_guard_backoff_factor**backtracks
+                for group, learning_rate in zip(
+                    self.optimizer.param_groups,
+                    base_learning_rates,
+                    strict=True,
+                ):
+                    group["lr"] = learning_rate * scale
+                result = proposal(trajectories)
+                post_update = self._policy_ratio_statistics(
+                    transitions, joint=joint
+                )
+                accepted = bool(
+                    float(post_update["min"])
+                    >= self.policy_ratio_guard_min
+                    and float(post_update["max"])
+                    <= self.policy_ratio_guard_max
+                )
+                if accepted:
+                    return self._record_transaction_result(
+                        result,
+                        post_update=post_update,
+                        accepted=True,
+                        attempts=attempts,
+                        backtracks=backtracks,
+                    )
+        except Exception:
+            self.policy.load_state_dict(policy_state)
+            self.optimizer.load_state_dict(optimizer_state)
+            optimizer_to(self.optimizer, self.device)
+            torch.random.set_rng_state(cpu_rng_state)
+            if cuda_rng_states is not None:
+                torch.cuda.set_rng_state_all(cuda_rng_states)
+            raise
+
+        if result is None or post_update is None:
+            raise RuntimeError("structured PPO made no trust-region proposal")
+        self.policy.load_state_dict(policy_state)
+        self.optimizer.load_state_dict(optimizer_state)
+        optimizer_to(self.optimizer, self.device)
+        torch.random.set_rng_state(cpu_rng_state)
+        if cuda_rng_states is not None:
+            torch.cuda.set_rng_state_all(cuda_rng_states)
+        post_update = self._policy_ratio_statistics(transitions, joint=joint)
+        return self._record_transaction_result(
+            result,
+            post_update=post_update,
+            accepted=False,
+            attempts=attempts,
+            backtracks=attempts,
+        )
+
+    def update_structured(
+        self,
+        trajectories: Sequence[Sequence[StructuredTransition]],
+    ) -> StructuredPPOUpdate:
+        """Apply a transactional PPO update to complete episodes."""
+
+        return self._transactional_update(trajectories, joint=False)
+
+    def update_joint_structured(
+        self,
+        trajectories: Sequence[Sequence[StructuredJointTrajectoryStep]],
+    ) -> StructuredPPOUpdate:
+        """Apply transactional PPO to exact joint-action trajectories."""
+
+        return self._transactional_update(trajectories, joint=True)
 
     def state_dict(self) -> Mapping[str, Any]:
         return {
@@ -782,7 +1275,7 @@ def _build_structured(
 
 PLUGIN = AlgorithmPlugin(
     name="structured_ppo",
-    version="1.3.0",
+    version="1.6.0",
     family="on-policy structured actor critic",
     build=None,
     build_structured=_build_structured,
@@ -792,7 +1285,8 @@ PLUGIN = AlgorithmPlugin(
     enforce_policy_lag=True,
     description=(
         "Clipped PPO over variable entities, state-local candidates, and "
-        "exact factorized joint-action trajectories."
+        "exact factorized joint-action trajectories with optional low-rank "
+        "selected-prefix preferences."
     ),
 )
 algorithm_registry.register(PLUGIN)

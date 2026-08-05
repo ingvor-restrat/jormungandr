@@ -52,6 +52,7 @@ class StructuredServiceConfig:
     beta0: float
     beta_steps: int
     replay_ratio: float
+    supervision_sampling: str
     checkpoint_every: int
     checkpoint_dir: str
     metric_history_size: int
@@ -232,6 +233,7 @@ class StructuredServiceManager:
             "beta0",
             "beta_steps",
             "replay_ratio",
+            "supervision_sampling",
             "checkpoint_every",
             "checkpoint_dir",
             "metric_history_size",
@@ -258,6 +260,13 @@ class StructuredServiceManager:
             checkpoint_dir = self._checkpoint_root
         else:
             checkpoint_dir = Path("./checkpoints/jormungandr-structured").resolve()
+        supervision_sampling = str(
+            raw.get("supervision_sampling", "uniform")
+        ).strip().lower()
+        if supervision_sampling not in {"uniform", "sample_weight"}:
+            raise ValueError(
+                "supervision_sampling must be uniform or sample_weight"
+            )
         config = StructuredServiceConfig(
             algo=algo,
             replay_mode=plugin.replay_mode,
@@ -269,6 +278,7 @@ class StructuredServiceManager:
             beta0=min(1.0, max(0.0, float(raw.get("beta0", 0.4)))),
             beta_steps=max(1, int(raw.get("beta_steps", 100_000))),
             replay_ratio=max(0.0, float(raw.get("replay_ratio", 1.0))),
+            supervision_sampling=supervision_sampling,
             checkpoint_every=max(0, int(raw.get("checkpoint_every", 5000))),
             checkpoint_dir=str(checkpoint_dir / model_id),
             metric_history_size=max(
@@ -771,6 +781,29 @@ class StructuredServiceManager:
                     "candidate_ids": list(result.candidate_ids),
                     "candidate_logits": logits,
                     "behavior_value": float(result.value),
+                    **(
+                        {
+                            "candidate_prefix_keys": [
+                                list(vector)
+                                for vector in result.candidate_prefix_keys
+                            ],
+                            "candidate_prefix_values": [
+                                list(vector)
+                                for vector in result.candidate_prefix_values
+                            ],
+                            "preference_conditioning": {
+                                "mode": "low_rank_additive_v1",
+                                "dim": len(result.candidate_prefix_keys[0]),
+                            },
+                        }
+                        if result.candidate_prefix_keys
+                        else {
+                            "preference_conditioning": {
+                                "mode": "prefix_independent",
+                                "dim": 0,
+                            }
+                        }
+                    ),
                 }
             )
         return {
@@ -1035,6 +1068,7 @@ class StructuredServiceManager:
                             rng=np.random.default_rng(
                                 43_000_003 + record.updates
                             ),
+                            strategy=config.supervision_sampling,
                         )
                         validation = record.validation_supervision.snapshot()
                     with record.agent_lock:
@@ -1346,6 +1380,16 @@ class StructuredServiceManager:
                 },
                 "device": str(record.agent.device),
                 "trainable_parameters": int(trainable_parameters),
+                "policy_conditioning": {
+                    "mode": (
+                        "low_rank_additive_v1"
+                        if int(getattr(trainable_module, "prefix_dim", 0)) > 0
+                        else "prefix_independent"
+                    ),
+                    "prefix_dim": int(
+                        getattr(trainable_module, "prefix_dim", 0)
+                    ),
+                },
                 "tensorboard": {
                     "enabled": record.tensorboard_enabled,
                     "logdir": record.tensorboard_logdir,
@@ -1403,6 +1447,7 @@ class StructuredServiceManager:
                     "ingress_calls": record.supervision_add_calls,
                     "ingested_items": record.supervision_add_items,
                     "trained_items": record.supervision_train_items,
+                    "sampling": record.config.supervision_sampling,
                 },
                 "updates": record.updates,
                 "policy_version": record.policy_version,

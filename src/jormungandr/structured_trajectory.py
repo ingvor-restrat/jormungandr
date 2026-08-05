@@ -25,6 +25,8 @@ JOINT_TRAJECTORY_STEP_SCHEMA = "jormungandr.structured_joint_step.v1"
 JOINT_TRAJECTORY_SEQUENCE_SCHEMA = (
     "jormungandr.structured_joint_trajectory_sequence.v1"
 )
+CONDITIONAL_LEGAL_CANDIDATE_IDS = "conditional_legal_candidate_ids"
+PREFIX_CONDITIONING_MODE = "low_rank_additive_v1"
 
 
 @dataclass(frozen=True)
@@ -72,11 +74,47 @@ class StructuredFactorChoice:
         log_probability = float(self.behavior_log_probability)
         if not math.isfinite(log_probability) or log_probability > 1e-6:
             raise ValueError("behavior log probability must be finite and <= 0")
+        metadata = dict(self.metadata)
+        conditional = metadata.get(CONDITIONAL_LEGAL_CANDIDATE_IDS)
+        if conditional is not None:
+            if not isinstance(conditional, Sequence) or isinstance(
+                conditional, (str, bytes)
+            ):
+                raise ValueError(
+                    "conditional legal candidate IDs must be an array"
+                )
+            conditional_ids = tuple(
+                str(value).strip() for value in conditional
+            )
+            if not conditional_ids or any(not value for value in conditional_ids):
+                raise ValueError(
+                    "conditional legal candidate IDs must be non-empty"
+                )
+            if len(set(conditional_ids)) != len(conditional_ids):
+                raise ValueError(
+                    "conditional legal candidate IDs must be unique"
+                )
+            if not set(conditional_ids).issubset(candidate_ids):
+                raise ValueError(
+                    "conditional legal candidates must belong to the factor"
+                )
+            if selected not in conditional_ids:
+                raise ValueError(
+                    "selected candidate must remain conditionally legal"
+                )
+            metadata[CONDITIONAL_LEGAL_CANDIDATE_IDS] = list(conditional_ids)
         object.__setattr__(self, "factor_id", factor_id)
         object.__setattr__(self, "candidate_ids", candidate_ids)
         object.__setattr__(self, "selected_candidate_id", selected)
         object.__setattr__(self, "behavior_log_probability", log_probability)
-        object.__setattr__(self, "metadata", dict(self.metadata))
+        object.__setattr__(self, "metadata", metadata)
+
+    @property
+    def conditional_candidate_ids(self) -> tuple[str, ...]:
+        """Candidates in the exact conditional distribution used by the actor."""
+
+        values = self.metadata.get(CONDITIONAL_LEGAL_CANDIDATE_IDS)
+        return self.candidate_ids if values is None else tuple(values)
 
 
 @dataclass(frozen=True)
@@ -99,6 +137,46 @@ LegalMaskUpdate = Callable[
 ]
 
 
+def apply_candidate_prefix_numpy(
+    candidate_logits: Sequence[float] | np.ndarray,
+    selected_candidate_indices: Sequence[int],
+    *,
+    candidate_prefix_keys: Sequence[Sequence[float]] | np.ndarray | None = None,
+    candidate_prefix_values: Sequence[Sequence[float]] | np.ndarray | None = None,
+) -> np.ndarray:
+    """NumPy counterpart of ``structured.apply_candidate_prefix``.
+
+    Actors use this function on score-service output, while PPO uses the Torch
+    implementation with the same formula.  Returning a copy for an
+    unconditioned policy preserves the historical joint sampler exactly.
+    """
+
+    logits = np.asarray(candidate_logits, dtype=np.float64)
+    if logits.ndim != 1 or np.isnan(logits).any() or np.isposinf(logits).any():
+        raise ValueError("candidate logits must be a vector without NaN or +inf")
+    if (candidate_prefix_keys is None) != (candidate_prefix_values is None):
+        raise ValueError("candidate prefix keys and values must appear together")
+    selected = np.asarray(tuple(selected_candidate_indices), dtype=np.int64)
+    if selected.ndim != 1 or np.any(selected < 0) or np.any(selected >= len(logits)):
+        raise ValueError("selected candidate prefix index is out of range")
+    if candidate_prefix_keys is None:
+        return logits.copy()
+    keys = np.asarray(candidate_prefix_keys, dtype=np.float64)
+    values = np.asarray(candidate_prefix_values, dtype=np.float64)
+    if keys.ndim != 2 or values.shape != keys.shape:
+        raise ValueError(
+            "candidate prefix keys and values must share [candidates, dim]"
+        )
+    if keys.shape[0] != len(logits) or keys.shape[1] <= 0:
+        raise ValueError("candidate prefix tensors do not align with logits")
+    if not np.isfinite(keys).all() or not np.isfinite(values).all():
+        raise ValueError("candidate prefix tensors must be finite")
+    if not len(selected):
+        return logits.copy()
+    prefix_context = values[selected].sum(axis=0)
+    return logits + keys @ prefix_context / math.sqrt(keys.shape[1])
+
+
 def sample_structured_joint_action(
     observation: EntityCandidateObservation,
     factors: Sequence[StructuredActionFactor],
@@ -108,6 +186,8 @@ def sample_structured_joint_action(
     deterministic: bool = False,
     rng: np.random.Generator | None = None,
     legal_mask_update: LegalMaskUpdate | None = None,
+    candidate_prefix_keys: Sequence[Sequence[float]] | np.ndarray | None = None,
+    candidate_prefix_values: Sequence[Sequence[float]] | np.ndarray | None = None,
 ) -> StructuredJointActionResult:
     """Select one candidate per factor with an exact joint log probability.
 
@@ -170,7 +250,13 @@ def sample_structured_joint_action(
         if not bool(legal_local.any()):
             raise ValueError(f"factor {factor.factor_id!r} has no legal candidate")
         legal_indices = indices[legal_local]
-        legal_logits = logits[legal_indices]
+        conditional_logits = apply_candidate_prefix_numpy(
+            logits,
+            [by_id[candidate_id] for candidate_id in selected],
+            candidate_prefix_keys=candidate_prefix_keys,
+            candidate_prefix_values=candidate_prefix_values,
+        )
+        legal_logits = conditional_logits[legal_indices]
         if not np.isfinite(legal_logits).all():
             raise ValueError("legal candidate logits must be finite")
         shifted = legal_logits - float(np.max(legal_logits))
@@ -192,10 +278,15 @@ def sample_structured_joint_action(
                 selected_candidate_id=selected_id,
                 behavior_log_probability=log_probability,
                 metadata={
-                    "conditional_legal_candidate_ids": [
+                    CONDITIONAL_LEGAL_CANDIDATE_IDS: [
                         observation.candidate_ids[int(index)]
                         for index in legal_indices
-                    ]
+                    ],
+                    "preference_conditioning": (
+                        PREFIX_CONDITIONING_MODE
+                        if candidate_prefix_keys is not None
+                        else "prefix_independent"
+                    ),
                 },
             )
         )

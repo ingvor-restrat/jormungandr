@@ -110,6 +110,17 @@ bounded FIFO on-policy queue, while validation trajectories enter an isolated
 store. Duplicate identity, ordering, semantic membership, and policy lag are
 checked before admission.
 
+Structured PPO and BC may additionally enable low-rank prefix conditioning.
+One inference returns a base logit plus a key and value vector for every
+candidate. Before factor `i`, the actor sums the value vectors of choices
+`0..i-1` and adds its scaled inner product with every current candidate key.
+This changes learned preferences without another service call; the
+environment-owned callback separately changes legality. The actor and PPO use
+the same formula, and trajectory tests require their joint log probabilities
+to agree. Setting `structured_prefix_dim: 0` preserves the historical
+prefix-independent scorer. This additive compatibility profile is
+prefix-aware, but it is not a recurrent network or arbitrary temporal memory.
+
 The public trajectory endpoint accepts either the original array of complete
 step records or a compact observation-chain sequence. The latter stores one
 ordered array of `N + 1` observations beside `N` action/reward records, so an
@@ -122,23 +133,47 @@ not a learning change.
 
 The trajectory learner measures the raw signal before applying GAE. Its
 standard metrics include episode-return mean, standard deviation, minimum,
-maximum, unique-value count, mean episode length, and nonzero-reward fraction.
+maximum, unique-value count, episode-length range, and nonzero-reward fraction.
+They also include `gae_decay = gamma * lambda` and the minimum, mean, and
+maximum weight with which the newest temporal-difference residual can reach
+the oldest step of each sampled episode. For an episode of length `N`, that
+direct weight is `(gamma * lambda) ** (N - 1)`.
 This matters for sparse objectives: high critic explained variance can mean
 that the value head predicts one common losing return and its distance to
 termination. It is not, by itself, evidence that sampled actions received a
 discriminating policy signal.
 
+The generic delayed-terminal reference benchmark validates these values over
+719 steps against both their closed form and Stable-Baselines3's independent
+rollout buffer. It retains the full-vector comparison in the gate calculation
+while storing compact endpoint and error summaries in the audit artifact.
+
 The v2 supervision profile stores one semantic target for one state-local
 factor. Its candidate IDs are the legal alternatives for that conditional
-choice, and its target is an ID rather than a row index. Samples may carry a
-positive weight plus generic source and factor groups. Training and validation
-use different bounded buffers; only training labels enter weighted categorical
-negative log likelihood. Accuracy, NLL, entropy, calibration, and group metrics
-are evaluated without consulting reward. A structured-BC checkpoint uses the
-same entity/candidate transformer state as structured PPO, so PPO may initialize
-its policy directly while starting with a fresh optimizer, update counter, and
-trajectory stores. The value head receives no BC loss and begins PPO as an
-untrained critic.
+choice, its optional selected-prefix IDs identify earlier choices, and its
+target is an ID rather than a row index. Samples may carry a positive weight
+plus generic source, factor, reporting-target, and training-balance groups.
+The reporting target and balance stratum are separate: an application may
+retain a human-readable target metric while declaring a finer conditional
+choice-set/prefix stratum for optimization. Legacy records that omit
+`balance_group` use `target_group` and retain the previous behavior.
+
+The generic balance helper computes mean-one inverse-frequency weights
+`count(group) ** -exponent`. The service's default `uniform` sampler leaves
+those loss weights on uniformly drawn records. Its opt-in `sample_weight`
+sampler draws with replacement in proportion to the declared weights and
+passes unit-weight copies to the learner. The batch mean then estimates the
+same normalized weighted objective without applying the weight twice, while
+rare strata appear more consistently in finite batches. Jormungandr assigns
+no meaning to a group name and derives no application constraint from it.
+
+Training and validation use different bounded buffers; only training labels
+enter weighted categorical negative log likelihood. Accuracy, NLL, entropy,
+calibration, and group metrics are evaluated without consulting reward. A
+structured-BC checkpoint uses the same entity/candidate transformer state as
+structured PPO, so PPO may initialize its policy directly while starting with
+a fresh optimizer, update counter, and trajectory stores. The value head
+receives no BC loss and begins PPO as an untrained critic.
 
 `ConstrainedWorkbench-v0` is the generic end-to-end diagnostic for these two
 profiles. Its Gymnasium interface exposes variable worker/job sets, while its

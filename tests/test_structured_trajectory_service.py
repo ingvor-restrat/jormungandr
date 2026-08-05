@@ -92,6 +92,8 @@ def _make_step(
         behavior_value=item["behavior_value"],
         deterministic=False,
         rng=np.random.default_rng(10_000 * actor + episode),
+        candidate_prefix_keys=item.get("candidate_prefix_keys"),
+        candidate_prefix_values=item.get("candidate_prefix_values"),
     )
     selected_acts = sum(
         candidate_id.endswith(":act")
@@ -167,6 +169,7 @@ def test_multiprocess_joint_trajectory_service_updates_checkpoints_and_metrics(
         "structured_heads": 4,
         "structured_layers": 1,
         "structured_feedforward_dim": 32,
+        "structured_prefix_dim": 4,
         "epochs": 1,
         "minibatch_size": 4,
         "gamma": 1.0,
@@ -189,6 +192,10 @@ def test_multiprocess_joint_trajectory_service_updates_checkpoints_and_metrics(
             }
         )["model"]
         assert created["algorithm"]["replay_mode"] == "trajectory"
+        assert created["policy_conditioning"] == {
+            "mode": "low_rank_additive_v1",
+            "prefix_dim": 4,
+        }
 
         with ProcessActorPool(_actor_job, workers=2) as pool:
             results = pool.map(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import deque
+from dataclasses import replace
 from typing import Sequence
 
 import numpy as np
@@ -49,15 +50,46 @@ class StructuredSupervisionBuffer:
         count: int,
         *,
         rng: np.random.Generator,
+        strategy: str = "uniform",
     ) -> tuple[StructuredSupervisionExample, ...]:
+        """Draw one optimization batch.
+
+        ``uniform`` preserves the historical behavior: draw records uniformly
+        and leave their declared loss weights intact.  ``sample_weight`` draws
+        with replacement in proportion to those weights and returns unit-loss
+        copies.  For any per-record loss ``L_i`` this makes the batch mean an
+        unbiased estimator of ``sum(w_i L_i) / sum(w_i)`` without applying the
+        weight twice.  It also places rare, highly weighted strata into batches
+        more consistently than uniform sampling followed by loss weighting.
+        """
+
         if not self._items:
             raise ValueError("cannot sample an empty supervision buffer")
         size = max(1, int(count))
         items = tuple(self._items)
-        indices = rng.choice(
-            len(items), size=size, replace=len(items) < size
+        mode = str(strategy).strip().lower()
+        if mode == "uniform":
+            indices = rng.choice(
+                len(items), size=size, replace=len(items) < size
+            )
+            return tuple(
+                items[int(index)] for index in np.asarray(indices).reshape(-1)
+            )
+        if mode != "sample_weight":
+            raise ValueError(
+                "supervision sampling strategy must be uniform or sample_weight"
+            )
+        weights = np.asarray(
+            [item.sample_weight for item in items], dtype=np.float64
         )
-        return tuple(items[int(index)] for index in np.asarray(indices).reshape(-1))
+        probabilities = weights / float(weights.sum())
+        indices = rng.choice(
+            len(items), size=size, replace=True, p=probabilities
+        )
+        return tuple(
+            replace(items[int(index)], sample_weight=1.0)
+            for index in np.asarray(indices).reshape(-1)
+        )
 
     def snapshot(self) -> tuple[StructuredSupervisionExample, ...]:
         return tuple(self._items)

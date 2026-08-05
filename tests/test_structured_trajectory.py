@@ -194,9 +194,64 @@ def test_joint_sampler_records_exact_conditional_probabilities_and_masks() -> No
     )
     assert result.observation.legal_action_mask.tolist() == [True, True, True, False]
     assert result.factors[1].behavior_log_probability == 0.0
+    assert result.factors[1].conditional_candidate_ids == ("factor:1:pass",)
     assert result.joint_log_probability == pytest.approx(
         result.factors[0].behavior_log_probability
         + result.factors[1].behavior_log_probability
+    )
+
+
+def test_joint_sampler_conditions_later_preferences_on_selected_prefix() -> None:
+    observation = _observation(0, 2)
+    factors = (
+        StructuredActionFactor(
+            "factor:0", ("factor:0:pass", "factor:0:act")
+        ),
+        StructuredActionFactor(
+            "factor:1", ("factor:1:pass", "factor:1:act")
+        ),
+    )
+    keys = np.asarray(
+        [[0.0, 0.0], [0.0, 0.0], [1.0, 0.0], [-1.0, 0.0]]
+    )
+    values = np.asarray(
+        [[2.0, 0.0], [-2.0, 0.0], [0.0, 0.0], [0.0, 0.0]]
+    )
+
+    after_pass = sample_structured_joint_action(
+        observation,
+        factors,
+        np.asarray([3.0, 0.0, 0.0, 0.0]),
+        behavior_value=0.0,
+        deterministic=True,
+        candidate_prefix_keys=keys,
+        candidate_prefix_values=values,
+    )
+    after_act = sample_structured_joint_action(
+        observation,
+        factors,
+        np.asarray([0.0, 3.0, 0.0, 0.0]),
+        behavior_value=0.0,
+        deterministic=True,
+        candidate_prefix_keys=keys,
+        candidate_prefix_values=values,
+    )
+
+    assert after_pass.selected_candidate_ids == (
+        "factor:0:pass",
+        "factor:1:pass",
+    )
+    assert after_act.selected_candidate_ids == (
+        "factor:0:act",
+        "factor:1:act",
+    )
+    assert np.array_equal(
+        after_pass.observation.legal_action_mask,
+        after_act.observation.legal_action_mask,
+    )
+    assert all(
+        factor.metadata["preference_conditioning"] == "low_rank_additive_v1"
+        for factor in after_pass.factors
     )
 
 

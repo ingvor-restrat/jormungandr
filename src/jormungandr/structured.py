@@ -417,10 +417,72 @@ def collate_entity_candidate_observations(
 
 @dataclass(frozen=True)
 class EntityCandidatePolicyOutput:
-    """Policy logits over local candidates plus one value per state."""
+    """Policy logits, value, and optional low-rank prefix interactions.
+
+    ``candidate_prefix_keys`` and ``candidate_prefix_values`` are either both
+    absent or both shaped ``[batch, candidates, prefix_dim]``.  They let an
+    actor condition a later factor's preferences on candidates selected by
+    earlier factors without another network inference.  The interaction is
+    deliberately generic: the environment still owns factor order and hard
+    feasibility.
+    """
 
     logits: torch.Tensor
     values: torch.Tensor
+    candidate_prefix_keys: torch.Tensor | None = None
+    candidate_prefix_values: torch.Tensor | None = None
+
+
+def apply_candidate_prefix(
+    output: EntityCandidatePolicyOutput,
+    selected_candidate_indices: torch.Tensor,
+) -> torch.Tensor:
+    """Return logits conditioned on a padded selected-candidate prefix.
+
+    ``selected_candidate_indices`` has shape ``[batch, prefix]`` and uses
+    ``-1`` for padding.  A policy without prefix heads remains the historical
+    prefix-independent baseline.  With prefix heads, candidate ``j`` receives
+
+    ``key[j] dot sum(value[selected_prefix]) / sqrt(prefix_dim)``.
+
+    This low-rank directed compatibility is differentiable, permutation-safe
+    for padded batches, and exactly reproducible by the NumPy actor sampler.
+    """
+
+    indices = torch.as_tensor(
+        selected_candidate_indices,
+        dtype=torch.long,
+        device=output.logits.device,
+    )
+    if indices.ndim != 2 or indices.shape[0] != output.logits.shape[0]:
+        raise ValueError(
+            "selected candidate indices must have shape [batch, prefix]"
+        )
+    keys = output.candidate_prefix_keys
+    values = output.candidate_prefix_values
+    if (keys is None) != (values is None):
+        raise ValueError("candidate prefix keys and values must appear together")
+    if keys is None or values is None:
+        return output.logits
+    if keys.ndim != 3 or values.shape != keys.shape:
+        raise ValueError(
+            "candidate prefix keys and values must share [batch, candidates, dim]"
+        )
+    if keys.shape[:2] != output.logits.shape or keys.shape[2] <= 0:
+        raise ValueError("candidate prefix tensors do not align with logits")
+    if torch.any(indices < -1) or torch.any(indices >= output.logits.shape[1]):
+        raise ValueError("selected candidate prefix index is out of range")
+    if indices.shape[1] == 0:
+        return output.logits
+
+    safe_indices = torch.clamp(indices, min=0)
+    rows = torch.arange(indices.shape[0], device=indices.device)[:, None]
+    selected_values = values[rows, safe_indices]
+    selected_values = selected_values * (indices >= 0).unsqueeze(-1)
+    prefix_context = selected_values.sum(dim=1)
+    adjustment = torch.einsum("bcd,bd->bc", keys, prefix_context)
+    adjustment = adjustment / float(keys.shape[2]) ** 0.5
+    return output.logits + adjustment
 
 
 class EntityCandidateTransformer(nn.Module):
@@ -443,6 +505,7 @@ class EntityCandidateTransformer(nn.Module):
         layers: int = 2,
         feedforward_dim: int = 128,
         dropout: float = 0.0,
+        prefix_dim: int = 0,
     ) -> None:
         super().__init__()
         spec = StructuredPolicySpec(
@@ -455,6 +518,8 @@ class EntityCandidateTransformer(nn.Module):
             raise ValueError("model_dim must be positive and divisible by heads")
         if layers <= 0 or feedforward_dim <= 0:
             raise ValueError("layers and feedforward_dim must be positive")
+        if int(prefix_dim) < 0:
+            raise ValueError("prefix_dim must be non-negative")
 
         self.spec = spec
         self.global_projection = nn.Linear(spec.global_dim, model_dim)
@@ -484,6 +549,17 @@ class EntityCandidateTransformer(nn.Module):
             nn.Linear(model_dim, model_dim),
             nn.GELU(),
             nn.Linear(model_dim, 1),
+        )
+        self.prefix_dim = int(prefix_dim)
+        self.candidate_prefix_key = (
+            nn.Linear(model_dim, self.prefix_dim, bias=False)
+            if self.prefix_dim
+            else None
+        )
+        self.candidate_prefix_value = (
+            nn.Linear(model_dim, self.prefix_dim, bias=False)
+            if self.prefix_dim
+            else None
         )
 
     def forward(
@@ -522,6 +598,20 @@ class EntityCandidateTransformer(nn.Module):
         ).unsqueeze(-1)
         referenced_entities = (referenced_entities * reference_mask).sum(dim=2)
         candidate_tokens = candidate_tokens + referenced_entities
+        candidate_prefix_keys = (
+            self.candidate_prefix_key(candidate_tokens)
+            if self.candidate_prefix_key is not None
+            else None
+        )
+        candidate_prefix_values = (
+            self.candidate_prefix_value(candidate_tokens)
+            if self.candidate_prefix_value is not None
+            else None
+        )
+        if candidate_prefix_keys is not None:
+            candidate_mask = batch.candidate_mask.unsqueeze(-1)
+            candidate_prefix_keys = candidate_prefix_keys * candidate_mask
+            candidate_prefix_values = candidate_prefix_values * candidate_mask
         expanded_context = context.unsqueeze(1).expand_as(candidate_tokens)
         logits = self.candidate_scorer(
             torch.cat((expanded_context, candidate_tokens), dim=-1)
@@ -531,7 +621,12 @@ class EntityCandidateTransformer(nn.Module):
             raise ValueError("every batch row must admit at least one candidate")
         logits = logits.masked_fill(~effective_mask, -torch.inf)
         values = self.value_head(context).squeeze(-1)
-        return EntityCandidatePolicyOutput(logits=logits, values=values)
+        return EntityCandidatePolicyOutput(
+            logits=logits,
+            values=values,
+            candidate_prefix_keys=candidate_prefix_keys,
+            candidate_prefix_values=candidate_prefix_values,
+        )
 
 
 @dataclass(frozen=True)
