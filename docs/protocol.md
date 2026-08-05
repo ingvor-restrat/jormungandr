@@ -88,6 +88,29 @@ minimum, mean, and maximum oldest-delta weight
 GAE and are therefore direct checks for both an all-identical sparse-reward
 batch and a terminal signal whose direct reach is negligible at early steps.
 
+For a pretrained structured policy with a fresh critic, the following optional
+learner fields protect the handoff:
+
+```json
+{
+  "value_backbone_gradient_scale": 0.0,
+  "policy_ratio_guard_min": 0.1,
+  "policy_ratio_guard_max": 4.0,
+  "policy_ratio_guard_backoff_factor": 0.5,
+  "policy_ratio_guard_max_backtracks": 6
+}
+```
+
+The value head still receives its full loss; the first field scales only the
+critic gradient entering the shared policy representation. When ratio bounds
+are nonzero, the learner treats the complete PPO proposal as a transaction.
+It measures every selected behavior-action ratio over the full batch, restores
+policy, Adam, and RNG state on violation, and retries at the declared backoff.
+Metrics distinguish the within-optimization ratio range from
+`post_update_importance_ratio_*`, and report acceptance, attempts, backtracks,
+and the effective learning rate. Omitting the fields preserves the historical
+fully shared, unguarded update.
+
 ### Structured supervision mode
 
 Create a reward-free supervised model with `learner.algo` set to

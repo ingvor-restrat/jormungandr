@@ -1275,7 +1275,7 @@ def _build_structured(
 
 PLUGIN = AlgorithmPlugin(
     name="structured_ppo",
-    version="1.6.0",
+    version="1.7.0",
     family="on-policy structured actor critic",
     build=None,
     build_structured=_build_structured,
@@ -1286,7 +1286,8 @@ PLUGIN = AlgorithmPlugin(
     description=(
         "Clipped PPO over variable entities, state-local candidates, and "
         "exact factorized joint-action trajectories with optional low-rank "
-        "selected-prefix preferences."
+        "selected-prefix preferences, critic-backbone gradient scaling, and "
+        "transactional full-batch ratio guards."
     ),
 )
 algorithm_registry.register(PLUGIN)

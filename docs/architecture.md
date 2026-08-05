@@ -175,6 +175,16 @@ structured PPO, so PPO may initialize its policy directly while starting with
 a fresh optimizer, update counter, and trajectory stores. The value head
 receives no BC loss and begins PPO as an untrained critic.
 
+That handoff creates an explicit gradient-ownership boundary. Structured PPO
+1.7 keeps the historical fully shared encoder by default, but can scale the
+critic gradient reaching that shared actor backbone independently while still
+training the value head. Its optional transactional policy-ratio guard snapshots
+the policy, optimizer, and RNG state before a proposal; it audits selected
+behavior-action ratios on the complete batch and commits only an in-bounds
+proposal. Backoff attempts replay the same minibatch randomness at a smaller
+declared rate, so a rejected proposal cannot silently alter either weights or
+Adam moments.
+
 `ConstrainedWorkbench-v0` is the generic end-to-end diagnostic for these two
 profiles. Its Gymnasium interface exposes variable worker/job sets, while its
 structured adapter supplies semantic factors and a sequential mask callback.

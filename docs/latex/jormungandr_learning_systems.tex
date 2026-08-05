@@ -75,6 +75,10 @@ count, episode-length range, reward sparsity, and the direct oldest-residual
 GAE weight before optimization, which prevents a critic fitting one common
 outcome---or a terminal residual with negligible reach at early decisions---from
 being mistaken for a policy receiving useful credit.
+Version 1.7 additionally separates value-head learning from critic gradients
+through a pretrained shared policy backbone and can transactionally back off a
+PPO proposal until every selected behavior-action ratio in the complete batch
+lies inside declared bounds.
 A QUBO selector makes auditable yes/no decisions
 over prioritized transitions, contiguous rollout fragments, or a bounded
 search frontier by trading utility against redundancy.  Quantile critics expose mean, lower-quantile,
@@ -360,6 +364,17 @@ the learner are decoupled \cite{impala}.  The APPO plugin follows the IMPACT
 combination of a target policy, circular replay, and truncated importance
 sampling; ordinary shuffled replay would violate the asynchronous PPO algorithm
 \cite{impact}.
+
+Clipping the surrogate does not directly bound a shared neural-network
+parameter step.  Structured PPO 1.7 therefore offers two independent,
+default-off preservation controls.  The value head always receives its full
+loss, while \texttt{value\_backbone\_gradient\_scale}$\in[0,1]$ controls the
+critic gradient entering the shared actor representation.  Optional minimum
+and maximum policy-ratio bounds audit every selected behavior action after a
+complete proposal.  A violation restores policy, Adam, and random-number state
+and retries the identical proposal at a declared learning-rate backoff.  The
+committed ratio range, attempts, backtracks, acceptance, and effective rate are
+reported separately from minibatch-average KL.
 
 Behavior cloning ignores reward and provides the demonstration baseline.  The
 structured profile predicts semantic candidate identity within one factor's
@@ -868,7 +883,9 @@ the example.  The BC and PPO profiles share the entity/candidate transformer
 schema.  A service-owned initialization operation therefore copies a
 schema-compatible BC policy into a new PPO learner while resetting optimizer,
 update/version, and trajectory state; the value head receives no BC objective
-and remains an untrained starting critic.
+and remains an untrained starting critic.  Gradient scaling lets that head fit
+returns without allowing its initial error to overwrite the copied actor
+backbone; the historical fully shared update remains the default.
 
 \subsection{Quantile tree baselines}
 
@@ -1298,6 +1315,17 @@ $2.6763\times10^{-6}$ in the first arm and one in the episodic arm.  This
 selects $\lambda=1$ for a terminal-only child experiment as an estimator design
 decision.  No learning or variance conclusion follows.
 
+The independent \texttt{StructuredPPOSafety-v0} gate tests policy preservation
+over five seeds.  In a value-only joint update, the historical shared critic
+moves a policy-backbone parameter by about $0.0200$.  Zero critic-backbone
+scale leaves every non-value parameter bit-identical while the value head still
+moves by about $0.0200$.  A second deliberately oversized actor proposal leaves
+the frozen ratio interval $[0.5,2]$ in all unguarded seeds, reaching
+$2.061\times10^{-9}$.  Transactional backoff accepts the third common-random
+proposal in every seed at effective rate $0.01$; all committed ratios lie in
+$[0.670,1.518]$ or a tighter interval.  These results establish isolation and
+containment.  Return improvement requires a separate environment experiment.
+
 The joint sampler can now be autoregressive in both legality and learned
 preference.  Optional low-rank candidate key/value heads condition later
 factor logits on the selected prefix while retaining one central inference per
@@ -1305,7 +1333,7 @@ turn.  Exact masks remain environment inputs.  The additive prefix summary
 conditions choices within one turn; temporal memory across turns requires
 recurrent state.
 
-The recorded functional suite contains 109 passing cases.  It includes direct
+The recorded functional suite contains 116 passing cases.  It includes direct
 finite updates and state round trips for every built-in, C51 projection and
 mask checks, graph-reference GAE, validation isolation, HTTP ingress, masked
 SAC entropy, QR-DQN tail output, QUBO cardinality and fragment audit, checkpoint
@@ -1316,7 +1344,8 @@ compact sequence round trip and compressed HTTP ingress,
 policy-lag/duplicate/order rejection, structured export, supervised split
 isolation, semantic candidate permutation, conditional balance compatibility,
 importance-sampling objective checks, BC-to-PPO initialization, the seeded
-online comparisons, and artifact manifests.  A
+online comparisons, critic-backbone isolation, transactional joint-ratio
+rollback and backoff, the structured PPO safety gate, and artifact manifests.  A
 separate threaded matrix gave every built-in eight mask-aware transitions;
 each completed an update, checkpoint, TorchScript export, restore, and masked
 inference.

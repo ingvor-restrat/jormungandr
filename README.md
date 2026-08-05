@@ -70,6 +70,12 @@ Before GAE, structured PPO also reports episode-return mean, spread, range,
 unique-value count, mean episode length, and the fraction of transitions with
 nonzero reward. These distinguish a critic fitting an all-identical return
 batch from a policy receiving useful outcome diversity.
+Structured PPO 1.7 can train a fresh value head while scaling its gradient
+through a pretrained shared policy backbone independently. An optional
+transactional ratio guard audits the complete on-policy batch after each PPO
+proposal, restores model and optimizer state on violation, and retries from
+the same RNG state with a declared learning-rate backoff. Both controls are
+disabled by defaults that preserve the earlier shared-encoder update.
 The DreamerV3 profile is a compact vector-control
 implementation, not full image/RSSM benchmark parity.
 

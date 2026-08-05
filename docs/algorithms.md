@@ -93,7 +93,7 @@ PPO defaults to `max_policy_lag: 0`; IMPALA and APPO default to 64. Offline
 MARWIL uses contiguous returns but does not enforce learner-version age on its
 demonstrations.
 
-Structured PPO version 1.6 records reward diversity and temporal credit reach
+Structured PPO version 1.7 records reward diversity and temporal credit reach
 before computing GAE: episode-return mean, standard deviation, range, unique
 count, episode-length range, nonzero-reward fraction, `gamma * lambda`, and the
 weight `(gamma * lambda) ** (N - 1)` linking the newest residual to the oldest
@@ -112,12 +112,31 @@ terminal residual at every step. It is selected for that specific child arm;
 Jormungandr does not silently change lambda or claim that the higher-variance
 estimator is universally preferable.
 
-Structured PPO 1.6 and structured BC 1.2 also support optional low-rank
+Structured PPO 1.7 and structured BC 1.2 also support optional low-rank
 conditioning of each factor's preferences on the already selected joint-action
 prefix. The score API emits candidate key/value vectors once; actors and PPO
 apply the same additive compatibility formula before each categorical choice.
 Hard legal masks remain actor/environment inputs and are not learned. A zero
 prefix dimension is exactly the previous prefix-independent behavior.
+
+Version 1.7 also makes BC-to-PPO actor preservation explicit. The value head
+always receives its complete configured loss, while
+`value_backbone_gradient_scale` in `[0, 1]` controls only how much of that
+critic gradient reaches the shared entity encoder. The default `1` is the
+historical shared actor--critic update. Setting it to `0` lets a fresh value
+head learn without allowing its initially large error to overwrite a
+pretrained policy representation; actor gradients still train the backbone.
+
+PPO clipping constrains the surrogate objective, not the neural-network
+parameter step. Optional `policy_ratio_guard_min` and
+`policy_ratio_guard_max` bounds therefore trigger a post-proposal audit over
+every behavior action in the full batch. A violating proposal is
+transactionally rolled back, including Adam state and RNG state, then retried
+with `policy_ratio_guard_backoff_factor` for at most
+`policy_ratio_guard_max_backtracks`. The learner reports both ratios observed
+inside optimization and the committed post-update ratio range, proposal count,
+backtracks, acceptance, and effective learning rate. Zero bounds leave the
+guard disabled and preserve previous behavior.
 
 Structured BC additionally separates a reporting target group from an
 application-declared training balance group. Generic helpers assign mean-one

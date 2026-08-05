@@ -119,5 +119,13 @@ env -u PYTHONPATH -u VIRTUAL_ENV PYTHONPATH="$PWD/src:$PWD" \
   --json-output docs/latex/figures/delayed_terminal_credit.json
 ```
 
+Regenerate the structured PPO critic-isolation and transactional-ratio gate
+with:
+
+```bash
+PYTHONPATH=src python examples/benchmark_structured_ppo_safety.py \
+  --json-output docs/latex/figures/structured_ppo_safety.json
+```
+
 Plotting uses the optional `plot` dependency group; GIF rendering additionally
 uses `record`.

@@ -18,11 +18,11 @@ Result:
 | core algorithm, replay, and artifact lifecycle | 32 | passed |
 | runtime, actors, monitor, trainer, and OU example | 13 | passed |
 | search, joint-action composition, and constrained environment | 13 | passed |
-| structured representation, transition/PPO service, export, and parity | 20 | passed |
+| structured representation, transition/PPO service, export, and parity | 26 | passed |
 | structured joint trajectory and multiprocess service | 14 | passed |
 | structured reward-free supervision and behavior cloning | 13 | passed |
-| independent terminal-credit and supervision-sampling gates | 4 | passed |
-| **Total** | **109** | **passed** |
+| independent terminal-credit, supervision, and PPO-safety gates | 5 | passed |
+| **Total** | **116** | **passed** |
 
 The tests cover zero-priority replay safety, probability preservation in the
 C51 projection, legal masking, graph-reference GAE, held-out evaluation
@@ -284,7 +284,7 @@ loopback service test sends gzip-compressed requests and admits a compact
 validation trajectory through the public endpoint without routing it into
 training.
 
-Structured PPO 1.6 adds pre-GAE signal and temporal-reach diagnostics to every update. The unit
+Structured PPO 1.7 adds pre-GAE signal and temporal-reach diagnostics to every update. The unit
 control with two terminal returns, `1.0` and `-0.5`, reports mean `0.25`,
 standard deviation `0.75`, range `[-0.5, 1.0]`, two unique returns, mean length
 three, and a one-third nonzero-reward fraction. The exact-joint control with
@@ -309,6 +309,31 @@ normalization used by PPO, the positive opening advantage is `2.6763e-6` for
 the current arm and `1.0` for the episodic arm. The gate therefore selects
 `lambda = 1.0` for a terminal-only 719-step child experiment. This is an
 estimator decision, not evidence of policy learning or reduced variance.
+
+## Structured PPO policy-preservation gate
+
+`StructuredPPOSafety-v0` isolates two update mechanisms without an application
+environment. Across seeds 101, 103, 107, 109, and 113, a value-only update
+through the historical shared encoder moves a policy-backbone parameter by
+about 0.0200. Setting `value_backbone_gradient_scale` to zero leaves every
+non-value parameter bit-identical while the value head still moves by about
+0.0200.
+
+The second arm deliberately proposes an oversized joint-policy update. Every
+unguarded seed leaves the declared ratio interval `[0.5, 2.0]`, reaching a
+minimum of `2.061e-9`. The transactional guard rejects those proposals and, on
+every seed, accepts the third common-random-number attempt at effective
+learning rate 0.01. Committed ranges are 0.670--1.518 or tighter. All six
+predeclared conditions pass in
+`docs/latex/figures/structured_ppo_safety.json`.
+
+```bash
+PYTHONPATH=src python examples/benchmark_structured_ppo_safety.py \
+  --json-output docs/latex/figures/structured_ppo_safety.json
+```
+
+This proves gradient isolation and transactional containment, not that either
+setting improves return in an unrelated environment.
 
 ```bash
 env -u PYTHONPATH -u VIRTUAL_ENV PYTHONPATH="$PWD/src:$PWD" \
