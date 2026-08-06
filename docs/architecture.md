@@ -175,6 +175,37 @@ structured PPO, so PPO may initialize its policy directly while starting with
 a fresh optimizer, update counter, and trajectory stores. The value head
 receives no BC loss and begins PPO as an untrained critic.
 
+The entity/candidate transformer optionally inserts one or more
+candidate-to-entity attention blocks after entity encoding. A candidate first
+incorporates its declared entity pointers, then queries the masked encoded
+global/entity set. This removes the requirement that every worker-, asset-, or
+job-relative decision be recoverable from one pooled global token. The option
+is generic and shared by structured BC, PPO, and DQN; depth zero remains the
+checkpoint-compatible default. Dynamic feasibility still comes from the
+actor-supplied legal mask.
+
+Exact prefix-conditioned policy scoring is exposed through a streaming
+structured-supervision metrics accumulator. It reports raw and weighted
+accuracy, NLL, and entropy by source, factor, and semantic target, plus target
+macro accuracy. A separate seeded SHA-256 selector creates input-order-
+independent capped diagnostic subsets per target, factor, or source and emits
+an exact selection receipt. Applications can therefore run fit probes without
+copying metric definitions or silently choosing convenient examples.
+
+Teacher provenance is a separate pre-training concern. The generic static
+audit parses Python without executing it and reports large literal tables,
+opaque embedded payloads, and output lookups indexed by an
+observation-derived step or turn. It reports mechanism and source fingerprints;
+it does not claim that every schedule is invalid or that a policy is learned.
+The structured-supervision time-dependence diagnostic pairs distinct episodes
+by timestep and factor, verifies that the exact numeric model input changed,
+and measures how often the semantic target also changed. A second generic
+summary records paired counterfactual input/decision fingerprints. Applications
+own the interventions, policy execution, thresholds, and decision about
+teacher eligibility. This separation prevents framework code from importing
+an environment while making trace replay and absent state-response evidence
+visible before imitation.
+
 That handoff creates an explicit gradient-ownership boundary. Structured PPO
 1.7 keeps the historical fully shared encoder by default, but can scale the
 critic gradient reaching that shared actor backbone independently while still
@@ -191,6 +222,27 @@ structured adapter supplies semantic factors and a sequential mask callback.
 An exact enumerator provides terminal-return and supervision controls. It lives
 behind the optional `benchmark` dependency and is not part of the service
 runtime or an application adapter.
+
+## Exact calculation friends
+
+Two domain-neutral exact solvers let an application remove deterministic
+calculation from a learned policy without moving application rules into
+Jörmungandr. The bipartite task-assignment solver can either first maximize the
+number of declared assignments and then caller-supplied utility, or maximize
+total declared utility while treating an unassigned worker/task as zero. The
+latter omits zero- and negative-improvement work from an optional task pool.
+Tasks have caller-declared positive capacities that default to one, permitting
+several workers to share one logical task without application-side slot copies.
+Workers always retain capacity one.
+The directed shortest-path solver minimizes caller-supplied positive edge cost
+and returns both node and semantic-action paths. Assignment ties use a recorded
+random seed; route ties use the caller's edge order.
+
+The application remains responsible for creating tasks, declaring feasible
+worker/task edges, choosing utilities, constructing the traversable graph, and
+giving actions meaning. Both solvers return auditable result payloads and
+explicitly report unassigned or unreachable cases. They do not alter sampled
+actions after the fact and do not infer constraints from observations.
 
 ## Auxiliary objective
 

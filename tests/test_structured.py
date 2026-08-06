@@ -134,6 +134,74 @@ def test_transformer_scores_different_candidate_counts_and_never_selects_padding
     assert any(parameter.grad is not None for parameter in model.parameters())
 
 
+def test_candidate_entity_attention_is_optional_masked_and_trainable() -> None:
+    torch.manual_seed(17)
+    observations = (
+        _observation(
+            entity_count=3,
+            candidate_ids=("north", "south", "pass"),
+            legal=(True, True, False),
+        ),
+        _observation(
+            entity_count=1,
+            candidate_ids=("wait",),
+            legal=(True,),
+        ),
+    )
+    batch = collate_entity_candidate_observations(observations).to_torch()
+    baseline = EntityCandidateTransformer(
+        global_dim=2,
+        entity_dim=3,
+        candidate_dim=4,
+        entity_type_count=3,
+        model_dim=16,
+        heads=4,
+        layers=1,
+        feedforward_dim=32,
+    )
+    relational = EntityCandidateTransformer(
+        global_dim=2,
+        entity_dim=3,
+        candidate_dim=4,
+        entity_type_count=3,
+        model_dim=16,
+        heads=4,
+        layers=1,
+        feedforward_dim=32,
+        candidate_attention_layers=1,
+    )
+
+    output = relational(batch)
+    loss = -torch.log_softmax(output.logits, dim=-1)[0, 0]
+    loss.backward()
+
+    assert output.logits.shape == (2, 3)
+    assert torch.isneginf(output.logits[0, 2])
+    assert torch.isneginf(output.logits[1, 1:]).all()
+    assert sum(parameter.numel() for parameter in relational.parameters()) > sum(
+        parameter.numel() for parameter in baseline.parameters()
+    )
+    assert any(
+        parameter.grad is not None
+        for parameter in relational.candidate_attention_layers.parameters()
+    )
+
+
+def test_transformer_rejects_negative_candidate_attention_depth() -> None:
+    with pytest.raises(ValueError, match="candidate_attention_layers"):
+        EntityCandidateTransformer(
+            global_dim=2,
+            entity_dim=3,
+            candidate_dim=4,
+            entity_type_count=3,
+            model_dim=16,
+            heads=4,
+            layers=1,
+            feedforward_dim=32,
+            candidate_attention_layers=-1,
+        )
+
+
 def test_observation_rejects_duplicate_or_entirely_illegal_candidates() -> None:
     with pytest.raises(ValueError, match="candidate_ids must be unique"):
         _observation(

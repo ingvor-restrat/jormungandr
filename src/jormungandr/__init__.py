@@ -9,6 +9,28 @@ __all__ = [
     "__version__",
     "JormungandrRuntime",
     "JormungandrHttpServer",
+    "BoundedIntegerRadixCodec",
+    "PAIRWISE_SUMMARY_SCHEMA",
+    "PairwiseOutcome",
+    "TASK_ASSIGNMENT_SCHEMA",
+    "TASK_ASSIGNMENT_OBJECTIVES",
+    "TaskAssignmentCandidate",
+    "TaskAssignmentChoice",
+    "TaskAssignmentResult",
+    "CONSTRAINED_TASK_ASSIGNMENT_SCHEMA",
+    "ConstrainedTaskAssignmentCandidate",
+    "ConstrainedTaskAssignmentChoice",
+    "ConstrainedTaskAssignmentResult",
+    "solve_resource_constrained_task_assignment",
+    "RANKING_METRICS_SCHEMA",
+    "SELECTION_SET_METRICS_SCHEMA",
+    "SELECTION_MULTISET_METRICS_SCHEMA",
+    "RankingMetricsAccumulator",
+    "SelectionMultisetMetricsAccumulator",
+    "SelectionSetMetricsAccumulator",
+    "SHORTEST_PATH_SCHEMA",
+    "DirectedRouteEdge",
+    "ShortestPathResult",
     "GraphTrajectoryBatch",
     "GraphTrajectoryBuffer",
     "GraphTrajectoryStep",
@@ -20,6 +42,9 @@ __all__ = [
     "EntityCandidateTransformer",
     "TorchEntityCandidateBatch",
     "StructuredPolicySpec",
+    "STRUCTURED_CHECKPOINT_SCHEMA",
+    "save_structured_checkpoint",
+    "structured_checkpoint_payload",
     "BeamSearchResult",
     "FrontierSelection",
     "QUBOFrontierPruner",
@@ -60,18 +85,118 @@ __all__ = [
     "structured_joint_trajectory_to_sequence_payload",
     "validate_structured_joint_trajectory",
     "STRUCTURED_SUPERVISION_SCHEMA",
+    "STRUCTURED_SUPERVISION_FRAME_SCHEMA",
+    "STRUCTURED_SUPERVISION_CEILING_SCHEMA",
+    "STRUCTURED_SUPERVISION_TIME_DEPENDENCE_SCHEMA",
+    "STRUCTURED_SUPERVISION_STRATIFIED_SUBSET_SCHEMA",
     "StructuredSupervisionExample",
+    "StructuredSupervisionFrame",
+    "StructuredSupervisionLabel",
     "structured_supervision_balance_weights",
+    "structured_supervision_balance_weights_from_counts",
+    "structured_supervision_frame_balance_weights",
+    "structured_supervision_examples_from_frame",
     "apply_structured_supervision_balance_weights",
+    "apply_structured_supervision_frame_balance_weights",
     "structured_supervision_from_payload",
+    "structured_supervision_frame_from_payload",
+    "structured_supervision_frame_to_payload",
     "structured_supervision_to_payload",
+    "structured_supervision_deterministic_ceiling",
+    "structured_supervision_model_input_fingerprint",
+    "structured_supervision_time_dependence",
+    "structured_supervision_stratified_subset",
+    "STRUCTURED_SUPERVISION_POLICY_METRICS_SCHEMA",
+    "STRUCTURED_SUPERVISION_FRAME_POLICY_METRICS_SCHEMA",
+    "StructuredSupervisionFrameMetricsAccumulator",
+    "StructuredSupervisionMetricsAccumulator",
+    "structured_supervision_frame_policy_metrics",
+    "structured_supervision_policy_metrics",
+    "PYTHON_POLICY_SOURCE_AUDIT_SCHEMA",
+    "POLICY_COUNTERFACTUAL_RESPONSE_SCHEMA",
+    "PolicyCounterfactualOutcome",
+    "audit_python_policy_source",
+    "summarize_policy_counterfactual_responses",
     "STRUCTURED_BUNDLE_SCHEMA",
     "export_structured_policy_bundle",
     "load_structured_policy_bundle",
+    "fit_bradley_terry",
+    "outcome_from_values",
+    "pairwise_outcome_from_payload",
+    "summarize_pairwise_outcomes",
+    "solve_shortest_path",
+    "solve_task_assignment",
 ]
 
 
 def __getattr__(name: str) -> Any:
+    if name == "BoundedIntegerRadixCodec":
+        module = import_module("jormungandr.bounded_integer")
+        return getattr(module, name)
+    if name in {
+        "PAIRWISE_SUMMARY_SCHEMA",
+        "PairwiseOutcome",
+        "fit_bradley_terry",
+        "outcome_from_values",
+        "pairwise_outcome_from_payload",
+        "summarize_pairwise_outcomes",
+    }:
+        module = import_module("jormungandr.pairwise")
+        return getattr(module, name)
+    if name in {
+        "STRUCTURED_CHECKPOINT_SCHEMA",
+        "save_structured_checkpoint",
+        "structured_checkpoint_payload",
+    }:
+        module = import_module("jormungandr.structured_checkpoint")
+        return getattr(module, name)
+    if name in {
+        "STRUCTURED_SUPERVISION_FRAME_POLICY_METRICS_SCHEMA",
+        "STRUCTURED_SUPERVISION_POLICY_METRICS_SCHEMA",
+        "StructuredSupervisionFrameMetricsAccumulator",
+        "StructuredSupervisionMetricsAccumulator",
+        "structured_supervision_frame_policy_metrics",
+        "structured_supervision_policy_metrics",
+    }:
+        module = import_module("jormungandr.structured_metrics")
+        return getattr(module, name)
+    if name in {
+        "RANKING_METRICS_SCHEMA",
+        "SELECTION_SET_METRICS_SCHEMA",
+        "SELECTION_MULTISET_METRICS_SCHEMA",
+        "RankingMetricsAccumulator",
+        "SelectionMultisetMetricsAccumulator",
+        "SelectionSetMetricsAccumulator",
+    }:
+        module = import_module("jormungandr.ranking_metrics")
+        return getattr(module, name)
+    if name in {
+        "CONSTRAINED_TASK_ASSIGNMENT_SCHEMA",
+        "ConstrainedTaskAssignmentCandidate",
+        "ConstrainedTaskAssignmentChoice",
+        "ConstrainedTaskAssignmentResult",
+        "solve_resource_constrained_task_assignment",
+    }:
+        module = import_module("jormungandr.constrained_assignment")
+        return getattr(module, name)
+    if name in {
+        "SHORTEST_PATH_SCHEMA",
+        "DirectedRouteEdge",
+        "ShortestPathResult",
+        "solve_shortest_path",
+    }:
+        module = import_module("jormungandr.path_planning")
+        return getattr(module, name)
+    if name in {
+        "TASK_ASSIGNMENT_SCHEMA",
+        "TASK_ASSIGNMENT_OBJECTIVES",
+        "TaskAssignmentCandidate",
+        "TaskAssignmentChoice",
+        "TaskAssignmentResult",
+        "solve_task_assignment",
+    }:
+        module = import_module("jormungandr.task_assignment")
+        return getattr(module, name)
     if name in {"JormungandrClient", "JormungandrClientError"}:
         module = import_module("jormungandr.client")
         return getattr(module, name)
@@ -95,13 +220,42 @@ def __getattr__(name: str) -> Any:
         return getattr(module, name)
     if name in {
         "STRUCTURED_SUPERVISION_SCHEMA",
+        "STRUCTURED_SUPERVISION_FRAME_SCHEMA",
         "StructuredSupervisionExample",
+        "StructuredSupervisionFrame",
+        "StructuredSupervisionLabel",
         "structured_supervision_balance_weights",
+        "structured_supervision_balance_weights_from_counts",
+        "structured_supervision_frame_balance_weights",
+        "structured_supervision_examples_from_frame",
         "apply_structured_supervision_balance_weights",
+        "apply_structured_supervision_frame_balance_weights",
         "structured_supervision_from_payload",
+        "structured_supervision_frame_from_payload",
+        "structured_supervision_frame_to_payload",
         "structured_supervision_to_payload",
     }:
         module = import_module("jormungandr.structured_supervision")
+        return getattr(module, name)
+    if name in {
+        "STRUCTURED_SUPERVISION_CEILING_SCHEMA",
+        "STRUCTURED_SUPERVISION_TIME_DEPENDENCE_SCHEMA",
+        "STRUCTURED_SUPERVISION_STRATIFIED_SUBSET_SCHEMA",
+        "structured_supervision_deterministic_ceiling",
+        "structured_supervision_model_input_fingerprint",
+        "structured_supervision_time_dependence",
+        "structured_supervision_stratified_subset",
+    }:
+        module = import_module("jormungandr.supervision_diagnostics")
+        return getattr(module, name)
+    if name in {
+        "PYTHON_POLICY_SOURCE_AUDIT_SCHEMA",
+        "POLICY_COUNTERFACTUAL_RESPONSE_SCHEMA",
+        "PolicyCounterfactualOutcome",
+        "audit_python_policy_source",
+        "summarize_policy_counterfactual_responses",
+    }:
+        module = import_module("jormungandr.policy_provenance")
         return getattr(module, name)
     if name in {
         "STRUCTURED_BUNDLE_SCHEMA",

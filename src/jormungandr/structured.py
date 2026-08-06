@@ -485,6 +485,68 @@ def apply_candidate_prefix(
     return output.logits + adjustment
 
 
+class _CandidateEntityAttentionBlock(nn.Module):
+    """Let each dynamic candidate query the encoded entity set.
+
+    The original structured baseline compresses the entity set into one global
+    token before scoring every candidate.  That is economical, but it creates
+    an avoidable bottleneck for relational decisions: a candidate referring to
+    one worker cannot ask which target, job, or resource is relevant to that
+    worker.  This block is deliberately domain independent.  Candidate
+    descriptors (including their referenced entities) form the queries, while
+    the already encoded global/entity tokens provide keys and values.
+    """
+
+    def __init__(
+        self,
+        *,
+        model_dim: int,
+        heads: int,
+        feedforward_dim: int,
+        dropout: float,
+    ) -> None:
+        super().__init__()
+        self.cross_attention = nn.MultiheadAttention(
+            model_dim,
+            heads,
+            dropout=dropout,
+            batch_first=True,
+        )
+        self.attention_dropout = nn.Dropout(dropout)
+        self.attention_norm = nn.LayerNorm(model_dim)
+        self.feedforward = nn.Sequential(
+            nn.Linear(model_dim, feedforward_dim),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(feedforward_dim, model_dim),
+        )
+        self.feedforward_dropout = nn.Dropout(dropout)
+        self.feedforward_norm = nn.LayerNorm(model_dim)
+
+    def forward(
+        self,
+        candidates: torch.Tensor,
+        encoded_tokens: torch.Tensor,
+        *,
+        token_mask: torch.Tensor,
+        candidate_mask: torch.Tensor,
+    ) -> torch.Tensor:
+        attended, _ = self.cross_attention(
+            query=candidates,
+            key=encoded_tokens,
+            value=encoded_tokens,
+            key_padding_mask=~token_mask,
+            need_weights=False,
+        )
+        candidates = self.attention_norm(
+            candidates + self.attention_dropout(attended)
+        )
+        candidates = self.feedforward_norm(
+            candidates + self.feedforward_dropout(self.feedforward(candidates))
+        )
+        return candidates * candidate_mask.unsqueeze(-1)
+
+
 class EntityCandidateTransformer(nn.Module):
     """Small generic transformer for entity sets and dynamic candidates.
 
@@ -506,6 +568,7 @@ class EntityCandidateTransformer(nn.Module):
         feedforward_dim: int = 128,
         dropout: float = 0.0,
         prefix_dim: int = 0,
+        candidate_attention_layers: int = 0,
     ) -> None:
         super().__init__()
         spec = StructuredPolicySpec(
@@ -520,6 +583,8 @@ class EntityCandidateTransformer(nn.Module):
             raise ValueError("layers and feedforward_dim must be positive")
         if int(prefix_dim) < 0:
             raise ValueError("prefix_dim must be non-negative")
+        if int(candidate_attention_layers) < 0:
+            raise ValueError("candidate_attention_layers must be non-negative")
 
         self.spec = spec
         self.global_projection = nn.Linear(spec.global_dim, model_dim)
@@ -540,6 +605,15 @@ class EntityCandidateTransformer(nn.Module):
             enable_nested_tensor=False,
         )
         self.candidate_projection = nn.Linear(spec.candidate_dim, model_dim)
+        self.candidate_attention_layers = nn.ModuleList(
+            _CandidateEntityAttentionBlock(
+                model_dim=model_dim,
+                heads=heads,
+                feedforward_dim=feedforward_dim,
+                dropout=dropout,
+            )
+            for _ in range(int(candidate_attention_layers))
+        )
         self.candidate_scorer = nn.Sequential(
             nn.Linear(model_dim * 2, model_dim),
             nn.GELU(),
@@ -598,6 +672,13 @@ class EntityCandidateTransformer(nn.Module):
         ).unsqueeze(-1)
         referenced_entities = (referenced_entities * reference_mask).sum(dim=2)
         candidate_tokens = candidate_tokens + referenced_entities
+        for layer in self.candidate_attention_layers:
+            candidate_tokens = layer(
+                candidate_tokens,
+                encoded,
+                token_mask=token_mask,
+                candidate_mask=batch.candidate_mask,
+            )
         candidate_prefix_keys = (
             self.candidate_prefix_key(candidate_tokens)
             if self.candidate_prefix_key is not None

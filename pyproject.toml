@@ -38,6 +38,9 @@ plot = [
 benchmark = [
     "gymnasium>=1.1,<2",
 ]
+optimization = [
+    "scipy>=1.11,<2",
+]
 
 [project.scripts]
 jormungandr-service = "jormungandr.service:main"

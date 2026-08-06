@@ -1,6 +1,6 @@
 # Reproducible Results
 
-These functional results were recorded for Jörmungandr 0.2.0 through 4 August
+These functional results were recorded for Jörmungandr 0.2.0 through 5 August
 2026.
 They validate framework behavior and packaging; they are not learning-quality
 or performance benchmark claims.
@@ -15,14 +15,11 @@ Result:
 
 | Suite | Tests | Result |
 | --- | ---: | --- |
-| core algorithm, replay, and artifact lifecycle | 32 | passed |
-| runtime, actors, monitor, trainer, and OU example | 13 | passed |
-| search, joint-action composition, and constrained environment | 13 | passed |
-| structured representation, transition/PPO service, export, and parity | 26 | passed |
-| structured joint trajectory and multiprocess service | 14 | passed |
-| structured reward-free supervision and behavior cloning | 13 | passed |
-| independent terminal-credit, supervision, and PPO-safety gates | 5 | passed |
-| **Total** | **116** | **passed** |
+| classic algorithms, runtime, actors, artifacts, and examples | 45 | passed |
+| bounded integers, pairwise ranking, search, composition, assignment, and routing | 44 | passed |
+| structured representation, supervision, trajectory, service, and export | 58 | passed |
+| independent benchmarks and supervision/provenance diagnostics | 22 | passed |
+| **Total** | **169** | **passed** |
 
 The tests cover zero-priority replay safety, probability preservation in the
 C51 projection, legal masking, graph-reference GAE, held-out evaluation
@@ -31,6 +28,11 @@ to action-index mapping, training-only observation normalization, required
 actor provenance, interleaved split routing, auxiliary validation, and
 policy-versioned validation metrics. A loopback HTTP test exercises model
 creation and interleaved experience ingestion through the public endpoint.
+Exact-solver tests cover maximum-cardinality task assignment, optional
+total-utility assignment with a zero-utility unassigned alternative, declared
+task capacities, declared utility, seeded assignment ties, positive route
+costs, multiple destinations, caller-ordered route ties, source-as-target, and
+unreachable certificates.
 The plugin matrix performs a finite update, masked inference, and state-dict
 round trip for every built-in algorithm. Dedicated tests cover QR-DQN return
 quantiles and CVaR scoring, finite categorical-SAC masked entropy, exact QUBO
@@ -360,6 +362,45 @@ checkpoints the learned entity/candidate transformer. A frozen
 candidate logits while beginning at update and policy version zero. BC0 passes;
 this validates the generic imitation and initialization contract, not expert
 quality or downstream return.
+
+The reusable policy-metrics accumulator reproduces prefix conditioning before
+computing raw and sample-weighted accuracy, NLL, and entropy for overall,
+source, factor, and target groups. The deterministic stratified selector caps
+each declared semantic group by a seeded SHA-256 rank, is independent of input
+order, and fingerprints the exact selected records.
+
+## Candidate-conditioned relational supervision
+
+`RelationalSupervision-v1` contains six workers and six shuffled destinations.
+Each worker and its destination share an identity feature; each factor asks
+for the first Manhattan move toward that worker's destination. Validation uses
+64 unseen worlds. Under the same seed, minibatch sequence, 1,500 updates, and
+width-32 one-layer encoder, pooled context reaches 98.4375% validation
+accuracy and one candidate-to-entity attention block reaches 100%. The report
+SHA-256 is
+`8d363385d590c3294f1af62b8d790ee83e047d8f7335327d2a160d7d5028d7aa`.
+The 1.5625-point difference establishes functionality, not a general
+sample-efficiency claim; application-level fit still requires a separate
+frozen comparison.
+
+## Teacher-provenance diagnostics
+
+Five source-audit tests establish that Python policy text is parsed without
+execution, a 64-entry action table returned through an observation-derived
+step is reported, a small ordinary state lookup is not misclassified, opaque
+embedded payloads require review, and controlled counterfactual outcomes are
+summarized separately from source evidence. Four supervision-diagnostic tests
+also distinguish contradictory labels on identical model inputs from labels
+that merely repeat at the same timestep.
+
+The time-dependence report pairs different episodes by timestep and factor.
+It counts only pairs whose exact structured model-input fingerprint differs,
+then reports time-only target accuracy and the number of cells in which the
+semantic target changes. No response is labelled "open-loop compatible," not
+"open loop": a correct policy may choose the same action in many states.
+Source evidence or predeclared counterfactual probes are therefore required
+for a teacher-selection decision. Jormungandr supplies the generic evidence;
+the application owns policy loading, intervention semantics, and thresholds.
 
 ## Conditional supervision-sampling gate
 

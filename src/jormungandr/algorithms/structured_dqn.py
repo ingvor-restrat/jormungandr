@@ -58,6 +58,10 @@ class StructuredDQNAgent:
             layers=layers,
             feedforward_dim=feedforward,
             dropout=max(0.0, float(cfg(config, "structured_dropout", 0.0))),
+            candidate_attention_layers=max(
+                0,
+                int(cfg(config, "structured_candidate_attention_layers", 0)),
+            ),
         ).to(self.device)
         self.q_target = deepcopy(self.q).to(self.device)
         self.q_target.eval()

@@ -16,6 +16,9 @@ from jormungandr.structured import (
 
 
 STRUCTURED_SUPERVISION_SCHEMA = "jormungandr.structured_supervision.v1"
+STRUCTURED_SUPERVISION_FRAME_SCHEMA = (
+    "jormungandr.structured_supervision_frame.v1"
+)
 
 
 @dataclass(frozen=True)
@@ -134,6 +137,157 @@ class StructuredSupervisionExample:
         object.__setattr__(self, "metadata", dict(self.metadata))
 
 
+@dataclass(frozen=True)
+class StructuredSupervisionLabel:
+    """One factor label within a shared-observation supervision frame."""
+
+    factor_id: str
+    candidate_ids: tuple[str, ...]
+    target_candidate_id: str
+    selected_prefix_candidate_ids: tuple[str, ...] = ()
+    factor_group: str = "default"
+    target_group: str = "default"
+    balance_group: str = ""
+    sample_weight: float = 1.0
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        factor = str(self.factor_id).strip()
+        candidates = tuple(str(value).strip() for value in self.candidate_ids)
+        target = str(self.target_candidate_id).strip()
+        prefix = tuple(
+            str(value).strip() for value in self.selected_prefix_candidate_ids
+        )
+        if not factor or not candidates or any(not value for value in candidates):
+            raise ValueError("frame label factor and candidates are required")
+        if len(set(candidates)) != len(candidates):
+            raise ValueError("frame label candidate IDs must be unique")
+        if target not in candidates:
+            raise ValueError("frame label target must be one of its candidates")
+        if any(not value for value in prefix) or len(set(prefix)) != len(prefix):
+            raise ValueError("frame label prefix IDs must be nonempty and unique")
+        if set(prefix).intersection(candidates):
+            raise ValueError("frame label prefix must precede its factor")
+        factor_group = str(self.factor_group).strip()
+        target_group = str(self.target_group).strip()
+        balance_group = str(self.balance_group).strip() or target_group
+        if not factor_group or not target_group or not balance_group:
+            raise ValueError("frame label factor, target, and balance groups are required")
+        weight = float(self.sample_weight)
+        if not math.isfinite(weight) or weight <= 0.0:
+            raise ValueError("frame label sample weight must be finite and positive")
+        object.__setattr__(self, "factor_id", factor)
+        object.__setattr__(self, "candidate_ids", candidates)
+        object.__setattr__(self, "target_candidate_id", target)
+        object.__setattr__(self, "selected_prefix_candidate_ids", prefix)
+        object.__setattr__(self, "factor_group", factor_group)
+        object.__setattr__(self, "target_group", target_group)
+        object.__setattr__(self, "balance_group", balance_group)
+        object.__setattr__(self, "sample_weight", weight)
+        object.__setattr__(self, "metadata", dict(self.metadata))
+
+
+@dataclass(frozen=True)
+class StructuredSupervisionFrame:
+    """Several factor labels sharing one structured model input.
+
+    This is a storage and compute normalization only. Each label retains its
+    own conditional candidate set, prefix, reporting groups, and loss weight.
+    """
+
+    actor_id: str
+    episode_id: str
+    timestep: int
+    observation: EntityCandidateObservation
+    labels: tuple[StructuredSupervisionLabel, ...]
+    split: str = "train"
+    source_group: str = "default"
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        actor = str(self.actor_id).strip()
+        episode = str(self.episode_id).strip()
+        labels = tuple(self.labels)
+        if not actor or not episode or int(self.timestep) < 0:
+            raise ValueError("frame actor, episode, and non-negative timestep are required")
+        if not labels:
+            raise ValueError("a supervision frame requires at least one label")
+        if len({value.factor_id for value in labels}) != len(labels):
+            raise ValueError("supervision frame factor IDs must be unique")
+        observation_candidates = set(self.observation.candidate_ids)
+        legal_candidates = {
+            candidate_id
+            for candidate_id, legal in zip(
+                self.observation.candidate_ids,
+                self.observation.legal_action_mask,
+                strict=True,
+            )
+            if bool(legal)
+        }
+        for label in labels:
+            if not set(label.candidate_ids).issubset(observation_candidates):
+                raise ValueError("frame label candidates are absent from observation")
+            if not set(label.candidate_ids).issubset(legal_candidates):
+                raise ValueError("frame label contains an illegal candidate")
+            if not set(label.selected_prefix_candidate_ids).issubset(
+                observation_candidates
+            ):
+                raise ValueError("frame label prefix is absent from observation")
+            if not set(label.selected_prefix_candidate_ids).issubset(
+                legal_candidates
+            ):
+                raise ValueError("frame label prefix contains an illegal candidate")
+        split = "validation" if str(self.split) == "val" else str(self.split).strip()
+        if split not in {"train", "validation"}:
+            raise ValueError("frame split must be train or validation")
+        source_group = str(self.source_group).strip()
+        if not source_group:
+            raise ValueError("frame source group is required")
+        object.__setattr__(self, "actor_id", actor)
+        object.__setattr__(self, "episode_id", episode)
+        object.__setattr__(self, "timestep", int(self.timestep))
+        object.__setattr__(self, "labels", labels)
+        object.__setattr__(self, "split", split)
+        object.__setattr__(self, "source_group", source_group)
+        object.__setattr__(self, "metadata", dict(self.metadata))
+
+    @property
+    def label_count(self) -> int:
+        return len(self.labels)
+
+
+def structured_supervision_examples_from_frame(
+    frame: StructuredSupervisionFrame,
+) -> tuple[StructuredSupervisionExample, ...]:
+    """Expand a shared-observation frame into its semantic label records.
+
+    The returned examples all retain the same observation object.  This is a
+    reporting and compatibility view; callers can still score the observation
+    once and reuse that score for every label in the frame.
+    """
+
+    return tuple(
+        StructuredSupervisionExample(
+            actor_id=frame.actor_id,
+            episode_id=frame.episode_id,
+            timestep=frame.timestep,
+            observation=frame.observation,
+            factor_id=label.factor_id,
+            candidate_ids=label.candidate_ids,
+            target_candidate_id=label.target_candidate_id,
+            selected_prefix_candidate_ids=label.selected_prefix_candidate_ids,
+            split=frame.split,
+            source_group=frame.source_group,
+            factor_group=label.factor_group,
+            target_group=label.target_group,
+            balance_group=label.balance_group,
+            sample_weight=label.sample_weight,
+            metadata={**dict(frame.metadata), **dict(label.metadata)},
+        )
+        for label in frame.labels
+    )
+
+
 def structured_supervision_balance_weights(
     examples: Sequence[StructuredSupervisionExample],
     *,
@@ -148,17 +302,37 @@ def structured_supervision_balance_weights(
     """
 
     items = tuple(examples)
-    power = float(exponent)
     if not items:
         raise ValueError("at least one supervision example is required")
+    counts = Counter(item.balance_group for item in items)
+    return structured_supervision_balance_weights_from_counts(
+        counts, exponent=exponent
+    )
+
+
+def structured_supervision_balance_weights_from_counts(
+    counts: Mapping[str, int],
+    *,
+    exponent: float = 0.5,
+) -> Mapping[str, float]:
+    """Return mean-one inverse-frequency weights from frozen class counts."""
+
+    normalized = {str(group).strip(): int(count) for group, count in counts.items()}
+    power = float(exponent)
+    if not normalized or any(not group for group in normalized):
+        raise ValueError("supervision balance counts require named groups")
+    if any(count <= 0 for count in normalized.values()):
+        raise ValueError("supervision balance counts must be positive")
     if not 0.0 <= power <= 1.0:
         raise ValueError("supervision balance exponent must be in [0, 1]")
-    counts = Counter(item.balance_group for item in items)
-    total = len(items)
+    total = sum(normalized.values())
     raw = {
-        group: (total / count) ** power for group, count in counts.items()
+        group: (total / count) ** power
+        for group, count in normalized.items()
     }
-    normalization = sum(raw[item.balance_group] for item in items) / total
+    normalization = sum(
+        raw[group] * count for group, count in normalized.items()
+    ) / total
     return {
         group: float(value / normalization)
         for group, value in sorted(raw.items())
@@ -185,6 +359,61 @@ def apply_structured_supervision_balance_weights(
     return tuple(
         replace(item, sample_weight=float(weights[item.balance_group]))
         for item in items
+    )
+
+
+def structured_supervision_frame_balance_weights(
+    frames: Sequence[StructuredSupervisionFrame],
+    *,
+    exponent: float = 0.5,
+) -> Mapping[str, float]:
+    """Return mean-one inverse-frequency weights across frame labels.
+
+    Frames are deliberately retained as the unit of observation storage and
+    model execution.  Only their lightweight labels are counted here.
+    """
+
+    items = tuple(frames)
+    if not items:
+        raise ValueError("at least one supervision frame is required")
+    counts = Counter(
+        label.balance_group for frame in items for label in frame.labels
+    )
+    return structured_supervision_balance_weights_from_counts(
+        counts, exponent=exponent
+    )
+
+
+def apply_structured_supervision_frame_balance_weights(
+    frames: Sequence[StructuredSupervisionFrame],
+    weights: Mapping[str, float],
+) -> tuple[StructuredSupervisionFrame, ...]:
+    """Apply training-derived class weights while preserving shared frames."""
+
+    items = tuple(frames)
+    missing = {
+        label.balance_group
+        for frame in items
+        for label in frame.labels
+        if label.balance_group not in weights
+    }
+    if missing:
+        raise ValueError(
+            "supervision contains unseen balance groups: "
+            + ", ".join(sorted(missing))
+        )
+    return tuple(
+        replace(
+            frame,
+            labels=tuple(
+                replace(
+                    label,
+                    sample_weight=float(weights[label.balance_group]),
+                )
+                for label in frame.labels
+            ),
+        )
+        for frame in items
     )
 
 
@@ -248,5 +477,96 @@ def structured_supervision_from_payload(
         target_group=str(payload.get("target_group", "default")),
         balance_group=str(payload.get("balance_group", "")),
         sample_weight=float(payload.get("sample_weight", 1.0)),
+        metadata=metadata,
+    )
+
+
+def structured_supervision_frame_to_payload(
+    frame: StructuredSupervisionFrame,
+) -> dict[str, Any]:
+    """Encode a shared-observation frame as one JSON-compatible object."""
+
+    return {
+        "schema": STRUCTURED_SUPERVISION_FRAME_SCHEMA,
+        "actor_id": frame.actor_id,
+        "episode_id": frame.episode_id,
+        "timestep": frame.timestep,
+        "split": frame.split,
+        "source_group": frame.source_group,
+        "observation": entity_candidate_observation_to_payload(frame.observation),
+        "labels": [
+            {
+                "factor_id": label.factor_id,
+                "candidate_ids": list(label.candidate_ids),
+                "target_candidate_id": label.target_candidate_id,
+                "selected_prefix_candidate_ids": list(
+                    label.selected_prefix_candidate_ids
+                ),
+                "factor_group": label.factor_group,
+                "target_group": label.target_group,
+                "balance_group": label.balance_group,
+                "sample_weight": label.sample_weight,
+                "metadata": dict(label.metadata),
+            }
+            for label in frame.labels
+        ],
+        "metadata": dict(frame.metadata),
+    }
+
+
+def structured_supervision_frame_from_payload(
+    payload: Mapping[str, Any],
+    *,
+    spec: StructuredPolicySpec | None = None,
+) -> StructuredSupervisionFrame:
+    """Validate and decode one shared-observation supervision frame."""
+
+    if not isinstance(payload, Mapping):
+        raise ValueError("structured supervision frame must be an object")
+    if payload.get("schema") != STRUCTURED_SUPERVISION_FRAME_SCHEMA:
+        raise ValueError(
+            "structured supervision frame schema must be "
+            f"{STRUCTURED_SUPERVISION_FRAME_SCHEMA!r}"
+        )
+    raw_labels = payload.get("labels", ())
+    if not isinstance(raw_labels, Sequence) or isinstance(
+        raw_labels, (str, bytes, bytearray)
+    ):
+        raise ValueError("structured supervision frame labels must be a sequence")
+    labels = []
+    for raw in raw_labels:
+        if not isinstance(raw, Mapping):
+            raise ValueError("structured supervision frame label must be an object")
+        metadata = raw.get("metadata", {})
+        if not isinstance(metadata, Mapping):
+            raise ValueError("structured supervision frame label metadata must be an object")
+        labels.append(
+            StructuredSupervisionLabel(
+                factor_id=str(raw.get("factor_id", "")),
+                candidate_ids=tuple(raw.get("candidate_ids", ())),
+                target_candidate_id=str(raw.get("target_candidate_id", "")),
+                selected_prefix_candidate_ids=tuple(
+                    raw.get("selected_prefix_candidate_ids", ())
+                ),
+                factor_group=str(raw.get("factor_group", "default")),
+                target_group=str(raw.get("target_group", "default")),
+                balance_group=str(raw.get("balance_group", "")),
+                sample_weight=float(raw.get("sample_weight", 1.0)),
+                metadata=metadata,
+            )
+        )
+    metadata = payload.get("metadata", {})
+    if not isinstance(metadata, Mapping):
+        raise ValueError("structured supervision frame metadata must be an object")
+    return StructuredSupervisionFrame(
+        actor_id=str(payload.get("actor_id", "")),
+        episode_id=str(payload.get("episode_id", "")),
+        timestep=int(payload.get("timestep", -1)),
+        observation=entity_candidate_observation_from_payload(
+            payload.get("observation", {}), spec=spec
+        ),
+        labels=tuple(labels),
+        split=str(payload.get("split", "train")),
+        source_group=str(payload.get("source_group", "default")),
         metadata=metadata,
     )

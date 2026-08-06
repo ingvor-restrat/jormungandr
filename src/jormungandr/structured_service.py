@@ -24,6 +24,10 @@ from jormungandr.structured import (
     StructuredPolicySpec,
     entity_candidate_observation_from_payload,
 )
+from jormungandr.structured_checkpoint import (
+    STRUCTURED_CHECKPOINT_SCHEMA,
+    structured_checkpoint_payload,
+)
 from jormungandr.structured_replay import (
     StructuredPrioritizedReplayBuffer,
     StructuredReplayTransition,
@@ -382,7 +386,7 @@ class StructuredServiceManager:
             payload = torch.load(path, map_location=config.device, weights_only=False)
             if not isinstance(payload, Mapping):
                 raise ValueError("structured checkpoint must contain an object")
-            if payload.get("schema") != "jormungandr.structured_checkpoint.v1":
+            if payload.get("schema") != STRUCTURED_CHECKPOINT_SCHEMA:
                 raise ValueError("unsupported structured checkpoint schema")
             saved_representation = payload.get("representation")
             if not isinstance(saved_representation, Mapping):
@@ -420,7 +424,7 @@ class StructuredServiceManager:
                 path, map_location=config.device, weights_only=False
             )
             if not isinstance(payload, Mapping) or payload.get("schema") != (
-                "jormungandr.structured_checkpoint.v1"
+                STRUCTURED_CHECKPOINT_SCHEMA
             ):
                 raise ValueError("unsupported structured policy initialization")
             saved_representation = payload.get("representation")
@@ -1258,20 +1262,17 @@ class StructuredServiceManager:
             with record.lock:
                 updates = record.updates
                 policy_version = record.policy_version
-                payload = {
-                    "schema": "jormungandr.structured_checkpoint.v1",
-                    "model_id": record.model_id,
-                    "representation": asdict(record.spec),
-                    "plugin": {
-                        "name": record.plugin.name,
-                        "version": record.plugin.version,
-                    },
-                    "config": asdict(record.config),
-                    "updates": updates,
-                    "policy_version": policy_version,
-                    "metadata": dict(record.metadata),
-                    "agent": record.agent.state_dict(),
-                }
+                payload = structured_checkpoint_payload(
+                    model_id=record.model_id,
+                    representation=record.spec,
+                    plugin_name=record.plugin.name,
+                    plugin_version=record.plugin.version,
+                    agent_state=record.agent.state_dict(),
+                    config=asdict(record.config),
+                    updates=updates,
+                    policy_version=policy_version,
+                    metadata=record.metadata,
+                )
             path = (
                 Path(record.config.checkpoint_dir)
                 / f"ckpt_u{updates:09d}_v{policy_version:09d}.pt"

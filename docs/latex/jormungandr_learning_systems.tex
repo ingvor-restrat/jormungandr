@@ -1100,6 +1100,50 @@ counters at zero.  BC0 therefore validates reward-free semantic imitation and
 the BC-to-PPO handoff; it does not establish that a demonstration source is
 optimal or that imitation improves terminal return.
 
+Teacher provenance is checked separately from learnability. A non-executing
+Python source audit records source hashes, large literal tables, opaque
+embedded payloads, and output lookups indexed by an observation-derived turn.
+It reports a mechanism rather than declaring every schedule invalid. A second
+diagnostic pairs supervision from distinct episodes by timestep and factor,
+requires the exact numeric model input to differ, and measures whether the
+semantic target changes. A third summary accepts only input and decision
+fingerprints from application-owned counterfactual interventions. Thus
+\JORM{} can expose trace-compatible teachers without importing a simulator or
+pretending that an unchanged action proves state independence.
+
+Two exact, domain-neutral ``calculation friends'' provide a narrower boundary
+than asking a policy to approximate deterministic combinatorics.  The first
+solves a caller-declared bipartite assignment exactly.  It can maximize
+assignment cardinality and then declared utility, or maximize total declared
+utility while treating an unassigned worker and task as zero utility; the
+latter omits zero- and negative-improvement optional work.  Caller-declared
+positive task capacities default to one and permit several workers to share
+one logical task without copying numbered slots; worker capacity remains one.
+The second applies Dijkstra's algorithm
+to caller-declared positive-cost directed edges and returns a node path plus
+semantic action identifiers.  Assignment ties use a recorded seed and route
+ties use input edge order.  \JORM{} does not invent tasks, feasibility edges,
+costs, traversability, or action meanings; those remain application inputs.
+Unassigned and unreachable results are explicit and serializable.  These
+solvers can therefore sit below a learned task or target choice without
+silently replacing an already sampled policy action.
+
+The structured transformer can optionally apply candidate-to-entity
+cross-attention after the entity encoder.  A candidate first incorporates its
+declared entity pointers and then queries the masked encoded global/entity set.
+Thus a worker-relative candidate need not recover every worker--target relation
+from one pooled global token.  The same option is accepted by structured BC,
+PPO, and DQN; zero layers remains the checkpoint-compatible default.
+
+A streaming metrics accumulator applies the exact selected-prefix correction
+before reporting raw and weighted accuracy, negative log likelihood, and
+entropy by source, factor, and semantic target.  A seeded SHA-256 selector
+also produces input-order-independent, capped diagnostic subsets with an exact
+receipt.  In a six-worker synthetic routing control with unseen validation
+worlds and matched minibatches, pooled context reaches 98.4375\% and one
+candidate-attention block reaches 100\%.  The 1.5625-point difference verifies
+the mechanism; it is not a broad sample-efficiency claim.
+
 \subsection{Conditional supervision-sampling diagnostic}
 
 \texttt{ConditionalSupervisionSampling-v0} removes policy capacity and domain
@@ -1292,7 +1336,8 @@ joint-trajectory ingress, policy-lag checks, exact conditional-log-probability
 PPO, reward-free weighted structured supervision, conditional balance groups,
 importance-resampled supervision batches, direct BC-to-PPO policy
 initialization, structured checkpointing and inference bundles, recent learner
-history, external held-out metrics, and TensorBoard persistence.
+history, external held-out metrics, source/time-dependence/counterfactual
+teacher-provenance diagnostics, and TensorBoard persistence.
 Complete joint trajectories may use either the original step-array wire or a
 de-duplicated observation-chain sequence with transparent gzip request
 compression.
@@ -1333,7 +1378,7 @@ turn.  Exact masks remain environment inputs.  The additive prefix summary
 conditions choices within one turn; temporal memory across turns requires
 recurrent state.
 
-The recorded functional suite contains 116 passing cases.  It includes direct
+The recorded functional suite contains 169 passing cases.  It includes direct
 finite updates and state round trips for every built-in, C51 projection and
 mask checks, graph-reference GAE, validation isolation, HTTP ingress, masked
 SAC entropy, QR-DQN tail output, QUBO cardinality and fragment audit, checkpoint
@@ -1345,7 +1390,11 @@ policy-lag/duplicate/order rejection, structured export, supervised split
 isolation, semantic candidate permutation, conditional balance compatibility,
 importance-sampling objective checks, BC-to-PPO initialization, the seeded
 online comparisons, critic-backbone isolation, transactional joint-ratio
-rollback and backoff, the structured PPO safety gate, and artifact manifests.  A
+rollback and backoff, the structured PPO safety gate, and artifact manifests.
+The exact-calculation cases additionally verify cardinality-first assignment,
+optional total-utility assignment, declared utility and seeded ties,
+positive task capacities, positive-cost shortest routes, caller-ordered route
+ties, multiple targets, source-as-target, and unreachable certificates. A
 separate threaded matrix gave every built-in eight mask-aware transitions;
 each completed an update, checkpoint, TorchScript export, restore, and masked
 inference.
