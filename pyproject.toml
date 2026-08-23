@@ -27,6 +27,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "build>=1.2",
+    "gymnasium>=1.1,<2",
     "pytest>=8.0",
 ]
 record = [
@@ -40,6 +41,11 @@ benchmark = [
 ]
 optimization = [
     "scipy>=1.11,<2",
+]
+onnx = [
+    "onnx>=1.16",
+    "onnxruntime>=1.18",
+    "onnxscript>=0.2",
 ]
 
 [project.scripts]

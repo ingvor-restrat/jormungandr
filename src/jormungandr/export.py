@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import datetime as _dt
+import hashlib
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
@@ -472,7 +474,12 @@ class _ObsNormalizeModule(torch.nn.Module):
         return self.module((obs - self.mean) / self.std)
 
 
-def _script_module(agent: Any, module: str, *, obs_normalizer: Optional[Mapping[str, Any]] = None):
+def _resolve_torch_module(
+    agent: Any,
+    module: str,
+    *,
+    obs_normalizer: Optional[Mapping[str, Any]] = None,
+) -> torch.nn.Module:
     if hasattr(agent, "export_module"):
         torch_module = agent.export_module(module)
     elif module == "policy":
@@ -497,7 +504,168 @@ def _script_module(agent: Any, module: str, *, obs_normalizer: Optional[Mapping[
             std=obs_normalizer.get("std", []),
         )
     torch_module.eval()
-    return torch.jit.script(torch_module)
+    return torch_module
+
+
+def _script_module(
+    agent: Any,
+    module: str,
+    *,
+    obs_normalizer: Optional[Mapping[str, Any]] = None,
+):
+    return torch.jit.script(
+        _resolve_torch_module(
+            agent,
+            module,
+            obs_normalizer=obs_normalizer,
+        )
+    )
+
+
+def _tensor_outputs(value: Any) -> list[torch.Tensor]:
+    if isinstance(value, torch.Tensor):
+        return [value]
+    if isinstance(value, (tuple, list)) and all(
+        isinstance(item, torch.Tensor) for item in value
+    ):
+        return list(value)
+    raise ValueError("ONNX export module must return a tensor or tensor tuple")
+
+
+def export_onnx_from_checkpoint(
+    checkpoint_path: str,
+    out_path: str,
+    module: str = "auto",
+    metadata_path: Optional[str] = None,
+    *,
+    opset_version: int = 18,
+    parity_rows: int = 16,
+    atol: float = 1e-5,
+    rtol: float = 1e-4,
+) -> JsonDict:
+    """Export fixed-vector inference and publish only after ORT parity passes."""
+
+    try:
+        import onnx  # noqa: F401
+        import onnxruntime as ort
+        import onnxscript  # noqa: F401
+    except ImportError as exc:
+        raise RuntimeError(
+            "ONNX export requires the optional 'onnx' dependencies: "
+            "pip install 'jormungandr-rl[onnx]'"
+        ) from exc
+
+    ckpt = _load_checkpoint(checkpoint_path)
+    spec = _checkpoint_spec_from_payload(checkpoint_path, ckpt)
+    agent = _build_agent_from_checkpoint(ckpt, spec=spec, device="cpu")
+    obs_normalizer = _obs_normalizer_from_checkpoint(ckpt, spec.obs_dim)
+    resolved_module = _resolve_module(spec.algo, module)
+    torch_module = _resolve_torch_module(
+        agent,
+        resolved_module,
+        obs_normalizer=obs_normalizer,
+    )
+    rng = np.random.default_rng(17)
+    sample_np = rng.standard_normal(
+        (max(1, int(parity_rows)), int(spec.obs_dim))
+    ).astype(np.float32)
+    sample = torch.from_numpy(sample_np)
+    with torch.no_grad():
+        expected = [
+            item.detach().cpu().numpy()
+            for item in _tensor_outputs(torch_module(sample))
+        ]
+    output_names = (
+        ["q_logits", "aux_logits"]
+        if len(expected) == 2 and resolved_module == "heads"
+        else [f"output_{index}" for index in range(len(expected))]
+    )
+
+    out_file = Path(out_path).expanduser().resolve()
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+    temporary = out_file.with_suffix(out_file.suffix + ".pending")
+    temporary.unlink(missing_ok=True)
+    try:
+        torch.onnx.export(
+            torch_module,
+            (sample,),
+            str(temporary),
+            export_params=True,
+            opset_version=int(opset_version),
+            do_constant_folding=True,
+            input_names=["obs"],
+            output_names=output_names,
+            dynamic_axes={
+                "obs": {0: "batch"},
+                **{name: {0: "batch"} for name in output_names},
+            },
+        )
+        session = ort.InferenceSession(
+            str(temporary), providers=["CPUExecutionProvider"]
+        )
+        observed = session.run(output_names, {"obs": sample_np})
+        parity_outputs = []
+        parity_passed = len(observed) == len(expected)
+        for name, wanted, actual in zip(
+            output_names, expected, observed, strict=True
+        ):
+            absolute = np.abs(wanted - actual)
+            denominator = np.maximum(np.abs(wanted), float(atol))
+            row = {
+                "name": name,
+                "max_abs_error": float(np.max(absolute, initial=0.0)),
+                "max_rel_error": float(
+                    np.max(absolute / denominator, initial=0.0)
+                ),
+                "shape": list(actual.shape),
+            }
+            parity_outputs.append(row)
+            parity_passed = parity_passed and bool(
+                np.allclose(wanted, actual, atol=float(atol), rtol=float(rtol))
+            )
+        if not parity_passed:
+            raise RuntimeError(
+                "ONNX output does not match PyTorch within the configured tolerances; export was not published"
+            )
+        os.replace(temporary, out_file)
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise
+
+    artifact_sha256 = hashlib.sha256(out_file.read_bytes()).hexdigest()
+    info: JsonDict = {
+        "ok": True,
+        "format": "jormungandr.onnx_artifact.v1",
+        "checkpoint": str(Path(checkpoint_path).expanduser().resolve()),
+        "onnx": str(out_file),
+        "sha256": artifact_sha256,
+        "algo": spec.algo,
+        "module": resolved_module,
+        "opset_version": int(opset_version),
+        "obs_dim": int(spec.obs_dim),
+        "input": {"name": "obs", "dtype": "float32", "shape": ["N", spec.obs_dim]},
+        "outputs": output_names,
+        "preprocessing": {
+            **_obs_normalizer_summary(obs_normalizer),
+            "embedded_in_artifact": bool(obs_normalizer),
+        },
+        "parity": {
+            "passed": True,
+            "rows": int(sample_np.shape[0]),
+            "atol": float(atol),
+            "rtol": float(rtol),
+            "outputs": parity_outputs,
+        },
+    }
+    meta_file = (
+        Path(metadata_path).expanduser().resolve()
+        if metadata_path
+        else out_file.with_suffix(out_file.suffix + ".meta.json")
+    )
+    meta_file.parent.mkdir(parents=True, exist_ok=True)
+    meta_file.write_text(json.dumps(info, indent=2) + "\n", encoding="utf-8")
+    info["metadata"] = str(meta_file)
+    return info
 
 
 def _cxx_escape(s: str) -> str:
@@ -648,7 +816,10 @@ def export_inference_bundle(
 
     manifest: JsonDict = {
         "format": "jormungandr.inference_bundle.v1",
-        "exported_at_utc": _dt.datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+        "exported_at_utc": _dt.datetime.now(_dt.timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z"),
         "source": {
             "checkpoint": str(Path(checkpoint_path).expanduser().resolve()),
             "style": spec.style,

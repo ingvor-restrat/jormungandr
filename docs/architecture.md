@@ -270,16 +270,38 @@ Feature-map auxiliary inference uses a stable `feature_keys` order stored in
 model metadata. Checkpoints preserve that order and the observation
 normalizer.
 
-Vector models serve through a process-local `ReplicatedInferencePool`. Startup
-configuration declares the permitted CPU/CUDA devices and replica count.
-Requests enter one compatibility-aware dynamic-batch queue, while replica
-workers execute independently of the optimizer lock. Every replica has active
-and standby agents. A refresh copies the authoritative learner state (without
-optimizer slots) into all standby agents, synchronizes affected CUDA devices,
-and flips the complete fleet to one policy version under replica locks. In-flight
-requests may finish on the preceding version; no request observes partially
-loaded weights. Pool placement, queue depth, versions, batch counts, and refresh
-latency are exposed in model runtime telemetry.
+Vector and structured models serve through the same process-local
+`ReplicatedInferencePool`. With no explicit hardware settings, the runtime
+probes visible accelerators, follows the resolved model device, falls back to
+CPU, and allocates no more than the configured automatic cap. Explicit device
+and replica settings remain available for reproducible or memory-constrained
+deployments. Automatic placement works with CPU and any GPUs visible to the
+process.
+
+Requests that share the same model and input settings enter one dynamic-batch
+queue, while replica workers execute independently of the optimizer lock. C51,
+QR-DQN, and the scalar value family process an entire formed batch in one
+network call. An online tuner measures item throughput and tries a limited set
+of batch delays and active-replica counts. Replica allocation stays fixed,
+so tuning reuses the existing replicas and every choice is reversible. Runtime
+statistics expose the measured choices and current setting.
+
+Every replica keeps a current serving copy and a spare copy. A refresh copies
+the learner's model weights into every spare copy while optimizer state stays
+with the learner. It synchronizes affected CUDA devices and switches all
+replicas to the new policy version together. In-flight requests may finish on
+the preceding version. Every request sees one completely loaded version.
+On-policy structured models
+refresh every update so a zero policy-lag contract remains satisfiable;
+high-rate off-policy models refresh less often. Model status reports device
+placement, queue depth, versions, batch counts, and refresh latency.
+
+The v1 fixed-vector model may optionally declare
+`jormungandr.windowed_observation.v1`. It assigns shapes to windowed `x` and
+application `state`, validates them independently, and flattens them in the
+declared `[x, state]` order before normalization. Flat observations of the
+same total width remain accepted. The layout supplies dimensions and flatten
+order; the actor and selected algorithm define the window's temporal meaning.
 
 ## Artifact plane
 
@@ -289,7 +311,7 @@ feature keys, learner update, selector identity, and policy version. The outer
 format remains `jormungandr.checkpoint.v1`, so existing C51 artifacts and the
 new plugin payloads use one lifecycle envelope.
 
-The exporter produces:
+The bundle exporter produces:
 
 ```text
 manifest.json
@@ -304,6 +326,21 @@ internal artifacts can be migrated.
 Structured plugins use `jormungandr.structured_inference_bundle.v1`, containing
 the feature-width schema, plugin identity/version, agent construction config,
 hashed policy state, and the semantic row-alignment contract.
+
+Fixed-vector checkpoints may also request background ONNX export. A single
+export worker retains the newest waiting checkpoint while an export is
+active. The normalizer is embedded, batch dimension `N` is dynamic, and the
+ONNX Runtime comparison checks PyTorch outputs against declared absolute and
+relative tolerances before publishing the file. Model status reports export
+failures, including a missing optional ONNX runtime, while the learner
+continues running.
+
+The fixed-vector HTTP API additionally supports the checked-in
+Jormungandr FIX SBE schema. JSON/gzip represents variable-size structured
+messages with nested semantic IDs and lists of different lengths. The server
+checks compressed and expanded size limits separately before parsing JSON.
+The [SBE protocol guide](sbe.md) records the binary message layout and schema
+compatibility rules.
 
 Replay contents and validation contents are not checkpointed. A restored
 learner resumes model, optimizer, version, and preprocessing state but actors

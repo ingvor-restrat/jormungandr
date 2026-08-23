@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 
-from jormungandr.core import C51Agent, PrioritizedReplayBuffer
+from jormungandr.core import C51Agent, PrioritizedReplayBuffer, PriorityIndex
 from jormungandr.policy import (
     GraphTrajectoryBuffer,
     GraphTrajectoryStep,
@@ -41,6 +41,35 @@ def test_prioritized_replay_keeps_zero_updates_sampleable() -> None:
     assert idxs.shape == (4,)
     assert np.isfinite(weights).all()
     assert (replay.priorities[:4] > 0.0).all()
+
+
+def test_priority_index_tracks_updates_and_samples_only_positive_mass() -> None:
+    index = PriorityIndex(8)
+    index.set(2, 1.0)
+    index.set(5, 3.0)
+    assert index.total == 4.0
+    assert set(index.sample(128).tolist()).issubset({2, 5})
+
+    index.set(2, 0.0)
+    assert index.total == 3.0
+    assert set(index.sample(32).tolist()) == {5}
+
+
+def test_replay_sum_tree_survives_ring_overwrite_and_roundtrip() -> None:
+    replay = PrioritizedReplayBuffer(capacity=3, obs_dim=1, alpha=0.6)
+    for value in range(5):
+        replay.add([value], 0, 0.0, [value + 1], False)
+    replay.update_priorities(
+        np.asarray([0, 1, 2]), np.asarray([0.1, 10.0, 0.1])
+    )
+    sampled = replay.sample(256, beta=0.4)[1]
+    assert np.count_nonzero(sampled == 1) > np.count_nonzero(sampled == 0)
+
+    restored = PrioritizedReplayBuffer.load(replay.state_dict())
+    sampled_restored = restored.sample(256, beta=0.4)[1]
+    assert np.count_nonzero(sampled_restored == 1) > np.count_nonzero(
+        sampled_restored == 2
+    )
 
 
 def test_c51_projection_preserves_probability_at_exact_atoms() -> None:

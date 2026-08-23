@@ -4,7 +4,12 @@ from concurrent.futures import ThreadPoolExecutor
 
 import torch
 
-from jormungandr.inference_pool import InferencePoolConfig, ReplicatedInferencePool
+from jormungandr.inference_pool import (
+    InferencePoolConfig,
+    ReplicatedInferencePool,
+    auto_replica_count,
+    resolve_devices,
+)
 from jormungandr.service import JormungandrRuntime
 
 
@@ -61,6 +66,65 @@ def test_pool_batches_requests_and_activates_one_version_across_replicas() -> No
         assert {result.policy_version for result in refreshed} == {7}
     finally:
         pool.close()
+
+
+def test_auto_resources_fall_back_to_cpu_without_hardware_assumptions(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "jormungandr.inference_pool.available_cuda_devices", lambda: []
+    )
+    assert resolve_devices(("auto",), fallback_device="auto") == ("cpu",)
+    assert 1 <= auto_replica_count(("cpu",), max_replicas=3) <= 3
+
+
+def test_pool_can_change_active_replicas_and_batch_wait_at_runtime() -> None:
+    source = ToyAgent("cpu", {"model": {"weight": torch.tensor([[1.0]])}})
+
+    pool = ReplicatedInferencePool(
+        InferencePoolConfig(
+            devices=("cpu",),
+            replicas=2,
+            max_batch_size=8,
+            batch_wait_ms=2.0,
+            auto_tune=False,
+        ),
+        agent_factory=lambda device, state: ToyAgent(device, state),
+        infer_batch=lambda agent, payloads, _metadata: (
+            agent.model(
+                torch.tensor(payloads, dtype=torch.float32, device=agent.device).reshape(-1, 1)
+            )
+            .detach()
+            .cpu()
+            .reshape(-1)
+            .tolist()
+        ),
+    )
+    pool.start(source.state_dict(), policy_version=0)
+    try:
+        pool.configure_runtime(active_replicas=1, batch_wait_ms=0.25)
+        first = pool.snapshot()
+        assert first["active_replica_count"] == 1
+        assert first["batch_wait_ms"] == 0.25
+        assert pool.submit(3.0).value == 3.0
+
+        pool.configure_runtime(active_replicas=2, batch_wait_ms=1.0)
+        second = pool.snapshot()
+        assert second["active_replica_count"] == 2
+        assert second["batch_wait_ms"] == 1.0
+    finally:
+        pool.close()
+
+
+def test_tuner_prefers_latency_and_fewer_replicas_inside_throughput_band() -> None:
+    candidates = [(0.5, 1), (2.0, 2), (0.5, 2)]
+    scores = {
+        (0.5, 1): {"ewma_items_per_s": 970.0},
+        (2.0, 2): {"ewma_items_per_s": 1000.0},
+        (0.5, 2): {"ewma_items_per_s": 980.0},
+    }
+    assert ReplicatedInferencePool.best_tune_candidate(candidates, scores) == (
+        0.5,
+        1,
+    )
 
 
 def test_vector_runtime_routes_policy_calls_through_replicas() -> None:

@@ -10,17 +10,18 @@ jormungandr-service \
   --host 127.0.0.1 \
   --port 8811 \
   --checkpoint-root /tmp/jormungandr-checkpoints \
-  --inference-devices cuda:0 \
-  --inference-replicas 2 \
   --top
 ```
 
 The service starts empty. Models are created through the API because each
 model declares its observation size, discrete action vocabulary, replay
 limits, learner configuration, and validation cadence.
-The service validates configured GPU resources on startup. Replicas are
-assigned round-robin across the declared devices; omit `--inference-devices`
-to serve each model on its learner device.
+With no hardware flags, the service follows the resolved learner device,
+discovers visible resources, applies a conservative replica cap, and tunes the
+active replica count and batch wait online. To pin a reproducible deployment,
+pass, for example, `--inference-devices cuda:0 --inference-replicas 2
+--no-inference-auto-tune`. Configured GPU resources are validated at startup;
+automatic placement works with CPU and any GPUs visible to the process.
 
 ## Create one learner
 
@@ -52,6 +53,11 @@ domain value returned to actors. Use `GET /v1/algorithms` to inspect installed
 plugins. C51 remains available with `"algo":"c51"`; the complete built-in
 matrix and its scope are documented in
 [Algorithm Plugins, Noise, and Return Risk](algorithms.md).
+
+For a windowed input, replace `obs_dim` with an `observation_layout`, for
+example `{"x_shape":[32,8],"state_shape":[4]}`. Actors may then send nested
+`x` and `state` fields or the equivalent flat vector. Jörmungandr records and
+validates the flattening contract with the model and its checkpoints.
 
 ## Interleave train and validation
 
@@ -161,11 +167,20 @@ jormungandr-export export-bundle \
   --checkpoint /path/to/checkpoint.pt \
   --bundle-dir /tmp/jormungandr-bundle \
   --module auto
+jormungandr-export export-onnx \
+  --checkpoint /path/to/checkpoint.pt \
+  --out /tmp/jormungandr-model.onnx \
+  --module auto
 ```
 
 `auto` exports the plugin's declared policy or value module. `heads` exports
 C51 logits and auxiliary logits together. Observation normalization is
 embedded in the TorchScript module when a trained normalizer is present.
+Install `.[onnx]` for ONNX export. ONNX Runtime confirms that its outputs match
+PyTorch before the file is published. For automatic
+checkpoint exports, set
+`"checkpoint_export_onnx":true`; export runs on one background worker and its
+status is visible through the model API while learner updates continue.
 
 ## Compare models
 

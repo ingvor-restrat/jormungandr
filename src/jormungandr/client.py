@@ -9,6 +9,11 @@ from urllib.error import HTTPError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
+from jormungandr.generated_sbe import (
+    decode_policy_infer_response,
+    encode_policy_infer_request,
+)
+
 
 class JormungandrClientError(RuntimeError):
     pass
@@ -77,6 +82,45 @@ class JormungandrClient:
                 else "invalid service response"
             )
         return result
+
+    def infer_policy_sbe(
+        self,
+        model_id: str,
+        obs: Sequence[float],
+        *,
+        deterministic: bool = True,
+        epsilon: float = 0.0,
+        request_id: int = 0,
+    ) -> dict[str, Any]:
+        """Run fixed-vector inference through Jormungandr's SBE endpoint."""
+
+        body = encode_policy_infer_request(
+            obs,
+            deterministic=deterministic,
+            epsilon=epsilon,
+            request_id=request_id,
+        )
+        request = Request(
+            f"{self.base_url}/v1/models/{self._model_path(model_id)}"
+            "/policy/infer-sbe",
+            data=body,
+            headers={"Content-Type": "application/vnd.fixprotocol.sbe"},
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=self.timeout) as response:
+                result = decode_policy_infer_response(response.read())
+        except HTTPError as exc:
+            try:
+                detail = json.loads(exc.read().decode("utf-8"))
+            except Exception:
+                detail = {"error": str(exc)}
+            raise JormungandrClientError(
+                str(detail.get("detail") or detail.get("error") or exc)
+            ) from exc
+        except Exception as exc:
+            raise JormungandrClientError(str(exc)) from exc
+        return dict(result)
 
     @staticmethod
     def _model_path(model_id: str) -> str:

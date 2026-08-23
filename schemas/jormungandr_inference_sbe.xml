@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- GENERATED from schemas/jormungandr_inference_schema.json sha256=f899b6473981d7c28e257f9291172998ea216e54ce5b08e3b2a405eeced4a3de; DO NOT EDIT. -->
+<sbe:messageSchema xmlns:sbe="http://fixprotocol.io/2016/sbe"
+  package="jormungandr" id="902" version="1"
+  semanticVersion="1.0.0" byteOrder="littleEndian"
+  description="Jormungandr portable fixed-vector policy-inference transport. This JSON is the canonical protocol source.">
+  <types>
+    <composite name="messageHeader" description="SBE recommended message header">
+      <type name="blockLength" primitiveType="uint16"/>
+      <type name="templateId" primitiveType="uint16"/>
+      <type name="schemaId" primitiveType="uint16"/>
+      <type name="version" primitiveType="uint16"/>
+      <type name="numGroups" primitiveType="uint16"/>
+      <type name="numVarDataFields" primitiveType="uint16"/>
+    </composite>
+    <composite name="varDataEncoding">
+      <type name="length" primitiveType="uint32" maxValue="1073741824"/>
+      <type name="varData" primitiveType="uint8" length="0" characterEncoding="binary"/>
+    </composite>
+  </types>
+  <sbe:message name="PolicyInferRequest" id="1" blockLength="20">
+    <field name="requestId" id="1" type="uint64" offset="0"/>
+    <field name="epsilon" id="2" type="float" offset="8"/>
+    <field name="observationCount" id="3" type="uint32" offset="12"/>
+    <field name="flags" id="4" type="uint8" offset="16"/>
+    <data name="observation" id="5" type="varDataEncoding"/>
+  </sbe:message>
+  <sbe:message name="PolicyInferResponse" id="2" blockLength="48">
+    <field name="requestId" id="1" type="uint64" offset="0"/>
+    <field name="actionIndex" id="2" type="uint32" offset="8"/>
+    <field name="action" id="3" type="float" offset="12"/>
+    <field name="policyVersion" id="4" type="uint64" offset="16"/>
+    <field name="updates" id="5" type="uint64" offset="24"/>
+    <field name="replicaId" id="6" type="int32" offset="32"/>
+    <field name="qValueCount" id="7" type="uint32" offset="36"/>
+    <field name="decisionValueCount" id="8" type="uint32" offset="40"/>
+    <field name="auxProbabilityCount" id="9" type="uint32" offset="44"/>
+    <data name="qValues" id="10" type="varDataEncoding"/>
+    <data name="decisionValues" id="11" type="varDataEncoding"/>
+    <data name="auxProbabilities" id="12" type="varDataEncoding"/>
+  </sbe:message>
+</sbe:messageSchema>

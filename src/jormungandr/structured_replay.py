@@ -8,6 +8,7 @@ from typing import Any, Mapping, Sequence
 
 import numpy as np
 
+from jormungandr.core import PriorityIndex
 from jormungandr.structured import EntityCandidateObservation
 
 
@@ -87,6 +88,7 @@ class StructuredPrioritizedReplayBuffer:
         self.items: list[StructuredReplayTransition | None] = [None] * self.capacity
         self.priorities = np.zeros(self.capacity, dtype=np.float32)
         self.max_priority = 1.0
+        self._priority_index = PriorityIndex(self.capacity)
 
     def __len__(self) -> int:
         return self.capacity if self.full else self.pos
@@ -107,6 +109,10 @@ class StructuredPrioritizedReplayBuffer:
             if math.isfinite(candidate) and candidate > 0.0:
                 resolved_priority = candidate
         self.priorities[index] = max(1e-6, float(resolved_priority))
+        self._priority_index.set(
+            index,
+            float(self.priorities[index]) ** self.alpha,
+        )
         self.max_priority = max(self.max_priority, float(self.priorities[index]))
         self.pos = (self.pos + 1) % self.capacity
         if self.pos == 0:
@@ -122,15 +128,16 @@ class StructuredPrioritizedReplayBuffer:
         if size == 0:
             raise ValueError("replay buffer is empty")
         count = max(1, min(int(batch_size), size))
-        priorities = self.priorities[:size].astype(np.float64)
-        probabilities = priorities ** self.alpha
-        total = float(probabilities.sum())
+        total = self._priority_index.total
         if not math.isfinite(total) or total <= 0.0:
-            probabilities.fill(1.0 / size)
+            indices = np.random.randint(0, size, size=count).astype(np.int64)
+            sampled_probabilities = np.full(count, 1.0 / size)
         else:
-            probabilities /= total
-        indices = np.random.choice(size, count, replace=True, p=probabilities)
-        weights = (size * probabilities[indices]) ** (-max(0.0, float(beta)))
+            indices = self._priority_index.sample(count)
+            if np.any(indices >= size):
+                raise RuntimeError("priority index sampled an uninitialized slot")
+            sampled_probabilities = self._priority_index.values(indices) / total
+        weights = (size * sampled_probabilities) ** (-max(0.0, float(beta)))
         weights /= max(float(weights.max()), 1e-12)
         sampled = tuple(self.items[int(index)] for index in indices)
         if any(item is None for item in sampled):
@@ -158,4 +165,8 @@ class StructuredPrioritizedReplayBuffer:
             raise IndexError("replay priority index is out of bounds")
         priority_array = np.maximum(priority_array, np.float32(1e-6))
         self.priorities[index_array] = priority_array
+        for index, priority in zip(
+            index_array.tolist(), priority_array.tolist(), strict=True
+        ):
+            self._priority_index.set(index, float(priority) ** self.alpha)
         self.max_priority = max(self.max_priority, float(priority_array.max()))

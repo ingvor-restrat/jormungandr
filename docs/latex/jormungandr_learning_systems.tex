@@ -36,6 +36,8 @@
     font=\sffamily\fontsize{8}{9.5}\selectfont
   },
   jhot/.style={jbox,draw=blue!55!black,fill=blue!6},
+  jcontrol/.style={jbox,draw=teal!55!black,fill=teal!7},
+  jfleet/.style={jbox,text width=43mm,minimum height=17mm},
   jflow/.style={-{Latex[length=2mm]},draw=black!80,line width=0.75pt},
   jfuture/.style={-{Latex[length=2mm]},draw=blue!55!black,dashed,line width=0.75pt}
 }
@@ -60,7 +62,7 @@ discrete conservative Q-learning, maximum-entropy soft Q-learning, behavior
 cloning, MARWIL, PPO, IMPALA, an IMPACT-style APPO profile, categorical SAC,
 and a compact vector-observation DreamerV3 profile.  Training and validation
 stores remain isolated; legal masks, behavior probabilities, policy versions,
-checkpoints, TorchScript artifacts, TensorBoard series, and internal comparison
+checkpoints, TorchScript and verified ONNX exports, TensorBoard series, and internal comparison
 metrics share one lifecycle.  A second service profile transports variable-size
 typed entity sets and state-local semantic action candidates through central
 inference, prioritized transition replay, or policy-lag-aware joint PPO
@@ -79,6 +81,12 @@ Version 1.7 additionally separates value-head learning from critic gradients
 through a pretrained shared policy backbone and can transactionally back off a
 PPO proposal until every selected behavior-action ratio in the complete batch
 lies inside declared bounds.
+Inference shares batches across CPU or GPU replicas and automatically adjusts
+the number of active replicas and the batching delay.  It makes no assumption
+about the available hardware.  Fixed-vector value plugins execute one network
+call per batch; structured policies use the same versioned replica pool.
+Models may declare a windowed-X/state input layout, and fixed-vector clients
+may use a standalone FIX SBE message format.  Variable-size messages use JSON.
 A QUBO selector makes auditable yes/no decisions
 over prioritized transitions, contiguous rollout fragments, or a bounded
 search frontier by trading utility against redundancy.  Quantile critics expose mean, lower-quantile,
@@ -212,6 +220,60 @@ bounded action interface: the compiler or application decides which slot means
 close, wait, resize, hedge, or exercise, and the mask decides whether that slot
 is admissible in the current state.
 
+
+\subsection{Hardware-aware inference and load balancing}
+
+Inference routes each model's requests through a shared queue.  Workers combine
+requests with matching input settings into batches.  At startup, the service
+reads the model device, detects visible GPUs, and creates up to the configured
+maximum number of replicas.  These defaults work on CPU and on the GPUs visible
+to the process.  Explicit device and replica settings support repeatable
+benchmarks and fixed memory budgets.
+
+\begin{figure}[H]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[node distance=12mm and 14mm]
+  \node[jbox] (actors2) {concurrent callers\\vector or structured};
+  \node[jhot,right=of actors2] (queue) {shared batch queue\\matching requests};
+  \node[jfleet,right=of queue] (fleet) {allocated replica pool\\active $0,\ldots,a-1$; idle $a,\ldots,k-1$};
+  \node[jhot,right=of fleet] (reply) {versioned results\\device and replica ID};
+  \node[jcontrol,below=of queue] (tuner) {automatic tuning\\items/s; batch delay\\active replicas};
+  \node[jbox,below=of fleet] (learner2) {one learner\\weights updated here};
+  \node[jcontrol,right=of learner2] (standby) {new serving copy\\spare models};
+  \draw[jflow] (actors2) -- (queue);
+  \draw[jflow] (queue) -- node[above,font=\sffamily\scriptsize]{dispatch} (fleet);
+  \draw[jflow] (fleet) -- (reply);
+  \draw[jflow] (learner2) -- node[above,font=\sffamily\scriptsize]{model weights} (standby);
+  \draw[jfuture] (standby.north) to[bend right=18] node[right,font=\sffamily\scriptsize]{switch together} (fleet.south);
+  \draw[jflow] (queue.south) -- node[right,font=\sffamily\scriptsize]{measurements} (tuner.north);
+  \draw[jfuture] (tuner.west) to[bend left=38] node[left,font=\sffamily\scriptsize]{delay + active replicas} (queue.west);
+\end{tikzpicture}
+}%
+\caption{Hardware detection or explicit settings determine the replica pool.
+The tuner controls the number of active replicas and the batching delay.  The
+learner loads new weights into spare model copies, then switches every replica
+to the same version.}
+\label{fig:inference-load-balancing}
+\end{figure}
+
+Each replica keeps a current serving copy and a spare copy.  A refresh loads
+the learner's weights into every spare copy.  Optimizer state stays with the
+learner.  The service synchronizes affected CUDA devices and switches all
+replicas to one policy version together.  Requests already in progress may
+finish on the preceding version; each request sees one completely loaded
+version.  On-policy structured models refresh after each update to preserve a
+zero-lag contract.  High-rate off-policy models refresh less often.  The tuner
+tests a limited set of batch delays and active-replica counts.  Among settings
+within five percent of the best throughput, it chooses the lowest delay and
+fewest workers.  Replica allocation stays fixed during tuning.
+
+For fixed-vector policies, a model may additionally declare windowed $X$ and
+application state.  The runtime validates each shape and flattens in
+the recorded $[X,\mathrm{state}]$ order before normalization.  Flat vectors of
+the same width remain valid.  The layout records dimensions and flatten order;
+the actor defines the window and its temporal meaning.
+
 \subsection{Split isolation}
 
 Training transitions update the running observation statistics and enter the
@@ -291,6 +353,15 @@ manifests describe action-by-atom logits.  QR-DQN manifests describe
 action-by-quantile values and retain the risk rule.  Policy and scalar-Q
 profiles describe action-width outputs.  Torch checkpoints use pickle-based
 loading and therefore require trusted local storage and handling.
+
+Fixed-vector checkpoints can also queue ONNX exports on one background worker.
+Normalization is embedded and the batch dimension remains dynamic.  ONNX
+Runtime compares the exported outputs with PyTorch under declared absolute and
+relative tolerances before the worker publishes the file.  Model status reports
+a missing optional dependency or output mismatch while the learner continues.
+The fixed-vector HTTP API has a standalone Jörmungandr FIX SBE schema.
+Size-limited JSON/gzip represents variable-size semantic entity/candidate
+messages.
 
 \end{SNcolumns}
 
@@ -1378,7 +1449,7 @@ turn.  Exact masks remain environment inputs.  The additive prefix summary
 conditions choices within one turn; temporal memory across turns requires
 recurrent state.
 
-The recorded functional suite contains 169 passing cases.  It includes direct
+The recorded functional suite contains 210 passing cases.  It includes direct
 finite updates and state round trips for every built-in, C51 projection and
 mask checks, graph-reference GAE, validation isolation, HTTP ingress, masked
 SAC entropy, QR-DQN tail output, QUBO cardinality and fragment audit, checkpoint
@@ -1391,6 +1462,10 @@ isolation, semantic candidate permutation, conditional balance compatibility,
 importance-sampling objective checks, BC-to-PPO initialization, the seeded
 online comparisons, critic-backbone isolation, transactional joint-ratio
 rollback and backoff, the structured PPO safety gate, and artifact manifests.
+It also covers logarithmic priority indexing, request-size limits,
+windowed-X/state flattening, one network call per batch, structured serving
+replicas, the Jörmungandr SBE codec and endpoint, automatic tuning choices,
+and background ONNX export status and output verification.
 The exact-calculation cases additionally verify cardinality-first assignment,
 optional total-utility assignment, declared utility and seeded ties,
 positive task capacities, positive-cost shortest routes, caller-ordered route
@@ -1407,7 +1482,7 @@ episodes; bootstrapped partial fragments remain unsupported.  The constrained
 workbench is a small exact-oracle benchmark and does not establish scaling to a
 large action system.  Application actors still supply dynamic feasibility
 callbacks and execute actions.
-Multi-learner synchronization, authentication, binary high-throughput
+Multi-learner synchronization, authentication, a binary structured-trajectory
 transport, exact QUBO solving, native kernels, and a Volt-scale empirical QUBO
 advantage are absent from the release.
 

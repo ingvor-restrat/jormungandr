@@ -99,6 +99,55 @@ def mask_logits(logits: torch.Tensor, mask: Optional[torch.Tensor]) -> torch.Ten
     return logits.masked_fill(~mask, -torch.inf)
 
 
+def action_mask_tensor(
+    action_masks: Optional[np.ndarray],
+    *,
+    rows: int,
+    actions: int,
+    device: torch.device,
+) -> torch.Tensor:
+    if action_masks is None:
+        return torch.ones((rows, actions), dtype=torch.bool, device=device)
+    mask = torch.as_tensor(action_masks, dtype=torch.bool, device=device)
+    if mask.shape != (rows, actions) or not bool(torch.all(mask.any(dim=-1))):
+        raise ValueError(
+            "action masks must align with the batch and admit an action"
+        )
+    return mask
+
+
+def epsilon_greedy_batch(
+    scores: torch.Tensor,
+    legal_mask: torch.Tensor,
+    *,
+    deterministic: bool,
+    epsilon: float,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Select a whole batch without reducing neural inference to row calls."""
+
+    decision = scores.masked_fill(~legal_mask, -torch.inf)
+    greedy = decision.argmax(dim=-1)
+    eps = 0.0 if deterministic else min(1.0, max(0.0, float(epsilon)))
+    legal_counts = legal_mask.sum(dim=-1, keepdim=True).clamp_min(1)
+    probabilities = legal_mask.float() * (eps / legal_counts.float())
+    probabilities.scatter_add_(
+        1,
+        greedy.unsqueeze(1),
+        torch.full(
+            (scores.shape[0], 1),
+            1.0 - eps,
+            dtype=scores.dtype,
+            device=scores.device,
+        ),
+    )
+    selected = greedy
+    if eps > 0.0:
+        random_actions = torch.multinomial(legal_mask.float(), 1).squeeze(1)
+        explore = torch.rand(scores.shape[0], device=scores.device) < eps
+        selected = torch.where(explore, random_actions, greedy)
+    return selected, probabilities
+
+
 def clip_rewards(rewards: torch.Tensor, limit: float) -> torch.Tensor:
     return rewards.clamp(-limit, limit) if limit > 0.0 else rewards
 
@@ -164,4 +213,3 @@ class AuxiliaryMixin:
 
 def action_values_tensor(values: Sequence[float], device: torch.device) -> torch.Tensor:
     return torch.as_tensor(list(values), dtype=torch.float32, device=device)
-

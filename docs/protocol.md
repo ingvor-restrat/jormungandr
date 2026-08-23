@@ -176,6 +176,27 @@ Content-Type: application/json
 
 The model identifier is unique within one runtime process.
 
+For a fixed-vector input with declared shapes, `obs_dim` may be zero and the model may
+declare a windowed-X/state layout:
+
+```json
+{
+  "model_id": "windowed-example",
+  "obs_dim": 0,
+  "observation_layout": {
+    "x_shape": [32, 8],
+    "state_shape": [4]
+  },
+  "learner": {"enabled": true, "algo": "qrdqn"}
+}
+```
+
+The runtime derives `obs_dim = 260`, validates both shapes, and flattens in
+row-major `x` then `state` order. The model response records the normalized
+`jormungandr.windowed_observation.v1` contract. A flat 260-element `obs`
+remains valid, which permits low-allocation actors and SBE clients to use the
+same model.
+
 ## Publish experience
 
 ```http
@@ -218,6 +239,9 @@ Content-Type: application/json
 Required identity fields are `split`, `actor_id`, `episode_id`, `timestep`,
 and `policy_version`. `obs` and `next_obs` must match the model observation
 dimension. Rewards and action values must be finite.
+For a model with `observation_layout`, an item may replace `obs` with `x` and
+`state`, and replace `next_obs` with `next_x` and `next_state`. Training and
+inference share the same shape checks and flattening implementation.
 
 `action_idx` is preferred. `action` is accepted when it uniquely matches one
 configured action value. The learner always stores the resulting action index.
@@ -293,6 +317,19 @@ Batched observations use `obs_batch`:
 }
 ```
 
+Windowed models may send one nested observation as:
+
+```json
+{
+  "x": [[0.1, 0.2], [0.3, 0.4]],
+  "state": [0.5, 0.6],
+  "deterministic": true
+}
+```
+
+An `obs_batch` may contain those `{x,state}` objects, or callers may send
+aligned `x_batch` and `state_batch` arrays.
+
 Set `deterministic` to false and provide `epsilon` to enable epsilon-greedy
 or epsilon-mixture selection. Every item returns `action` and `action_idx`.
 Value learners additionally return `q_values`; policy learners return
@@ -314,6 +351,27 @@ POST /v1/models/{model_id}/aux/infer
 
 The body may contain `obs` or a `features` object. Feature objects are mapped
 using the stable model `feature_keys`.
+
+### Fixed-vector SBE inference
+
+`POST /v1/models/{model_id}/policy/infer-sbe` accepts and returns
+`application/vnd.fixprotocol.sbe`. The canonical source is
+[`schemas/jormungandr_inference_schema.json`](../schemas/jormungandr_inference_schema.json);
+the generated FIX SBE XML is checked in beside it. Schema 902 version 1 uses
+the recommended 12-byte message header. The request carries request ID,
+epsilon, deterministic flag, and a flattened float32 observation. The response
+carries action, version/update/replica IDs, Q values, decision values, and
+optional auxiliary probabilities. `JormungandrClient.infer_policy_sbe`
+provides the standard-library Python client path.
+
+SBE carries fixed vectors. JSON/gzip carries variable-size entity/candidate
+sets, semantic strings, and structured trajectories. The server
+enforces independent compressed and expanded request limits for both paths;
+oversized input receives HTTP 413 before parsing or inference.
+
+The [SBE protocol guide](sbe.md) gives the complete request and response byte
+layouts, field semantics, Python examples, compatibility rules, and error
+responses.
 
 ## Introspection and artifacts
 
@@ -342,3 +400,10 @@ zero or match the checkpoint. Replay and validation items are not embedded in
 the checkpoint and begin empty. A checkpoint that records an algorithm-plugin
 version is not silently loaded through a different installed version; migrate
 the state explicitly or install the compatible plugin.
+
+If `learner.checkpoint_export_onnx` is true, checkpoint saving queues a
+background ONNX export. `checkpoint_export_module` selects `auto`, `policy`,
+`q`, or `heads`. Model and checkpoint responses expose `onnx_export.status` as
+`pending`, `ready`, or `failed`. The server compares outputs with PyTorch
+within the configured tolerances before reporting `ready`. Install
+`jormungandr-rl[onnx]` to enable this path.

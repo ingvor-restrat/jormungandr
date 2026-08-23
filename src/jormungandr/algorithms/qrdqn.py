@@ -17,8 +17,10 @@ from torch import nn
 from .base import ActionResult, AlgorithmPlugin, UpdateResult
 from .common import (
     AuxiliaryMixin,
+    action_mask_tensor,
     cfg,
     clip_rewards,
+    epsilon_greedy_batch,
     legal_mask_from_metadata,
     mask_logits,
     noisy_observations,
@@ -119,56 +121,13 @@ class QuantileDQNAgent(AuxiliaryMixin):
         epsilon: float = 0.0,
         action_mask: Optional[np.ndarray] = None,
     ) -> ActionResult:
-        obs_t = torch.as_tensor(
-            obs, dtype=torch.float32, device=self.device
-        ).reshape(1, -1)
-        mask_t = None
-        if action_mask is not None:
-            mask_t = torch.as_tensor(
-                action_mask, dtype=torch.bool, device=self.device
-            ).reshape(1, -1)
-            if mask_t.shape != (1, self.num_actions) or not bool(mask_t.any()):
-                raise ValueError(
-                    "action_mask must align with action_values and admit an action"
-                )
-        with torch.no_grad():
-            quantiles = self.q(obs_t)
-            raw_scores = self._scores(quantiles)
-            scores = mask_logits(raw_scores, mask_t)
-            legal = (
-                torch.arange(self.num_actions, device=self.device)
-                if mask_t is None
-                else torch.nonzero(mask_t[0], as_tuple=False).flatten()
-            )
-            greedy = scores.argmax(dim=-1)
-            eps = 0.0 if deterministic else min(1.0, max(0.0, float(epsilon)))
-            if eps > 0.0 and float(torch.rand((), device=self.device)) < eps:
-                idx_t = legal[torch.randint(len(legal), (1,), device=self.device)]
-            else:
-                idx_t = greedy
-            probabilities = torch.zeros(self.num_actions, device=self.device)
-            probabilities[legal] = eps / float(len(legal))
-            probabilities[int(greedy.item())] += 1.0 - eps
-            idx = int(idx_t.item())
-            logp = torch.log(probabilities[idx].clamp_min(1e-8))
-            q_mean = quantiles.mean(dim=-1)[0]
-            risk_scores = raw_scores[0]
-        return ActionResult(
-            action=float(self.action_values[idx]),
-            action_idx=idx,
-            log_probability=float(logp.item()),
-            value=float(risk_scores[idx].item()),
-            extras={
-                "q_values": [float(x) for x in q_mean.cpu().tolist()],
-                "risk_values": [float(x) for x in risk_scores.cpu().tolist()],
-                "quantiles": [
-                    [float(value) for value in row]
-                    for row in quantiles[0].cpu().tolist()
-                ],
-                "risk_measure": self.risk_measure,
-                "risk_level": float(self.risk_level),
-            },
-        )
+        masks = None if action_mask is None else np.asarray([action_mask])
+        return self.inference_batch(
+            np.asarray(obs, dtype=np.float32).reshape(1, -1),
+            deterministic=deterministic,
+            epsilon=epsilon,
+            action_masks=masks,
+        )[0]
 
     def act(
         self,
@@ -193,14 +152,63 @@ class QuantileDQNAgent(AuxiliaryMixin):
         epsilon: float,
         action_masks: Optional[np.ndarray] = None,
     ) -> list[ActionResult]:
-        return [
-            self.action_result(
-                row,
+        obs_t = torch.as_tensor(
+            np.asarray(obs, dtype=np.float32),
+            dtype=torch.float32,
+            device=self.device,
+        )
+        legal = action_mask_tensor(
+            action_masks,
+            rows=obs_t.shape[0],
+            actions=self.num_actions,
+            device=self.device,
+        )
+        with torch.no_grad():
+            quantiles = self.q(obs_t)
+            risk_scores = self._scores(quantiles)
+            indices, probabilities = epsilon_greedy_batch(
+                risk_scores,
+                legal,
                 deterministic=deterministic,
                 epsilon=epsilon,
-                action_mask=None if action_masks is None else action_masks[index],
             )
-            for index, row in enumerate(np.asarray(obs, dtype=np.float32))
+            selected_values = risk_scores.gather(
+                1, indices.unsqueeze(1)
+            ).squeeze(1)
+            selected_probabilities = probabilities.gather(
+                1, indices.unsqueeze(1)
+            ).squeeze(1)
+            q_mean = quantiles.mean(dim=-1)
+        q_rows = q_mean.cpu().tolist()
+        risk_rows = risk_scores.cpu().tolist()
+        decision_rows = risk_scores.masked_fill(~legal, -1e30).cpu().tolist()
+        quantile_rows = quantiles.cpu().tolist()
+        index_rows = indices.cpu().tolist()
+        value_rows = selected_values.cpu().tolist()
+        probability_rows = selected_probabilities.cpu().tolist()
+        return [
+            ActionResult(
+                action=float(self.action_values[int(index)]),
+                action_idx=int(index),
+                log_probability=float(
+                    np.log(max(float(probability_rows[row]), 1e-8))
+                ),
+                value=float(value_rows[row]),
+                extras={
+                    "q_values": [float(value) for value in q_rows[row]],
+                    "decision_values": [
+                        float(value) for value in decision_rows[row]
+                    ],
+                    "risk_values": [float(value) for value in risk_rows[row]],
+                    "quantiles": [
+                        [float(value) for value in values]
+                        for values in quantile_rows[row]
+                    ],
+                    "risk_measure": self.risk_measure,
+                    "risk_level": float(self.risk_level),
+                },
+            )
+            for row, index in enumerate(index_rows)
         ]
 
     def _target_quantiles(

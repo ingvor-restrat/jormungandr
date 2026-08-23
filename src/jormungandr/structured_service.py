@@ -20,6 +20,10 @@ import torch
 
 from jormungandr.algorithms import algorithm_registry, canonical_algorithm_name
 from jormungandr.core import TBLogger
+from jormungandr.inference_pool import (
+    InferencePoolConfig,
+    ReplicatedInferencePool,
+)
 from jormungandr.structured import (
     StructuredPolicySpec,
     entity_candidate_observation_from_payload,
@@ -136,6 +140,8 @@ class StructuredModelRecord:
     agent_lock: threading.Lock = field(default_factory=threading.Lock)
     stop_event: threading.Event = field(default_factory=threading.Event)
     thread: threading.Thread | None = None
+    inference_pool: ReplicatedInferencePool | None = None
+    inference_policy_version: int = 0
 
 
 class StructuredServiceManager:
@@ -146,6 +152,7 @@ class StructuredServiceManager:
         *,
         checkpoint_root: str | Path | None = None,
         tensorboard_root: str | Path | None = None,
+        inference_config: InferencePoolConfig | None = None,
     ) -> None:
         self._records: dict[str, StructuredModelRecord] = {}
         self._lock = threading.Lock()
@@ -160,6 +167,96 @@ class StructuredServiceManager:
             if tensorboard_root is not None and str(tensorboard_root).strip()
             else None
         )
+        self._inference_config = inference_config or InferencePoolConfig()
+
+    @staticmethod
+    def _serving_state_dict(agent: Any) -> dict[str, Any]:
+        """Return inference state without learner-only optimizer slots."""
+
+        return {
+            str(key): value
+            for key, value in dict(agent.state_dict()).items()
+            if not (
+                str(key) in {"opt", "optimizer"}
+                or str(key).endswith("_opt")
+                or str(key).endswith("_optimizer")
+            )
+        }
+
+    @staticmethod
+    def _serving_infer_batch(
+        agent: Any,
+        payloads: Sequence[Any],
+        metadata: Mapping[str, Any],
+    ) -> Sequence[Any]:
+        del metadata
+        mode = str(payloads[0]["mode"])
+        observations = tuple(payload["observation"] for payload in payloads)
+        if mode == "score":
+            if not hasattr(agent, "score_results_structured"):
+                raise ValueError("structured agent does not expose policy scores")
+            return agent.score_results_structured(observations)
+        return agent.action_results_structured(
+            observations,
+            deterministic=bool(payloads[0]["deterministic"]),
+            epsilon=max(0.0, float(payloads[0]["epsilon"])),
+        )
+
+    def _start_model_inference(self, record: StructuredModelRecord) -> None:
+        with record.agent_lock:
+            state = self._serving_state_dict(record.agent)
+        plugin = record.plugin
+        spec = record.spec
+        agent_config = dict(record.config.agent_config)
+
+        def agent_factory(device: str, serving_state: Mapping[str, Any]) -> Any:
+            agent = plugin.build_structured(spec, agent_config, device)
+            agent.load_state_dict(serving_state)
+            return agent
+
+        pool = ReplicatedInferencePool(
+            self._inference_config,
+            agent_factory=agent_factory,
+            infer_batch=self._serving_infer_batch,
+        )
+        pool.start(
+            state,
+            policy_version=int(record.policy_version),
+            metadata={"algo": record.config.algo},
+            fallback_device=record.config.device,
+        )
+        record.inference_pool = pool
+        record.inference_policy_version = int(record.policy_version)
+
+    def _refresh_model_inference(
+        self,
+        record: StructuredModelRecord,
+        *,
+        force: bool = False,
+    ) -> bool:
+        with record.lock:
+            pool = record.inference_pool
+            policy_version = int(record.policy_version)
+            refresh_updates = (
+                25 if record.config.replay_mode == "transition" else 1
+            )
+            due = bool(
+                force
+                or policy_version - int(record.inference_policy_version)
+                >= refresh_updates
+            )
+        if pool is None or not due:
+            return False
+        with record.agent_lock:
+            state = self._serving_state_dict(record.agent)
+        pool.refresh(
+            state,
+            policy_version=policy_version,
+            metadata={"algo": record.config.algo},
+        )
+        with record.lock:
+            record.inference_policy_version = policy_version
+        return True
 
     def _tensorboard_logdir(self, model_id: str, raw: str) -> str:
         value = str(raw or "").strip()
@@ -498,6 +595,13 @@ class StructuredServiceManager:
             if mid in self._records:
                 raise ValueError(f"model_id already exists: {mid}")
             self._records[mid] = record
+        try:
+            self._start_model_inference(record)
+        except Exception:
+            with self._lock:
+                self._records.pop(mid, None)
+            record.tb_logger.close()
+            raise
         if record.trainable:
             record.thread = threading.Thread(
                 target=self._learner_loop,
@@ -763,19 +867,30 @@ class StructuredServiceManager:
             entity_candidate_observation_from_payload(item, spec=record.spec)
             for item in observations
         )
+        if not hasattr(record.agent, "score_results_structured"):
+            raise ValueError(
+                f"algorithm {record.config.algo!r} does not expose policy scores"
+            )
+        pool = record.inference_pool
+        if pool is None:
+            raise ValueError("structured inference pool is not running")
         started = time.perf_counter()
-        with record.agent_lock:
-            if not hasattr(record.agent, "score_results_structured"):
-                raise ValueError(
-                    f"algorithm {record.config.algo!r} does not expose policy scores"
-                )
-            results = record.agent.score_results_structured(decoded)
-            with record.lock:
-                policy_version = record.policy_version
-                updates = record.updates
-                record.score_calls += 1
+        infer_results = pool.submit_many(
+            [
+                {"mode": "score", "observation": observation}
+                for observation in decoded
+            ],
+            key="structured-score",
+        )
+        results = [result.value for result in infer_results]
+        versions = sorted(
+            {int(result.policy_version) for result in infer_results}
+        )
+        with record.lock:
+            updates = record.updates
+            record.score_calls += 1
         items = []
-        for result in results:
+        for result, inference in zip(results, infer_results, strict=True):
             logits = [
                 float(value) if np.isfinite(float(value)) else -1e30
                 for value in result.candidate_logits
@@ -785,6 +900,9 @@ class StructuredServiceManager:
                     "candidate_ids": list(result.candidate_ids),
                     "candidate_logits": logits,
                     "behavior_value": float(result.value),
+                    "policy_version": int(inference.policy_version),
+                    "inference_replica_id": int(inference.replica_id),
+                    "inference_device": str(inference.device),
                     **(
                         {
                             "candidate_prefix_keys": [
@@ -814,7 +932,8 @@ class StructuredServiceManager:
             "schema": "jormungandr.structured_policy_scores.v1",
             "model_id": model_id,
             "algo": record.config.algo,
-            "policy_version": int(policy_version),
+            "policy_version": int(versions[-1]),
+            "policy_versions": versions,
             "updates": int(updates),
             "batch_size": len(items),
             "items": items,
@@ -913,18 +1032,31 @@ class StructuredServiceManager:
             entity_candidate_observation_from_payload(item, spec=record.spec)
             for item in observations
         )
-        with record.agent_lock:
-            results = record.agent.action_results_structured(
-                decoded,
-                deterministic=bool(deterministic),
-                epsilon=max(0.0, float(epsilon)),
-            )
-            with record.lock:
-                policy_version = record.policy_version
-                updates = record.updates
-                record.inference_calls += 1
+        pool = record.inference_pool
+        if pool is None:
+            raise ValueError("structured inference pool is not running")
+        resolved_epsilon = max(0.0, float(epsilon))
+        infer_results = pool.submit_many(
+            [
+                {
+                    "mode": "infer",
+                    "observation": observation,
+                    "deterministic": bool(deterministic),
+                    "epsilon": resolved_epsilon,
+                }
+                for observation in decoded
+            ],
+            key=("structured-infer", bool(deterministic), resolved_epsilon),
+        )
+        results = [result.value for result in infer_results]
+        versions = sorted(
+            {int(result.policy_version) for result in infer_results}
+        )
+        with record.lock:
+            updates = record.updates
+            record.inference_calls += 1
         items = []
-        for result in results:
+        for result, inference in zip(results, infer_results, strict=True):
             items.append(
                 {
                     "candidate_id": result.candidate_id,
@@ -932,12 +1064,16 @@ class StructuredServiceManager:
                     "behavior_logp": result.log_probability,
                     "q_value": result.value,
                     "candidate_values": list(result.candidate_values),
+                    "policy_version": int(inference.policy_version),
+                    "inference_replica_id": int(inference.replica_id),
+                    "inference_device": str(inference.device),
                 }
             )
         return {
             "model_id": model_id,
             "algo": record.config.algo,
-            "policy_version": policy_version,
+            "policy_version": int(versions[-1]),
+            "policy_versions": versions,
             "updates": updates,
             "batch_size": len(items),
             "items": items,
@@ -1041,6 +1177,7 @@ class StructuredServiceManager:
                             )
                     if checkpoint_due:
                         self.checkpoint(record.model_id)
+                    self._refresh_model_inference(record)
             except Exception as exc:
                 with record.lock:
                     record.last_error = f"{type(exc).__name__}: {exc}"
@@ -1140,6 +1277,7 @@ class StructuredServiceManager:
                             )
                     if checkpoint_due:
                         self.checkpoint(record.model_id)
+                    self._refresh_model_inference(record)
             except Exception as exc:
                 with record.lock:
                     record.last_error = f"{type(exc).__name__}: {exc}"
@@ -1251,6 +1389,7 @@ class StructuredServiceManager:
                             )
                     if checkpoint_due:
                         self.checkpoint(record.model_id)
+                    self._refresh_model_inference(record)
             except Exception as exc:
                 with record.lock:
                     record.last_error = f"{type(exc).__name__}: {exc}"
@@ -1353,6 +1492,11 @@ class StructuredServiceManager:
     def get_model(self, model_id: str) -> dict[str, Any]:
         record = self._record(model_id)
         with record.lock:
+            inference_pool = (
+                record.inference_pool.snapshot()
+                if record.inference_pool is not None
+                else {}
+            )
             trainable_module = getattr(
                 record.agent,
                 "policy",
@@ -1476,6 +1620,7 @@ class StructuredServiceManager:
                     ),
                 },
                 "score_calls": record.score_calls,
+                "inference_pool": inference_pool,
                 "last_loss": record.last_loss,
                 "last_td_abs": record.last_td_abs,
                 "last_update_ts": record.last_update_ts,
@@ -1513,6 +1658,9 @@ class StructuredServiceManager:
         record.stop_event.set()
         if record.thread is not None:
             record.thread.join(timeout=5.0)
+        if record.inference_pool is not None:
+            record.inference_pool.close()
+            record.inference_pool = None
         record.tb_logger.flush()
         record.tb_logger.close()
         return {"model_id": model_id, "deleted": True}

@@ -47,6 +47,74 @@ def post_json(url: str, payload: dict) -> dict:
         return json.load(response)
 
 
+def test_windowed_x_state_layout_flattens_consistently_for_training_and_inference() -> None:
+    runtime = JormungandrRuntime(
+        inference_replicas=1, inference_auto_tune=False
+    )
+    model = runtime.create_model(
+        obs_dim=0,
+        observation_layout={"x_shape": [2, 2], "state_shape": [2]},
+        model_id="windowed-state",
+        tensorboard_enabled=False,
+        learner={
+            "enabled": True,
+            "device": "cpu",
+            "hidden": 8,
+            "min_replay": 1000,
+            "checkpoint_every": 0,
+        },
+    )
+    try:
+        assert model["obs_dim"] == 6
+        assert model["observation_layout"] == {
+            "schema": "jormungandr.windowed_observation.v1",
+            "x_shape": [2, 2],
+            "state_shape": [2],
+            "flatten_order": ["x", "state"],
+            "obs_dim": 6,
+        }
+        observation = {
+            "x": [[1.0, 2.0], [3.0, 4.0]],
+            "state": [5.0, 6.0],
+        }
+        inferred = runtime.policy_infer("windowed-state", obs=observation)
+        assert inferred["action_idx"] in {0, 1, 2}
+        batch = runtime.policy_infer_batch(
+            "windowed-state",
+            obs_batch=[observation, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]],
+        )
+        assert batch["batch_size"] == 2
+        added = runtime.experience_add(
+            "windowed-state",
+            [
+                {
+                    "split": "train",
+                    "actor_id": "actor-windowed",
+                    "episode_id": "episode-windowed",
+                    "timestep": 0,
+                    "policy_version": inferred["policy_version"],
+                    **observation,
+                    "action_idx": inferred["action_idx"],
+                    "reward": 1.0,
+                    "next_x": [[2.0, 3.0], [4.0, 5.0]],
+                    "next_state": [6.0, 7.0],
+                    "done": False,
+                }
+            ],
+        )
+        assert added["added"] == 1
+        record = runtime.get_model_record("windowed-state")
+        assert record.replay.obs[0].tolist() == pytest.approx(
+            [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+        )
+        with pytest.raises(JormungandrServiceError, match="obs.x"):
+            runtime.policy_infer(
+                "windowed-state", obs={"x": [[1.0, 2.0]], "state": [5.0, 6.0]}
+            )
+    finally:
+        runtime.close_all()
+
+
 def test_interleaved_experience_is_split_without_validation_leakage() -> None:
     runtime = JormungandrRuntime()
     runtime.create_model(
@@ -164,6 +232,47 @@ def test_learner_evaluates_interleaved_validation_samples() -> None:
         assert learner["validation_policy_version"] >= 1
         assert learner["last_validation_count"] == 2
         assert learner["last_validation_ts"] > 0
+    finally:
+        runtime.close_all()
+
+
+def test_vector_learner_respects_replay_sample_epoch_budget() -> None:
+    runtime = JormungandrRuntime()
+    runtime.create_model(
+        obs_dim=2,
+        model_id="bounded-replay-test",
+        capacity=16,
+        tensorboard_enabled=False,
+        learner={
+            "enabled": True,
+            "device": "cpu",
+            "hidden": 8,
+            "batch_size": 2,
+            "min_replay": 2,
+            "tick_interval_s": 0.001,
+            "updates_per_tick": 8,
+            "replay_sample_epochs": 1.0,
+            "checkpoint_every": 0,
+        },
+    )
+    try:
+        runtime.experience_add(
+            "bounded-replay-test",
+            [
+                experience(split="train", timestep=index, action=float(index % 3 - 1))
+                for index in range(4)
+            ],
+        )
+        deadline = time.time() + 3.0
+        while time.time() < deadline:
+            updates = runtime.get_model("bounded-replay-test")["learner"]["updates"]
+            if updates >= 2:
+                break
+            time.sleep(0.01)
+        time.sleep(0.05)
+        learner = runtime.get_model("bounded-replay-test")["learner"]
+        assert learner["updates"] == 2
+        assert learner["config"]["replay_sample_epochs"] == 1.0
     finally:
         runtime.close_all()
 

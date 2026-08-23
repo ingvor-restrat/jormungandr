@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import threading
 import time
+import os
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Callable, Deque, Hashable, Mapping, Optional, Sequence
@@ -23,20 +24,34 @@ class InferencePoolConfig:
     """Process-local inference resources shared by one policy model."""
 
     devices: tuple[str, ...] = ()
-    replicas: int = 1
+    # Zero selects hardware-aware automatic placement. Explicit positive values
+    # remain available for reproducible benchmarks and constrained hosts.
+    replicas: int = 0
+    max_auto_replicas: int = 2
     max_batch_size: int = 64
     batch_wait_ms: float = 2.0
     request_timeout_s: float = 30.0
+    auto_tune: bool = True
+    tune_interval_s: float = 15.0
+    tune_batch_wait_ms: tuple[float, ...] = (0.5, 2.0, 5.0, 10.0)
 
     def __post_init__(self) -> None:
-        if int(self.replicas) <= 0:
-            raise ValueError("inference replicas must be > 0")
+        if int(self.replicas) < 0:
+            raise ValueError("inference replicas must be >= 0 (zero means auto)")
+        if int(self.max_auto_replicas) <= 0:
+            raise ValueError("inference max_auto_replicas must be > 0")
         if int(self.max_batch_size) <= 0:
             raise ValueError("inference max_batch_size must be > 0")
         if float(self.batch_wait_ms) < 0.0:
             raise ValueError("inference batch_wait_ms must be >= 0")
         if float(self.request_timeout_s) <= 0.0:
             raise ValueError("inference request_timeout_s must be > 0")
+        if float(self.tune_interval_s) <= 0.0:
+            raise ValueError("inference tune_interval_s must be > 0")
+        if not self.tune_batch_wait_ms or any(
+            float(value) < 0.0 for value in self.tune_batch_wait_ms
+        ):
+            raise ValueError("inference tune_batch_wait_ms must be nonempty and non-negative")
 
 
 @dataclass(frozen=True)
@@ -113,11 +128,13 @@ def validate_devices(devices: Sequence[str]) -> tuple[str, ...]:
     out: list[str] = []
     for raw in devices:
         device = str(raw).strip().lower()
-        if not device:
+        if not device or device == "auto":
             continue
         if device == "cpu":
             out.append(device)
             continue
+        if device == "cuda":
+            device = "cuda:0"
         if not device.startswith("cuda:"):
             raise ValueError(
                 f"unsupported inference device {raw!r}; use cpu or cuda:N"
@@ -128,8 +145,50 @@ def validate_devices(devices: Sequence[str]) -> tuple[str, ...]:
             raise ValueError(f"invalid inference device {raw!r}") from exc
         if not torch.cuda.is_available() or index < 0 or index >= torch.cuda.device_count():
             raise ValueError(f"inference device {device} is not available")
-        out.append(f"cuda:{index}")
+        canonical = f"cuda:{index}"
+        if canonical not in out:
+            out.append(canonical)
     return tuple(out)
+
+
+def resolve_devices(
+    devices: Sequence[str],
+    *,
+    fallback_device: str = "auto",
+) -> tuple[str, ...]:
+    """Resolve explicit placement or select the learner-capable local device.
+
+    Auto placement never assumes a CUDA ordinal or even that CUDA exists.  It
+    follows an already resolved learner device when supplied, otherwise it
+    selects the first visible CUDA device and falls back to CPU.
+    """
+
+    explicit = validate_devices(devices)
+    if explicit:
+        return explicit
+    fallback = str(fallback_device or "auto").strip().lower()
+    if fallback in {"", "auto"}:
+        visible = available_cuda_devices()
+        return (str(visible[0]["device"]),) if visible else ("cpu",)
+    return validate_devices((fallback,))
+
+
+def auto_replica_count(
+    devices: Sequence[str],
+    *,
+    max_replicas: int,
+) -> int:
+    """Return a conservative capability-derived serving replica count."""
+
+    maximum = max(1, int(max_replicas))
+    cuda_devices = [value for value in devices if str(value).startswith("cuda:")]
+    if cuda_devices:
+        # Two candidates per visible accelerator let the online tuner measure
+        # whether overlapping small batches help. The configured maximum is
+        # the admission bound and may be set to one on memory-constrained hosts.
+        return min(maximum, max(1, 2 * len(cuda_devices)))
+    cpu_parallelism = max(1, (os.cpu_count() or 1) // 2)
+    return min(maximum, cpu_parallelism)
 
 
 class ReplicatedInferencePool:
@@ -153,6 +212,13 @@ class ReplicatedInferencePool:
         self._threads: list[threading.Thread] = []
         self._refreshes = 0
         self._last_refresh_ms = 0.0
+        self._active_replicas = 0
+        self._runtime_batch_wait_ms = float(config.batch_wait_ms)
+        self._tune_candidates: list[tuple[float, int]] = []
+        self._tune_scores: dict[tuple[float, int], dict[str, float | int]] = {}
+        self._tune_current = (float(config.batch_wait_ms), 1)
+        self._tune_round = 0
+        self._tune_thread: Optional[threading.Thread] = None
 
     @property
     def replicas(self) -> int:
@@ -168,13 +234,19 @@ class ReplicatedInferencePool:
     ) -> None:
         if self._replicas:
             raise InferencePoolError("inference pool is already started")
-        devices = self.config.devices or (str(fallback_device),)
-        devices = validate_devices(devices)
+        devices = resolve_devices(
+            self.config.devices,
+            fallback_device=str(fallback_device),
+        )
         if not devices:
             raise InferencePoolError("no inference devices are configured")
+        replica_count = int(self.config.replicas) or auto_replica_count(
+            devices,
+            max_replicas=int(self.config.max_auto_replicas),
+        )
         activated_ts = time.time()
         snapshot_metadata = dict(metadata or {})
-        for replica_id in range(int(self.config.replicas)):
+        for replica_id in range(replica_count):
             device = devices[replica_id % len(devices)]
             active = self._agent_factory(device, state)
             standby = self._agent_factory(device, state)
@@ -192,6 +264,22 @@ class ReplicatedInferencePool:
                 )
             )
         self._stop.clear()
+        self._active_replicas = 1 if self.config.auto_tune else replica_count
+        waits = sorted(
+            {
+                float(self.config.batch_wait_ms),
+                *(float(value) for value in self.config.tune_batch_wait_ms),
+            }
+        )
+        self._tune_candidates = [
+            (wait_ms, active)
+            for wait_ms in waits
+            for active in range(1, replica_count + 1)
+        ]
+        self._tune_current = (
+            float(self._runtime_batch_wait_ms),
+            int(self._active_replicas),
+        )
         for replica in self._replicas:
             thread = threading.Thread(
                 target=self._worker,
@@ -201,16 +289,26 @@ class ReplicatedInferencePool:
             )
             thread.start()
             self._threads.append(thread)
+        if self.config.auto_tune and len(self._tune_candidates) > 1:
+            self._tune_thread = threading.Thread(
+                target=self._tune_worker,
+                name="inference-auto-tuner",
+                daemon=True,
+            )
+            self._tune_thread.start()
 
-    def _take_batch(self) -> list[_Request]:
+    def _take_batch(self, replica_id: int) -> list[_Request]:
         with self._condition:
-            while not self._queue and not self._stop.is_set():
+            while (
+                (not self._queue or replica_id >= self._active_replicas)
+                and not self._stop.is_set()
+            ):
                 self._condition.wait(timeout=0.25)
             if self._stop.is_set():
                 return []
             first = self._queue.popleft()
             batch = [first]
-            deadline = time.monotonic() + float(self.config.batch_wait_ms) / 1000.0
+            deadline = time.monotonic() + self._runtime_batch_wait_ms / 1000.0
             while len(batch) < int(self.config.max_batch_size):
                 matching_index = next(
                     (i for i, request in enumerate(self._queue) if request.key == first.key),
@@ -229,7 +327,7 @@ class ReplicatedInferencePool:
 
     def _worker(self, replica: _Replica) -> None:
         while not self._stop.is_set():
-            batch = self._take_batch()
+            batch = self._take_batch(replica.replica_id)
             if not batch:
                 continue
             started = time.perf_counter()
@@ -273,6 +371,103 @@ class ReplicatedInferencePool:
                 if request.error is None:
                     request.result = results[index]
                 request.done.set()
+
+    def configure_runtime(
+        self,
+        *,
+        active_replicas: int,
+        batch_wait_ms: float,
+    ) -> None:
+        """Atomically change the active serving subset and batching delay."""
+
+        if not self._replicas:
+            raise InferencePoolError("inference pool is not running")
+        active = int(active_replicas)
+        wait_ms = float(batch_wait_ms)
+        if active < 1 or active > len(self._replicas):
+            raise ValueError("active_replicas must be within the allocated fleet")
+        if wait_ms < 0.0:
+            raise ValueError("batch_wait_ms must be non-negative")
+        with self._condition:
+            self._active_replicas = active
+            self._runtime_batch_wait_ms = wait_ms
+            self._tune_current = (wait_ms, active)
+            self._condition.notify_all()
+
+    @staticmethod
+    def best_tune_candidate(
+        candidates: Sequence[tuple[float, int]],
+        scores: Mapping[tuple[float, int], Mapping[str, float | int]],
+        *,
+        throughput_tolerance: float = 0.05,
+    ) -> tuple[float, int]:
+        """Prefer lower delay and fewer replicas when throughput is within 5%."""
+
+        if not candidates:
+            raise ValueError("inference tune candidate list is empty")
+        best_rate = max(
+            float(scores[item]["ewma_items_per_s"]) for item in candidates
+        )
+        acceptable_rate = best_rate * max(0.0, 1.0 - throughput_tolerance)
+        acceptable = [
+            item
+            for item in candidates
+            if float(scores[item]["ewma_items_per_s"]) >= acceptable_rate
+        ]
+        return min(acceptable, key=lambda item: (float(item[0]), int(item[1])))
+
+    def _total_items(self) -> int:
+        return sum(int(replica.items) for replica in self._replicas)
+
+    def _tune_worker(self) -> None:
+        last_ts = time.monotonic()
+        last_items = self._total_items()
+        while not self._stop.wait(float(self.config.tune_interval_s)):
+            now = time.monotonic()
+            total_items = self._total_items()
+            elapsed = max(1e-9, now - last_ts)
+            item_delta = max(0, total_items - last_items)
+            had_previous_traffic = last_items > 0
+            last_ts = now
+            last_items = total_items
+            if item_delta <= 0 or not had_previous_traffic:
+                continue
+            rate = float(item_delta) / elapsed
+            candidate = self._tune_current
+            stats = self._tune_scores.setdefault(
+                candidate,
+                {"samples": 0, "ewma_items_per_s": 0.0, "last_items_per_s": 0.0},
+            )
+            samples = int(stats["samples"])
+            stats["samples"] = samples + 1
+            stats["last_items_per_s"] = rate
+            stats["ewma_items_per_s"] = (
+                rate
+                if samples == 0
+                else 0.7 * float(stats["ewma_items_per_s"]) + 0.3 * rate
+            )
+            self._tune_round += 1
+            untried = [
+                item
+                for item in self._tune_candidates
+                if int(self._tune_scores.get(item, {}).get("samples", 0)) == 0
+            ]
+            if untried:
+                next_candidate = untried[0]
+            elif self._tune_round % 10 == 0:
+                index = (self._tune_candidates.index(candidate) + 1) % len(
+                    self._tune_candidates
+                )
+                next_candidate = self._tune_candidates[index]
+            else:
+                next_candidate = self.best_tune_candidate(
+                    self._tune_candidates,
+                    self._tune_scores,
+                )
+            self.configure_runtime(
+                batch_wait_ms=next_candidate[0],
+                active_replicas=next_candidate[1],
+            )
 
     def submit(
         self,
@@ -382,6 +577,7 @@ class ReplicatedInferencePool:
         return {
             "schema": "jormungandr.inference_pool.v1",
             "replica_count": len(self._replicas),
+            "active_replica_count": int(self._active_replicas),
             "devices": sorted({replica.device for replica in self._replicas}),
             "queued_requests": int(queued),
             "refreshes": int(self._refreshes),
@@ -390,7 +586,23 @@ class ReplicatedInferencePool:
             "weight_transport": "pytorch_device_copy",
             "activation": "double_buffered_atomic",
             "max_batch_size": int(self.config.max_batch_size),
-            "batch_wait_ms": float(self.config.batch_wait_ms),
+            "batch_wait_ms": float(self._runtime_batch_wait_ms),
+            "auto_tune": {
+                "enabled": bool(self.config.auto_tune),
+                "round": int(self._tune_round),
+                "current": {
+                    "batch_wait_ms": float(self._tune_current[0]),
+                    "active_replicas": int(self._tune_current[1]),
+                },
+                "candidates": [
+                    {
+                        "batch_wait_ms": float(candidate[0]),
+                        "active_replicas": int(candidate[1]),
+                        **dict(self._tune_scores.get(candidate, {})),
+                    }
+                    for candidate in self._tune_candidates
+                ],
+            },
             "replicas": [
                 {
                     "replica_id": replica.replica_id,
@@ -423,6 +635,9 @@ class ReplicatedInferencePool:
         for thread in self._threads:
             thread.join(timeout=3.0)
         self._threads.clear()
+        if self._tune_thread is not None:
+            self._tune_thread.join(timeout=3.0)
+            self._tune_thread = None
 
 
 __all__ = [
@@ -431,5 +646,7 @@ __all__ = [
     "InferenceResult",
     "ReplicatedInferencePool",
     "available_cuda_devices",
+    "auto_replica_count",
+    "resolve_devices",
     "validate_devices",
 ]

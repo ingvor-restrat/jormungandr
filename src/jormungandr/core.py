@@ -18,6 +18,62 @@ except Exception as exc:  # pragma: no cover - optional dependency
     raise SystemExit(f"Torch is required for jormungandr: {exc}")
 
 
+class PriorityIndex:
+    """Array-backed sum tree for logarithmic prioritized sampling and updates."""
+
+    def __init__(self, capacity: int) -> None:
+        if int(capacity) <= 0:
+            raise ValueError("priority index capacity must be positive")
+        self.capacity = int(capacity)
+        leaf_count = 1
+        while leaf_count < self.capacity:
+            leaf_count <<= 1
+        self.leaf_count = leaf_count
+        self.tree = np.zeros(2 * leaf_count, dtype=np.float64)
+
+    @property
+    def total(self) -> float:
+        return float(self.tree[1])
+
+    def set(self, index: int, value: float) -> None:
+        idx = int(index)
+        if idx < 0 or idx >= self.capacity:
+            raise IndexError("priority index is out of bounds")
+        node = self.leaf_count + idx
+        safe_value = float(value)
+        if not np.isfinite(safe_value) or safe_value < 0.0:
+            safe_value = 0.0
+        delta = safe_value - float(self.tree[node])
+        while node >= 1:
+            self.tree[node] += delta
+            node //= 2
+
+    def values(self, indices: np.ndarray) -> np.ndarray:
+        idx = np.asarray(indices, dtype=np.int64).reshape(-1)
+        if np.any(idx < 0) or np.any(idx >= self.capacity):
+            raise IndexError("priority index is out of bounds")
+        return self.tree[self.leaf_count + idx]
+
+    def sample(self, count: int) -> np.ndarray:
+        n = max(1, int(count))
+        total = self.total
+        if not np.isfinite(total) or total <= 0.0:
+            raise ValueError("priority index has no positive mass")
+        # Stratification retains replacement semantics while reducing the
+        # variance of a minibatch compared with independent full-range draws.
+        values = (np.arange(n, dtype=np.float64) + np.random.random(n)) * (
+            total / n
+        )
+        nodes = np.ones(n, dtype=np.int64)
+        while np.any(nodes < self.leaf_count):
+            left = nodes * 2
+            left_mass = self.tree[left]
+            take_right = values >= left_mass
+            values = np.where(take_right, values - left_mass, values)
+            nodes = np.where(take_right, left + 1, left)
+        return (nodes - self.leaf_count).astype(np.int64)
+
+
 class PrioritizedReplayBuffer:
     def __init__(self, capacity: int, obs_dim: int, alpha: float = 0.6):
         self.capacity = int(capacity)
@@ -32,6 +88,7 @@ class PrioritizedReplayBuffer:
         self.done = np.zeros((self.capacity, 1), dtype=np.float32)
         self.priorities = np.zeros((self.capacity,), dtype=np.float32)
         self.max_priority = 1.0
+        self._priority_index = PriorityIndex(self.capacity)
 
     def __len__(self) -> int:
         return self.capacity if self.full else self.pos
@@ -44,6 +101,7 @@ class PrioritizedReplayBuffer:
         self.next_obs[idx] = next_obs
         self.done[idx] = done
         self.priorities[idx] = self.max_priority
+        self._priority_index.set(idx, float(self.max_priority) ** self.alpha)
 
         self.pos = (self.pos + 1) % self.capacity
         if self.pos == 0:
@@ -52,15 +110,17 @@ class PrioritizedReplayBuffer:
     def sample(self, batch_size: int, beta: float):
         if len(self) == 0:
             raise ValueError("Replay buffer is empty")
-        probs = self.priorities[: len(self)] ** self.alpha
-        total = float(probs.sum())
+        total = self._priority_index.total
         if not np.isfinite(total) or total <= 0.0:
-            probs.fill(1.0 / len(self))
+            idxs = np.random.randint(0, len(self), size=int(batch_size))
+            sampled_probs = np.full(int(batch_size), 1.0 / len(self))
         else:
-            probs /= total
-        idxs = np.random.choice(len(self), batch_size, p=probs)
+            idxs = self._priority_index.sample(int(batch_size))
+            if np.any(idxs >= len(self)):
+                raise RuntimeError("priority index sampled an uninitialized slot")
+            sampled_probs = self._priority_index.values(idxs) / total
 
-        weights = (len(self) * probs[idxs]) ** (-beta)
+        weights = (len(self) * sampled_probs) ** (-beta)
         weights /= weights.max()
         weights = weights.astype(np.float32)
 
@@ -79,6 +139,12 @@ class PrioritizedReplayBuffer:
             return
         priorities = np.maximum(priorities, np.float32(1e-6))
         self.priorities[idxs] = priorities
+        for index, priority in zip(
+            np.asarray(idxs, dtype=np.int64).reshape(-1).tolist(),
+            priorities.tolist(),
+            strict=True,
+        ):
+            self._priority_index.set(index, float(priority) ** self.alpha)
         self.max_priority = max(self.max_priority, float(priorities.max()))
 
     def state_dict(self) -> dict:
@@ -108,6 +174,12 @@ class PrioritizedReplayBuffer:
         buf.done = state["done"]
         buf.priorities = state["priorities"]
         buf.max_priority = state["max_priority"]
+        live = len(buf)
+        for index in range(live):
+            buf._priority_index.set(
+                index,
+                float(buf.priorities[index]) ** float(buf.alpha),
+            )
         return buf
 
 
