@@ -27,6 +27,12 @@ from jormungandr.algorithms import (
 from jormungandr.core import PrioritizedReplayBuffer, RunningNormalizer, TBLogger
 from jormungandr.episode import CtypesEpisodeFactory, SubprocessEpisodeFactory
 from jormungandr.interfaces import EpisodeClient, EpisodeFactory
+from jormungandr.inference_pool import (
+    InferencePoolConfig,
+    ReplicatedInferencePool,
+    available_cuda_devices,
+    validate_devices,
+)
 from jormungandr.selectors import (
     ReplaySelector,
     build_replay_selector,
@@ -246,6 +252,9 @@ class ModelRecord:
     aux_update_matched: int = 0
     aux_update_pending: int = 0
     session_ids: set[str] = field(default_factory=set)
+    inference_pool: Optional[ReplicatedInferencePool] = None
+    inference_policy_version: int = 0
+    inference_normalizer_ready: bool = False
     lock: threading.Lock = field(default_factory=threading.Lock)
 
 
@@ -253,12 +262,17 @@ class JormungandrRuntime:
     """Thread-safe Jörmungandr runtime for multi-model training over HTTP."""
 
     _OBS_NORMALIZER_WARMUP = 32
+    _INFERENCE_REFRESH_UPDATES = 25
 
     def __init__(
         self,
         *,
         tensorboard_root: str = "",
         checkpoint_root: str = "",
+        inference_devices: Optional[Sequence[str]] = None,
+        inference_replicas: int = 1,
+        inference_max_batch_size: int = 64,
+        inference_batch_wait_ms: float = 2.0,
     ) -> None:
         self._models: Dict[str, ModelRecord] = {}
         self._sessions: Dict[str, SessionRecord] = {}
@@ -268,6 +282,13 @@ class JormungandrRuntime:
         self._started_ts = time.time()
         self._tensorboard_root = self._resolve_root(tensorboard_root)
         self._checkpoint_root = self._resolve_root(checkpoint_root)
+        self._inference_devices = validate_devices(inference_devices or ())
+        self._inference_config = InferencePoolConfig(
+            devices=self._inference_devices,
+            replicas=int(inference_replicas),
+            max_batch_size=int(inference_max_batch_size),
+            batch_wait_ms=float(inference_batch_wait_ms),
+        )
         self._structured_models = StructuredServiceManager(
             checkpoint_root=self._checkpoint_root,
             tensorboard_root=self._tensorboard_root,
@@ -282,6 +303,19 @@ class JormungandrRuntime:
         self._http_latency_recent_ms: deque[float] = deque(maxlen=4096)
         self._http_route_latency_sum_ms: Dict[str, float] = defaultdict(float)
         self._http_route_latency_count: Counter[str] = Counter()
+
+    def inference_runtime_config(self) -> JsonDict:
+        return {
+            "schema": "jormungandr.inference_runtime.v1",
+            "configured_devices": list(self._inference_devices),
+            "replicas_per_model": int(self._inference_config.replicas),
+            "available_gpus": available_cuda_devices(),
+            "max_batch_size": int(self._inference_config.max_batch_size),
+            "batch_wait_ms": float(self._inference_config.batch_wait_ms),
+            "scheduler": "shared_dynamic_batch_queue",
+            "weight_transport": "pytorch_device_copy",
+            "activation": "double_buffered_atomic",
+        }
 
     def _episode_call(self, srec: SessionRecord, fn: Callable[[], T]) -> T:
         if str(srec.driver).lower() == "ctypes":
@@ -1105,6 +1139,7 @@ class JormungandrRuntime:
                             and len(rec.validation) >= int(cfg.min_validation)
                         ):
                             validation_due = True
+                    self._refresh_model_inference(rec, learner)
                     if validation_due and learner.agent is not None:
                         with rec.lock:
                             validation_size = len(rec.validation)
@@ -1350,6 +1385,204 @@ class JormungandrRuntime:
                     split_tag=f"weights/{module_name}/{tag_name}",
                 )
 
+    @staticmethod
+    def _serving_state_dict(agent: Any) -> JsonDict:
+        """Return weights/state required for serving, excluding optimizer slots."""
+
+        return {
+            str(key): value
+            for key, value in dict(agent.state_dict()).items()
+            if not (
+                str(key) in {"opt", "optimizer"}
+                or str(key).endswith("_opt")
+                or str(key).endswith("_optimizer")
+            )
+        }
+
+    @classmethod
+    def _inference_metadata_locked(
+        cls,
+        rec: ModelRecord,
+        learner: LearnerState,
+    ) -> JsonDict:
+        ready = bool(rec.obs_normalizer.count >= cls._OBS_NORMALIZER_WARMUP)
+        return {
+            "normalizer_ready": ready,
+            "normalizer_mean": rec.obs_normalizer.mean.astype(np.float32).copy(),
+            "normalizer_std": rec.obs_normalizer.std().astype(np.float32).copy(),
+            "updates": int(learner.updates),
+            "algo": str(learner.cfg.algo),
+            "action_values": list(learner.cfg.action_values),
+        }
+
+    @classmethod
+    def _serving_infer_batch(
+        cls,
+        agent: Any,
+        payloads: Sequence[Any],
+        metadata: Mapping[str, Any],
+    ) -> Sequence[Any]:
+        import torch
+
+        rows = cls._sanitize_obs_array(
+            np.stack(
+                [np.asarray(payload["obs"], dtype=np.float32) for payload in payloads],
+                axis=0,
+            )
+        )
+        if bool(metadata.get("normalizer_ready", False)):
+            mean = np.asarray(metadata["normalizer_mean"], dtype=np.float32)
+            std = np.asarray(metadata["normalizer_std"], dtype=np.float32)
+            rows = ((rows - mean) / std).astype(np.float32, copy=False)
+
+        mode = str(payloads[0].get("mode", "policy"))
+        obs_t = torch.tensor(rows, dtype=torch.float32, device=agent.device)
+        if mode == "aux":
+            aux_head = getattr(agent, "aux_head", None)
+            if aux_head is None:
+                raise JormungandrServiceError("aux head is not enabled for this model")
+            with torch.no_grad():
+                logits_t = aux_head(obs_t)
+                probs_t = torch.softmax(logits_t, dim=-1)
+                logits = logits_t.detach().cpu().numpy().astype(np.float64)
+                probs = probs_t.detach().cpu().numpy().astype(np.float64)
+            return [
+                {
+                    "logits": logits[index],
+                    "probs": probs[index],
+                    "pred_class": int(np.argmax(probs[index])),
+                }
+                for index in range(len(payloads))
+            ]
+
+        deterministic = bool(payloads[0].get("deterministic", True))
+        epsilon = max(0.0, float(payloads[0].get("epsilon", 0.0)))
+        masks_raw = [payload.get("action_mask") for payload in payloads]
+        masks = None
+        if any(mask is not None for mask in masks_raw):
+            action_count = len(metadata.get("action_values") or [])
+            masks = np.asarray(
+                [
+                    ([True] * action_count if mask is None else list(mask))
+                    for mask in masks_raw
+                ],
+                dtype=np.bool_,
+            )
+        results = agent.inference_batch(
+            rows,
+            deterministic=deterministic,
+            epsilon=epsilon,
+            action_masks=masks,
+        )
+        aux_probs_arr = None
+        aux_preds = None
+        aux_head = getattr(agent, "aux_head", None)
+        if aux_head is not None:
+            with torch.no_grad():
+                probs_t = torch.softmax(aux_head(obs_t), dim=-1)
+                aux_probs_arr = probs_t.detach().cpu().numpy()
+                aux_preds = np.argmax(aux_probs_arr, axis=1).astype(int)
+        out: List[JsonDict] = []
+        for index, result in enumerate(results):
+            item: JsonDict = {
+                "action": float(result.action),
+                "action_idx": int(result.action_idx),
+            }
+            item.update(dict(result.extras))
+            if result.log_probability is not None:
+                item["log_probability"] = float(result.log_probability)
+                item["behavior_logp"] = float(result.log_probability)
+            if result.value is not None:
+                item["value"] = float(result.value)
+                item["behavior_value"] = float(result.value)
+            if masks is not None:
+                item["action_mask"] = [bool(value) for value in masks[index].tolist()]
+            if aux_probs_arr is not None:
+                item["aux_probs"] = [float(value) for value in aux_probs_arr[index].tolist()]
+                item["aux_pred"] = int(aux_preds[index]) if aux_preds is not None else None
+            out.append(item)
+        return out
+
+    def _start_model_inference(self, rec: ModelRecord) -> None:
+        learner = rec.learner
+        if (
+            learner is None
+            or not learner.cfg.enabled
+            or learner.agent is None
+            or learner.plugin is None
+            or learner.plugin.build is None
+        ):
+            return
+        with learner.agent_lock:
+            state = self._serving_state_dict(learner.agent)
+        with rec.lock:
+            metadata = self._inference_metadata_locked(rec, learner)
+            policy_version = int(learner.policy_version)
+        plugin = learner.plugin
+        config = asdict(learner.cfg)
+
+        def agent_factory(device: str, serving_state: Mapping[str, Any]) -> Any:
+            assert plugin.build is not None
+            agent = plugin.build(int(rec.obs_dim), config, device)
+            agent.load_state_dict(serving_state)
+            return agent
+
+        pool = ReplicatedInferencePool(
+            self._inference_config,
+            agent_factory=agent_factory,
+            infer_batch=self._serving_infer_batch,
+        )
+        pool.start(
+            state,
+            policy_version=policy_version,
+            metadata=metadata,
+            fallback_device=str(learner.cfg.device),
+        )
+        with rec.lock:
+            rec.inference_pool = pool
+            rec.inference_policy_version = policy_version
+            rec.inference_normalizer_ready = bool(metadata["normalizer_ready"])
+
+    def _refresh_model_inference(
+        self,
+        rec: ModelRecord,
+        learner: LearnerState,
+        *,
+        force: bool = False,
+    ) -> bool:
+        with rec.lock:
+            pool = rec.inference_pool
+            policy_version = int(learner.policy_version)
+            normalizer_ready = bool(
+                rec.obs_normalizer.count >= self._OBS_NORMALIZER_WARMUP
+            )
+            due = bool(
+                force
+                or policy_version - int(rec.inference_policy_version)
+                >= self._INFERENCE_REFRESH_UPDATES
+                or normalizer_ready != rec.inference_normalizer_ready
+            )
+            metadata = (
+                self._inference_metadata_locked(rec, learner) if due else {}
+            )
+        if pool is None or learner.agent is None or not due:
+            return False
+        with learner.agent_lock:
+            state = self._serving_state_dict(learner.agent)
+        pool.refresh(state, policy_version=policy_version, metadata=metadata)
+        with rec.lock:
+            rec.inference_policy_version = policy_version
+            rec.inference_normalizer_ready = normalizer_ready
+        return True
+
+    @staticmethod
+    def _stop_model_inference(rec: ModelRecord) -> None:
+        with rec.lock:
+            pool = rec.inference_pool
+            rec.inference_pool = None
+        if pool is not None:
+            pool.close()
+
     def _start_model_learner(self, rec: ModelRecord) -> None:
         learner = rec.learner
         if learner is None or not learner.cfg.enabled:
@@ -1482,6 +1715,11 @@ class JormungandrRuntime:
                     learner_last_error = rec.learner.last_error
                     learner_checkpoint_count = int(rec.learner.checkpoint_count)
                     learner_device = str(rec.learner.cfg.device)
+                inference_pool = (
+                    rec.inference_pool.snapshot()
+                    if rec.inference_pool is not None
+                    else {}
+                )
                 models.append(
                     {
                         "model_id": rec.model_id,
@@ -1534,6 +1772,7 @@ class JormungandrRuntime:
                             else 0.0
                         ),
                         "learner_last_error": learner_last_error,
+                        "inference_pool": inference_pool,
                     }
                 )
                 total_replay_size += replay_size
@@ -1621,6 +1860,7 @@ class JormungandrRuntime:
                 "aux_update_pending": int(total_aux_update_pending),
             },
             "models": models,
+            "inference_runtime": self.inference_runtime_config(),
             "sessions": session_rows[: max(1, int(max_sessions))],
             "num_sessions_total": len(sessions),
         }
@@ -1779,6 +2019,7 @@ class JormungandrRuntime:
             if mid in self._models:
                 raise JormungandrServiceError(f"model_id already exists: {mid}")
             self._models[mid] = rec
+        self._start_model_inference(rec)
         self._start_model_learner(rec)
 
         return self.get_model(mid)
@@ -1821,6 +2062,11 @@ class JormungandrRuntime:
                     "step": rec.inference_step,
                     "ts": rec.inference_ts,
                     "has_payload": bool(rec.inference_payload),
+                    "pool": (
+                        rec.inference_pool.snapshot()
+                        if rec.inference_pool is not None
+                        else {}
+                    ),
                 },
                 "policy_infer_calls": int(rec.policy_infer_calls),
                 "aux_infer_calls": int(rec.aux_infer_calls),
@@ -1946,6 +2192,7 @@ class JormungandrRuntime:
                 rec.session_ids.discard(sid)
 
         self._stop_model_learner(rec)
+        self._stop_model_inference(rec)
 
         with self._lock:
             removed = self._models.pop(model_id, None)
@@ -2643,6 +2890,9 @@ class JormungandrRuntime:
                 raise JormungandrServiceError("learner is not enabled for this model")
             if getattr(learner.agent, "aux_head", None) is None:
                 raise JormungandrServiceError("aux head is not enabled for this model")
+            pool = rec.inference_pool
+            if pool is None:
+                raise JormungandrServiceError("inference pool is not enabled for this model")
 
             feature_keys: List[str] = []
             if obs is not None:
@@ -2656,19 +2906,15 @@ class JormungandrRuntime:
                 if not isinstance(features, Mapping):
                     raise JormungandrServiceError("features must be an object when obs is not provided")
                 obs_np, feature_keys = self._obs_from_features_locked(rec, features)
-            obs_np = self._normalize_obs_locked(rec, obs_np)
-
-        import torch
-
-        obs_t = torch.tensor(obs_np, dtype=torch.float32, device=learner.agent.device).unsqueeze(0)
-        with learner.agent_lock:
-            with torch.no_grad():
-                logits_t = learner.agent.aux_head(obs_t)
-                probs_t = torch.softmax(logits_t, dim=-1)
-                logits = logits_t.squeeze(0).detach().cpu().numpy().astype(np.float64)
-                probs = probs_t.squeeze(0).detach().cpu().numpy().astype(np.float64)
-                pred_class = int(np.argmax(probs)) if probs.size > 0 else 0
-                score = self._aux_score_from_probs(probs)
+        result = pool.submit(
+            {"mode": "aux", "obs": obs_np},
+            key="aux",
+        )
+        value = result.value
+        logits = np.asarray(value["logits"], dtype=np.float64)
+        probs = np.asarray(value["probs"], dtype=np.float64)
+        pred_class = int(value["pred_class"])
+        score = self._aux_score_from_probs(probs)
 
         with rec.lock:
             rec.aux_infer_calls += 1
@@ -2677,6 +2923,9 @@ class JormungandrRuntime:
                 "ts": time.time(),
                 "obs_dim": int(rec.obs_dim),
                 "feature_keys": feature_keys,
+                "policy_version": int(result.policy_version),
+                "inference_replica_id": int(result.replica_id),
+                "inference_device": str(result.device),
                 "aux": {
                     "pred_class": int(pred_class),
                     "score": float(score),
@@ -2718,51 +2967,39 @@ class JormungandrRuntime:
             learner = rec.learner
             if learner is None or not learner.cfg.enabled or learner.agent is None:
                 raise JormungandrServiceError("learner is not enabled for this model")
-            obs_model_np = self._normalize_obs_locked(rec, obs_np)
+            pool = rec.inference_pool
+            if pool is None:
+                raise JormungandrServiceError("inference pool is not enabled for this model")
             validated_mask = self._legal_action_mask_locked(
                 rec, action_mask, field_name="action_mask"
             )
-            import torch
-
-            obs_t = torch.tensor(obs_model_np, dtype=torch.float32, device=learner.agent.device).unsqueeze(0)
-            with learner.agent_lock:
-                result = learner.agent.action_result(
-                    obs_model_np,
-                    epsilon=max(0.0, float(epsilon)),
-                    deterministic=bool(deterministic),
-                    action_mask=validated_mask,
-                )
-                with torch.no_grad():
-                    aux_probs = None
-                    aux_pred = None
-                    if getattr(learner.agent, "aux_head", None) is not None:
-                        logits = learner.agent.aux_head(obs_t)
-                        probs = torch.softmax(logits, dim=-1).squeeze(0).detach().cpu().numpy()
-                        aux_probs = [float(x) for x in probs.tolist()]
-                        aux_pred = int(np.argmax(probs))
+            algo = str(learner.cfg.algo)
+            action_values = list(learner.cfg.action_values)
+            updates = int(learner.updates)
+        infer_result = pool.submit(
+            {
+                "mode": "policy",
+                "obs": obs_np,
+                "deterministic": bool(deterministic),
+                "epsilon": max(0.0, float(epsilon)),
+                "action_mask": validated_mask,
+            },
+            key=("policy", bool(deterministic), max(0.0, float(epsilon))),
+        )
+        item = dict(infer_result.value)
+        with rec.lock:
             rec.policy_infer_calls += 1
             out: JsonDict = {
                 "model_id": model_id,
                 "ts": time.time(),
-                "algo": learner.cfg.algo,
-                "action": float(result.action),
-                "action_idx": int(result.action_idx),
-                "action_values": list(learner.cfg.action_values),
-                "policy_version": int(learner.policy_version),
-                "updates": int(learner.updates),
+                "algo": algo,
+                "action_values": action_values,
+                "policy_version": int(infer_result.policy_version),
+                "updates": updates,
+                "inference_replica_id": int(infer_result.replica_id),
+                "inference_device": str(infer_result.device),
             }
-            out.update(dict(result.extras))
-            if result.log_probability is not None:
-                out["log_probability"] = float(result.log_probability)
-                out["behavior_logp"] = float(result.log_probability)
-            if result.value is not None:
-                out["value"] = float(result.value)
-                out["behavior_value"] = float(result.value)
-            if validated_mask is not None:
-                out["action_mask"] = list(validated_mask)
-            if aux_probs is not None:
-                out["aux_probs"] = aux_probs
-                out["aux_pred"] = int(aux_pred) if aux_pred is not None else None
+            out.update(item)
             return out
 
     def policy_infer_batch(
@@ -2785,7 +3022,9 @@ class JormungandrRuntime:
             learner = rec.learner
             if learner is None or not learner.cfg.enabled or learner.agent is None:
                 raise JormungandrServiceError("learner is not enabled for this model")
-            obs_model_np = np.stack([self._normalize_obs_locked(rec, row) for row in obs_np], axis=0)
+            pool = rec.inference_pool
+            if pool is None:
+                raise JormungandrServiceError("inference pool is not enabled for this model")
             validated_masks = None
             if action_masks is not None:
                 if not isinstance(action_masks, list) or len(action_masks) != obs_np.shape[0]:
@@ -2801,56 +3040,47 @@ class JormungandrRuntime:
                     ],
                     dtype=np.bool_,
                 )
-            import torch
-
-            obs_t = torch.tensor(obs_model_np, dtype=torch.float32, device=learner.agent.device)
-            with learner.agent_lock:
-                results = learner.agent.inference_batch(
-                    obs_model_np,
-                    deterministic=bool(deterministic),
-                    epsilon=max(0.0, float(epsilon)),
-                    action_masks=validated_masks,
-                )
-                with torch.no_grad():
-                    aux_probs_arr = None
-                    aux_preds = None
-                    if getattr(learner.agent, "aux_head", None) is not None:
-                        logits = learner.agent.aux_head(obs_t)
-                        probs_t = torch.softmax(logits, dim=-1)
-                        aux_probs_arr = probs_t.detach().cpu().numpy()
-                        aux_preds = np.argmax(aux_probs_arr, axis=1).astype(int)
-
-            items: List[JsonDict] = []
             action_values = list(learner.cfg.action_values)
-            for i, result in enumerate(results):
-                item: JsonDict = {
-                    "action": float(result.action),
-                    "action_idx": int(result.action_idx),
-                }
-                item.update(dict(result.extras))
-                if result.log_probability is not None:
-                    item["log_probability"] = float(result.log_probability)
-                    item["behavior_logp"] = float(result.log_probability)
-                if result.value is not None:
-                    item["value"] = float(result.value)
-                    item["behavior_value"] = float(result.value)
-                if validated_masks is not None:
-                    item["action_mask"] = [bool(x) for x in validated_masks[i].tolist()]
-                if aux_probs_arr is not None:
-                    item["aux_probs"] = [float(x) for x in aux_probs_arr[i].tolist()]
-                    item["aux_pred"] = int(aux_preds[i]) if aux_preds is not None else None
-                items.append(item)
-
+            algo = str(learner.cfg.algo)
+            updates = int(learner.updates)
+        payloads = [
+            {
+                "mode": "policy",
+                "obs": obs_np[index],
+                "deterministic": bool(deterministic),
+                "epsilon": max(0.0, float(epsilon)),
+                "action_mask": (
+                    validated_masks[index].tolist()
+                    if validated_masks is not None
+                    else None
+                ),
+            }
+            for index in range(obs_np.shape[0])
+        ]
+        infer_results = pool.submit_many(
+            payloads,
+            key=("policy", bool(deterministic), max(0.0, float(epsilon))),
+        )
+        items: List[JsonDict] = []
+        for result in infer_results:
+            item = dict(result.value)
+            item["policy_version"] = int(result.policy_version)
+            item["inference_replica_id"] = int(result.replica_id)
+            item["inference_device"] = str(result.device)
+            items.append(item)
+        versions = sorted({int(result.policy_version) for result in infer_results})
+        with rec.lock:
             rec.policy_infer_calls += 1
             return {
                 "model_id": model_id,
                 "ts": time.time(),
-                "algo": learner.cfg.algo,
+                "algo": algo,
                 "items": items,
                 "batch_size": int(len(items)),
                 "action_values": action_values,
-                "policy_version": int(learner.policy_version),
-                "updates": int(learner.updates),
+                "policy_version": int(versions[-1]),
+                "policy_versions": versions,
+                "updates": updates,
             }
 
     def force_policy_checkpoint(self, model_id: str) -> JsonDict:
@@ -3854,11 +4084,19 @@ class JormungandrHttpServer(ThreadingHTTPServer):
         access_log: bool = False,
         tensorboard_root: str = "",
         checkpoint_root: str = "",
+        inference_devices: Optional[Sequence[str]] = None,
+        inference_replicas: int = 1,
+        inference_max_batch_size: int = 64,
+        inference_batch_wait_ms: float = 2.0,
     ) -> None:
         super().__init__((host, port), JormungandrHttpHandler)
         self.runtime = runtime or JormungandrRuntime(
             tensorboard_root=tensorboard_root,
             checkpoint_root=checkpoint_root,
+            inference_devices=inference_devices,
+            inference_replicas=inference_replicas,
+            inference_max_batch_size=inference_max_batch_size,
+            inference_batch_wait_ms=inference_batch_wait_ms,
         )
         self.access_log = bool(access_log)
 
@@ -4126,6 +4364,22 @@ def parse_args() -> argparse.Namespace:
         help="Enable per-request access logs (disabled by default to avoid log flooding).",
     )
     ap.add_argument(
+        "--inference-devices",
+        default="",
+        help=(
+            "Comma-separated serving devices (for example cuda:0,cuda:1). "
+            "Empty uses each model's learner device."
+        ),
+    )
+    ap.add_argument(
+        "--inference-replicas",
+        type=int,
+        default=1,
+        help="Serving replicas per model, round-robin across inference devices.",
+    )
+    ap.add_argument("--inference-max-batch-size", type=int, default=64)
+    ap.add_argument("--inference-batch-wait-ms", type=float, default=2.0)
+    ap.add_argument(
         "--top",
         action="store_true",
         help="Print periodic top-style runtime stats (throughput, models, HTTP).",
@@ -4169,6 +4423,14 @@ def main() -> None:
         access_log=bool(args.access_log),
         tensorboard_root=str(args.tensorboard_root),
         checkpoint_root=str(args.checkpoint_root),
+        inference_devices=[
+            value.strip()
+            for value in str(args.inference_devices).split(",")
+            if value.strip()
+        ],
+        inference_replicas=int(args.inference_replicas),
+        inference_max_batch_size=int(args.inference_max_batch_size),
+        inference_batch_wait_ms=float(args.inference_batch_wait_ms),
     )
     top_printer: Optional[JormungandrTopPrinter] = None
     if args.top and top_mode == "print":
@@ -4196,6 +4458,10 @@ def main() -> None:
         f"(access_log={'on' if args.access_log else 'off'}, top={'on' if args.top else 'off'}, top_mode={top_mode}, "
         f"tb_root={str(args.tensorboard_root or '-').strip() or '-'}, "
         f"ckpt_root={str(args.checkpoint_root or '-').strip() or '-'})"
+    )
+    print(
+        "[jormungandr] inference runtime "
+        + json.dumps(server.runtime.inference_runtime_config(), separators=(",", ":"))
     )
 
     if args.top and top_mode == "curses":

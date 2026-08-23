@@ -10,12 +10,17 @@ jormungandr-service \
   --host 127.0.0.1 \
   --port 8811 \
   --checkpoint-root /tmp/jormungandr-checkpoints \
+  --inference-devices cuda:0 \
+  --inference-replicas 2 \
   --top
 ```
 
 The service starts empty. Models are created through the API because each
 model declares its observation size, discrete action vocabulary, replay
 limits, learner configuration, and validation cadence.
+The service validates configured GPU resources on startup. Replicas are
+assigned round-robin across the declared devices; omit `--inference-devices`
+to serve each model on its learner device.
 
 ## Create one learner
 

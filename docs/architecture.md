@@ -270,6 +270,17 @@ Feature-map auxiliary inference uses a stable `feature_keys` order stored in
 model metadata. Checkpoints preserve that order and the observation
 normalizer.
 
+Vector models serve through a process-local `ReplicatedInferencePool`. Startup
+configuration declares the permitted CPU/CUDA devices and replica count.
+Requests enter one compatibility-aware dynamic-batch queue, while replica
+workers execute independently of the optimizer lock. Every replica has active
+and standby agents. A refresh copies the authoritative learner state (without
+optimizer slots) into all standby agents, synchronizes affected CUDA devices,
+and flips the complete fleet to one policy version under replica locks. In-flight
+requests may finish on the preceding version; no request observes partially
+loaded weights. Pool placement, queue depth, versions, batch counts, and refresh
+latency are exposed in model runtime telemetry.
+
 ## Artifact plane
 
 A checkpoint contains the model configuration, plugin identity and version,
@@ -318,15 +329,16 @@ integration point; Jörmungandr never owns the contracts or graph state.
 ## Concurrency
 
 Models have independent locks and learner threads. Replay selection and
-metadata snapshots occur under the model lock. Each learner also has a model
-lock that serializes parameter updates, held-out evaluation, inference, and
-checkpoint snapshots without blocking experience ingestion for the duration
-of tensor computation. C-ABI episode adapters are serialized because native
-libraries may not be reentrant.
+metadata snapshots occur under the model lock. The authoritative agent lock
+serializes parameter updates, held-out evaluation, checkpoints, and serving
+snapshot capture. Policy inference runs on read-only replicas and therefore
+does not compete with optimizer updates. C-ABI episode adapters are serialized
+because native libraries may not be reentrant.
 
-The in-memory stores are process-local. Cross-process durability,
-high-throughput binary transports, distributed replay, and multi-learner
-parameter synchronization are future layers rather than implied behavior.
+The in-memory stores and serving queue are process-local. Cross-process
+durability, high-throughput binary transports, distributed replay, and
+multi-learner parameter synchronization are future layers rather than implied
+behavior.
 
 ## Volt integration stages
 

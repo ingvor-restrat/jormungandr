@@ -29,7 +29,8 @@ The current release provides:
   fragments;
 - bounded beam search with utility and QUBO frontier-pruner plugins;
 - held-out validation that never changes weights or normalization state;
-- online single-observation and batched policy inference;
+- online single-observation and batched policy inference, with optional
+  multi-GPU replicas, dynamic batching, and atomic hot-weight activation;
 - an optional auxiliary classification head with delayed-label attachment;
 - running observation normalization learned only from training data;
 - model lifecycle, metrics, runtime statistics, and checkpoints over HTTP;
@@ -85,6 +86,12 @@ implementation, not full image/RSSM benchmark parity.
 python -m pip install -e ".[dev]"
 python -m pytest
 jormungandr-service --host 127.0.0.1 --port 8811 --top
+```
+
+For two serving replicas on GPU 0 while retaining one authoritative learner:
+
+```bash
+jormungandr-service --inference-devices cuda:0 --inference-replicas 2 --top
 ```
 
 In another terminal, run the distributed actor example:
