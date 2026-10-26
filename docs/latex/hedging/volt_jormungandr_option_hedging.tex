@@ -437,6 +437,24 @@ With matched inputs, both implementations reached validation CVaR of
 approximately 0.262 in a two-date Black--Scholes learning control after
 1,000 updates.
 
+The matched Heston application extends this check to 30 hedge dates, stock
+and a funded variance instrument. Three paired training seeds used the same
+initial weights, 131,072 training paths, 8,192 validation paths and 10,000
+updates. On 32,768 fresh common paths, mean policy CVaR was 0.28700 for the
+author implementation and 0.28896 for Volt. The author-minus-Volt interval
+was $[-0.00828,0.00463]$ at the adjusted 95\% level. The model hedge produced
+0.24552. Increasing both the training and validation pools substantially
+improved both learning engines relative to their earlier small-pool fits.
+
+The learner also provides \texttt{volt\_shared\_lstm\_reset}: two shared LSTM
+layers followed by two dense ReLU layers and linear holdings outputs. Its
+hidden state resets at each decision, following the reference implementation's
+one-observation sequence. Optional wealth inputs carry the financed account
+into the decision and remain connected through differentiation during
+training. Dropout has an explicit probability and seed. CPU and Metal/fusion
+checks cover forward holdings, financial loss, all parameter derivatives,
+the first Adam update and checkpoint continuation.
+
 The end-to-end synthetic exercise used two trading days, a constant-volatility
 stock process with annual volatility 20\%, interest 3\% and dividend yield
 1\%. The liability was an at-the-money straddle and the hedge instruments
