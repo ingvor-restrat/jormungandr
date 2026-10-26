@@ -446,7 +446,7 @@ was $[-0.00828,0.00463]$ at the adjusted 95\% level. The model hedge produced
 0.24552. Increasing both the training and validation pools substantially
 improved both learning engines relative to their earlier small-pool fits.
 
-The learner also provides \texttt{volt\_shared\_lstm\_reset}: two shared LSTM
+The learner also provides \texttt{volt\_shared\_lstm\_reset}: two shared long short-term memory (LSTM)
 layers followed by two dense ReLU layers and linear holdings outputs. Its
 hidden state resets at each decision, following the reference implementation's
 one-observation sequence. Optional wealth inputs carry the financed account
@@ -471,17 +471,25 @@ updates and out-of-batch evaluation. Estimating economic performance calls
 for larger independent samples, repeated training runs and direct comparisons
 with model hedges.
 
+Executing the stock-and-option author's complete agent class also checks the
+new engine directly. With shared inputs and weights, holdings, financed profits
+and the first optimizer update agree to approximately $10^{-6}$ in single
+precision. That profile uses the recurrent activation and trading rule of the
+author's software.
+
 The 63-day stock-and-option application uses joint return and implied-volatility
-transitions with the coefficients supplied by the reference example. Three
-shared-LSTM policies completed 200 updates each, with batches of 1,000 paths.
+transitions with the coefficients supplied by the reference example. The policy used sigmoid recurrent activations and standard bias-corrected
+Adam. Three training seeds completed 200 updates each, with batches of 1,000 paths.
 Training used 32,000 paths and selection used 4,000 separate paths; assessment
 then used 8,000 fresh common paths. Mean squared hedging loss averaged 0.462,
 versus 3.077 for the source delta control, 2.121 for a delta--gamma hedge using
 pricing Greeks, and 24.750 without hedging. Mean fees were approximately 0.487
 for the learned policies and 1.145 for delta--gamma hedging.
 
-This initial comparison omits the source's learned small-trade rule and uses
-the stated finite training budget. All three selections occurred at update 200.
+This initial comparison evaluates raw network holdings under the stated
+finite training budget. All three selections occurred at update 200. A separate
+reference-rule experiment uses the author's recurrent activation, learned
+trade threshold and optimizer convention.
 The results demonstrate useful cost-aware learning for the supplied market
 specification. The original paper's longer training campaign and independently
 calibrated historical markets provide further comparisons. A 1,000-path,
@@ -511,9 +519,6 @@ the table provides an execution reference for the application calculation.
 
 Application checks also cover dataset-partition enforcement, stale model
 versions, checkpoint continuation and a different registered learner engine.
-The completed release validation included 288 Volt checks, 216 Jormungandr
-checks and six native protocol/HTTP checks. These support the availability
-of the application interface and numerical engine. The controls support using the API to construct and compare hedging policies.
 
 \section{Using the workflow in a trading application}
 The same interfaces support a research comparison and a deployed decision
