@@ -81,6 +81,10 @@ class StructuredBCAgent:
                 int(cfg(config, "structured_candidate_attention_layers", 0)),
             ),
         ).to(self.device)
+        # This scalar shifts every candidate logit equally. Categorical
+        # likelihood is invariant to it; freezing it prevents Adam from
+        # amplifying floating-point cancellation residuals into bias drift.
+        self.policy.candidate_scorer[-1].bias.requires_grad_(False)
         self.max_grad_norm = max(0.0, float(cfg(config, "max_grad", 1.0)))
         self.optimizer = torch.optim.Adam(
             self.policy.parameters(), lr=float(cfg(config, "lr", 3e-4))
