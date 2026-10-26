@@ -541,6 +541,20 @@ use the same conventions as training. Portfolio quantities convert the targets
 into economic exposures; the execution application handles order sizes,
 liquidity and position controls.
 
+For American and Bermudan contracts, the holder chooses an exercise time
+$\tau$ and receives $g(\tau,S_\tau)$. Volt's one-asset constant-volatility
+pricer already compares immediate exercise with continuation, including dated
+cash dividends. Its numerical exercise rule can supply a holder policy for
+training the writer's hedge. That application requires an episode account
+with dated settlement, hedge closure at exercise and subsequent cash financing.
+The completed learning studies above use expiry settlement.
+
+A further application learns the holder's exercise policy. Becker, Cheridito
+and Jentzen develop learned stopping rules, then combine exercise decisions,
+price bounds and dynamic hedges~\cite{stopping,american}. A Bermudan study with
+specified exercise dates and a numerical reference provides a practical first
+comparison for this extension.
+
 Changing the liability or market model begins with a new scenario specification.
 Longer horizons, additional instruments and new market observations enter through
 the configured policy dimensions and batch arrays. Predictive factors can enter
@@ -558,6 +572,8 @@ or a different hedge instrument improves risk after trading costs.
 \bibitem{volt} Volt. \emph{Native learner application guide}. Protocol, financial inputs, execution backends and checkpoint support. \url{https://github.com/ingvor-restrat/volt/blob/main/crates/volt-compute/docs-native-learner.md}.
 \bibitem{jorm} Jormungandr. \emph{Native learners}. Application endpoints, registered engines and example client. \url{https://github.com/ingvor-restrat/jormungandr/blob/main/docs/native-learners.md}.
 \bibitem{authorcode} H. Buehler. Deep Hedging sample implementation. \url{https://github.com/hansbuehler/deephedging}.
+\bibitem{stopping} S. Becker, P. Cheridito and A. Jentzen. \emph{Deep Optimal Stopping}. JMLR 20(74):1--25, 2019. \url{https://jmlr.org/papers/v20/18-232.html}.
+\bibitem{american} S. Becker, P. Cheridito and A. Jentzen. \emph{Pricing and hedging American-style options with deep learning}. JRFM 13(7):158, 2020. \url{https://arxiv.org/abs/1912.11060}.
 \bibitem{burn} Burn. Tensor and automatic-differentiation implementation. \url{https://github.com/tracel-ai/burn}.
 \end{thebibliography}
 \end{SNcolumns}
