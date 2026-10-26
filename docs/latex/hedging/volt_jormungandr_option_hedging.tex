@@ -485,6 +485,15 @@ $-2.063$, with an adjusted 95\% interval of $[-2.450,-1.880]$. One path in 8,000
 crossed the declared intermediate tracking limit for each policy. All policy
 selections were fixed before generating the assessment paths.
 
+A further comparison uses a classical trading band. Validation selected a
+threshold of three for the sum of absolute changes in stock and call holdings.
+On 4,000 additional fresh common paths, learned MSE was 0.286, band MSE 1.333,
+and daily delta--gamma MSE 2.250. Mean fees were 0.625, 0.711 and 1.150,
+respectively. The adjusted learned-minus-band MSE interval was
+$[-1.118,-0.974]$. The same three neural checkpoints were retained, and the
+band threshold was selected before generating these paths. This comparison
+shows an advantage beyond the cost savings of the selected fixed band.
+
 These results describe the supplied simulator and finite training budget.
 The original paper's historical calibration, path filtering and longer
 training experiment provide further comparisons. An earlier 200-update
