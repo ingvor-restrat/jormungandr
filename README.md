@@ -314,5 +314,8 @@ Continue with:
 - [Experience and inference protocol](docs/protocol.md)
 - [Reproducible results](docs/results.md)
 - [Jörmungandr research paper](docs/latex/jormungandr_learning_systems.pdf)
+- [Learning to Hedge with Stocks and Options](docs/latex/hedging/volt_jormungandr_option_hedging.pdf)
+  ([LaTeX source and build](docs/latex/hedging/README.md),
+  [complete API client](examples/native_hedging_api.py))
 
 Licensed under Apache-2.0.

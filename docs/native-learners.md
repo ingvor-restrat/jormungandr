@@ -82,4 +82,7 @@ Tests compare the financed recurrence with an independent scalar cash ledger, ch
 VOLT_LEARNER_TEST_BIN="$VOLT_LEARNER_BIN" python -m pytest tests/test_native_learner.py -q
 ```
 
-The surface-informed hedging paper additionally requires its simulator, policy architecture, trade thresholds and empirical comparison. Those remain research work beyond this integration control.
+The [stock-and-option hedging tutorial](latex/hedging/volt_jormungandr_option_hedging.pdf)
+develops the market model, cash accounting, objective and application calls.
+Its [LaTeX source](latex/hedging/volt_jormungandr_option_hedging.tex) and
+[complete client example](../examples/native_hedging_api.py) are maintained in this repository.

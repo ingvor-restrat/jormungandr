@@ -131,3 +131,10 @@ PYTHONPATH=src python examples/benchmark_structured_ppo_safety.py \
 
 Plotting uses the optional `plot` dependency group; GIF rendering additionally
 uses `record`.
+
+## Stock-and-option hedging tutorial
+
+[Learning to Hedge with Stocks and Options](hedging/volt_jormungandr_option_hedging.pdf)
+explains the financial control problem and native learner API. Its
+[canonical source and build instructions](hedging/README.md) live in the
+`hedging/` subdirectory, with a scoped journal template.
