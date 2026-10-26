@@ -471,6 +471,23 @@ updates and out-of-batch evaluation. Estimating economic performance calls
 for larger independent samples, repeated training runs and direct comparisons
 with model hedges.
 
+The 63-day stock-and-option application uses joint return and implied-volatility
+transitions with the coefficients supplied by the reference example. Three
+shared-LSTM policies completed 200 updates each, with batches of 1,000 paths.
+Training used 32,000 paths and selection used 4,000 separate paths; assessment
+then used 8,000 fresh common paths. Mean squared hedging loss averaged 0.462,
+versus 3.077 for the source delta control, 2.121 for a delta--gamma hedge using
+pricing Greeks, and 24.750 without hedging. Mean fees were approximately 0.487
+for the learned policies and 1.145 for delta--gamma hedging.
+
+This initial comparison omits the source's learned small-trade rule and uses
+the stated finite training budget. All three selections occurred at update 200.
+The results demonstrate useful cost-aware learning for the supplied market
+specification. The original paper's longer training campaign and independently
+calibrated historical markets provide further comparisons. A 1,000-path,
+63-date CPU preflight measured approximately 0.23--0.26 seconds per complete
+update; scenario generation and initial submission are additional costs.
+
 \begin{center}
 \begin{minipage}{\linewidth}
 \centering
