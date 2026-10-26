@@ -455,46 +455,41 @@ training. Dropout has an explicit probability and seed. CPU and Metal/fusion
 checks cover forward holdings, financial loss, all parameter derivatives,
 the first Adam update and checkpoint continuation.
 
-The end-to-end synthetic exercise used two trading days, a constant-volatility
-stock process with annual volatility 20\%, interest 3\% and dividend yield
-1\%. The liability was an at-the-money straddle and the hedge instruments
-were stock and an initially 84-day at-the-money call. Black--Scholes prices
-supplied the initial premium and hedge-call marks. Both networks had hidden
-width eight. Trading fees were 5 basis points for stock and 1\% for the option,
-including terminal liquidation.
+The two-date API example uses a constant-volatility stock process, a straddle
+liability and stock plus a longer-dated call as hedge instruments. Two actors
+submit batches and update one model. The example checks the complete client
+workflow on a small calculation; the larger study below evaluates hedging
+performance on a joint return and implied-volatility model.
 
-Two actors each supplied one batch of 64 training paths and applied 30 updates,
-for 60 accepted updates in total. Each actor reused its batch. On a separate
-64-path validation set, mean squared hedging loss fell from 1.54 to
-0.88, a 43\% reduction. This run exercises data submission, shared-model
-updates and out-of-batch evaluation. Estimating economic performance calls
-for larger independent samples, repeated training runs and direct comparisons
-with model hedges.
-
-Executing the stock-and-option author's complete agent class also checks the
-new engine directly. With shared inputs and weights, holdings, financed profits
+Executing the stock-and-option author's complete agent class checks the new
+engine directly. With shared inputs and weights, holdings, financed profits
 and the first optimizer update agree to approximately $10^{-6}$ in single
-precision. That profile uses the recurrent activation and trading rule of the
-author's software.
+precision. The reference profile uses the author's recurrent activation,
+learned small-trade threshold and Adam epsilon convention.
 
-The 63-day stock-and-option application uses joint return and implied-volatility
-transitions with the coefficients supplied by the reference example. The policy used sigmoid recurrent activations and standard bias-corrected
-Adam. Three training seeds completed 200 updates each, with batches of 1,000 paths.
-Training used 32,000 paths and selection used 4,000 separate paths; assessment
-then used 8,000 fresh common paths. Mean squared hedging loss averaged 0.462,
-versus 3.077 for the source delta control, 2.121 for a delta--gamma hedge using
-pricing Greeks, and 24.750 without hedging. Mean fees were approximately 0.487
-for the learned policies and 1.145 for delta--gamma hedging.
+The reference-rule study trained three shared policies for 1,000 updates each,
+with batches of 1,000 paths. Training used 32,000 paths, validation used 4,000
+separate paths, and assessment then used 8,000 fresh common paths. Its liability
+was one quoted-unit 63-day at-the-money straddle; hedges were stock and an
+84-day at-the-money call. Stock trades cost 0.05\% and option trades 2\%. At maturity, the stock
+position is valued at its mark and call liquidation incurs the 2\% fee. The generator used the coefficients supplied by
+the reference example. Validation used the smooth trading rule; final inference
+used the specified sharpening operation. The selected updates were 1,000,
+1,000 and 900.
 
-This initial comparison evaluates raw network holdings under the stated
-finite training budget. All three selections occurred at update 200. A separate
-reference-rule experiment uses the author's recurrent activation, learned
-trade threshold and optimizer convention.
-The results demonstrate useful cost-aware learning for the supplied market
-specification. The original paper's longer training campaign and independently
-calibrated historical markets provide further comparisons. A 1,000-path,
-63-date CPU preflight measured approximately 0.23--0.26 seconds per complete
-update; scenario generation and initial submission are additional costs.
+Mean squared hedging loss averaged 0.344, compared with 3.756 for the source
+delta control, 2.408 for delta--gamma hedging using pricing Greeks, and 30.581
+without hedging. Mean fees were 0.624 for the learned policies and 1.150 for
+delta--gamma hedging. The learned-minus-delta--gamma MSE difference was
+$-2.063$, with an adjusted 95\% interval of $[-2.450,-1.880]$. One path in 8,000
+crossed the declared intermediate tracking limit for each policy. All policy
+selections were fixed before generating the assessment paths.
+
+These results describe the supplied simulator and finite training budget.
+The original paper's historical calibration, path filtering and longer
+training experiment provide further comparisons. An earlier 200-update
+sigmoid-LSTM variant is retained in the research record; its separate
+8,000-path assessment produced mean squared loss of 0.462.
 
 \begin{center}
 \begin{minipage}{\linewidth}
