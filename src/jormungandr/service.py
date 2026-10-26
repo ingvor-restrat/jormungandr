@@ -45,6 +45,7 @@ from jormungandr.selectors import (
     select_trajectory_replay,
 )
 from jormungandr.structured_service import StructuredServiceManager
+from jormungandr.native_learner import NativeBackend, NativeLearnerManager, NativeWorkerError
 
 JsonDict = Dict[str, Any]
 T = TypeVar("T")
@@ -296,7 +297,9 @@ class JormungandrRuntime:
         inference_auto_tune: bool = True,
         inference_tune_interval_s: float = 15.0,
         inference_tune_batch_wait_ms: Sequence[float] = (0.5, 2.0, 5.0, 10.0),
+        native_backends: Optional[Mapping[str, NativeBackend]] = None,
     ) -> None:
+        self.native_models = NativeLearnerManager(native_backends)
         self._models: Dict[str, ModelRecord] = {}
         self._sessions: Dict[str, SessionRecord] = {}
         self._lock = threading.Lock()
@@ -3590,6 +3593,7 @@ class JormungandrRuntime:
             except Exception:
                 pass
         self._structured_models.close_all()
+        self.native_models.close_all()
         if not self._artifact_executor_closed:
             self._artifact_executor.shutdown(wait=True, cancel_futures=False)
             self._artifact_executor_closed = True
@@ -3867,6 +3871,18 @@ class JormungandrHttpHandler(BaseHTTPRequestHandler):
         self._request_started_ts = time.time()
         try:
             parts = self._path_parts()
+            if parts == ["v2", "native", "backends"]:
+                self._ok(self.runtime.native_models.capabilities())
+                return
+            if parts == ["v2", "native", "models"]:
+                self._ok({"models": self.runtime.native_models.list_models()})
+                return
+            if len(parts) == 4 and parts[:3] == ["v2", "native", "models"]:
+                self._ok(self.runtime.native_models.command(parts[3], "status"))
+                return
+            if len(parts) == 5 and parts[:3] == ["v2", "native", "models"] and parts[4] == "metrics":
+                self._ok(self.runtime.native_models.metrics(parts[3]))
+                return
             if parts == ["health"]:
                 self._ok({"service": "jormungandr", "ts": time.time()})
                 return
@@ -3934,6 +3950,8 @@ class JormungandrHttpHandler(BaseHTTPRequestHandler):
             self._err(404, str(exc))
         except ValueError as exc:
             self._err(400, str(exc))
+        except NativeWorkerError as exc:
+            self._err(503, str(exc))
         except Exception as exc:
             self._err(500, "internal error", detail=str(exc))
 
@@ -3960,6 +3978,13 @@ class JormungandrHttpHandler(BaseHTTPRequestHandler):
                 )
                 return
             body = self._read_json()
+
+            if parts == ["v2", "native", "models"]:
+                self._ok(self.runtime.native_models.create(body))
+                return
+            if len(parts) == 5 and parts[:3] == ["v2", "native", "models"]:
+                self._ok(self.runtime.native_models.command(parts[3], parts[4], body))
+                return
 
             if parts == ["v2", "models"]:
                 replay = body.get("replay", {})
@@ -4447,6 +4472,8 @@ class JormungandrHttpHandler(BaseHTTPRequestHandler):
             self._err(413, str(exc))
         except (JormungandrServiceError, ValueError) as exc:
             self._err(400, str(exc))
+        except NativeWorkerError as exc:
+            self._err(503, str(exc))
         except Exception as exc:
             self._err(500, "internal error", detail=str(exc))
 
@@ -4454,6 +4481,9 @@ class JormungandrHttpHandler(BaseHTTPRequestHandler):
         self._request_started_ts = time.time()
         try:
             parts = self._path_parts()
+            if len(parts) == 4 and parts[:3] == ["v2", "native", "models"]:
+                self._ok(self.runtime.native_models.delete(parts[3]))
+                return
             if len(parts) == 3 and parts[:2] == ["v2", "models"]:
                 self._ok(self.runtime.delete_structured_model(parts[2]))
                 return

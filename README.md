@@ -161,6 +161,14 @@ The [generic trainer walkthrough](docs/example-trainer.md) explains its
 environment interface, split scheduler, delayed auxiliary labels, run
 artifacts, and the future Volt adapter boundary.
 
+## Episode-training application API
+
+An optional native episode learner keeps its policy, optimizer and scenario tensors
+inside a persistent Rust worker. Actors submit complete batches through Jormungandr's
+HTTP API; the worker differentiates through continuous hedge decisions and portfolio
+cash flows. See the [native learner setup and API](docs/native-learners.md) and the
+[two-actor example](examples/native_hedging.py).
+
 ## See distributed learning
 
 ![A live distributed OU spread training monitor](docs/markup/ou-spread.gif)

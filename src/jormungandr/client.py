@@ -83,6 +83,21 @@ class JormungandrClient:
             )
         return result
 
+    def create_native_model(self, spec: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/v2/native/models", spec)
+
+    def get_native_model(self, model_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/v2/native/models/{quote(model_id, safe='')}")
+
+    def native_command(self, model_id: str, operation: str, payload: Mapping[str, Any] | None = None) -> dict[str, Any]:
+        from jormungandr.native_learner import NativeLearnerManager
+        if operation not in NativeLearnerManager.OPERATIONS:
+            raise ValueError("unsupported native operation")
+        return self._request("POST", f"/v2/native/models/{quote(model_id, safe='')}/{operation}", payload or {})
+
+    def delete_native_model(self, model_id: str) -> dict[str, Any]:
+        return self._request("DELETE", f"/v2/native/models/{quote(model_id, safe='')}")
+
     def infer_policy_sbe(
         self,
         model_id: str,
