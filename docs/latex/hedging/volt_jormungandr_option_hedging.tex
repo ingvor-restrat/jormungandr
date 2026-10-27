@@ -541,19 +541,121 @@ use the same conventions as training. Portfolio quantities convert the targets
 into economic exposures; the execution application handles order sizes,
 liquidity and position controls.
 
-For American and Bermudan contracts, the holder chooses an exercise time
-$\tau$ and receives $g(\tau,S_\tau)$. Volt's one-asset constant-volatility
-pricer already compares immediate exercise with continuation, including dated
-cash dividends. Its numerical exercise rule can supply a holder policy for
-training the writer's hedge. That application requires an episode account
-with dated settlement, hedge closure at exercise and subsequent cash financing.
-The completed learning studies above use expiry settlement.
+\section{Exercise decisions and the writer's hedge}
+A put holder can receive $\max(K-S_t,0)$ by exercising. American rights
+permit this throughout the contract's life; Bermudan rights specify a finite
+set of dates. Exercising gives up the remaining option, so the holder compares
+that payment with the expected value of waiting. The writer's hedge runs
+until the resulting stopping time $\tau$, when the claim settles.
 
-A further application learns the holder's exercise policy. Becker, Cheridito
-and Jentzen develop learned stopping rules, then combine exercise decisions,
-price bounds and dynamic hedges~\cite{stopping,american}. A Bermudan study with
-specified exercise dates and a numerical reference provides a practical first
-comparison for this extension.
+Let $G_n=e^{-rt_n}\max(K-S_{t_n},0)$ denote a discounted put payment under
+the risk-neutral model. A continuation function estimates the expected
+discounted payment from a later exercise rule:
+\[
+ c_n(x)=\E^{\mathbb Q}[G_{\tau_{n+1}}\mid S_{t_n}=x].
+\]
+Backward regression fits this expectation by squared error, then exercises
+where $G_n\geq c_n(S_{t_n})$. The 2019 direct method instead learns a smooth
+exercise probability $f_\theta(x)$ by maximizing
+\[
+ \E^{\mathbb Q}\!\left[G_n f_\theta(S_{t_n})+
+ (1-f_\theta(S_{t_n}))G_{\tau_{n+1}}\right].
+\]
+Later decisions stay fixed while fitting the current date. Deployment uses
+the resulting binary exercise decisions. Volt implements both methods from
+Becker, Cheridito and Jentzen~\cite{stopping,american}, starting with a
+one-stock GBM put and an explicitly dated exercise grid.
+
+The holder and writer optimize different quantities. The holder seeks the
+largest expected discounted payment under the pricing model. Given that
+rule, the writer chooses hedge holdings to reduce its selected after-cost
+risk. Volt's finite-difference holder map supplies an independently computed
+exercise control, including cash dividends. Its scenario producer supplies
+either numerical or learned stopping times to the writer's native worker.
+An upload adds \texttt{exercise} with per-path settlement indices and signed
+amounts, \texttt{cash\_income} for intermediate per-unit payments, and optional
+\texttt{initial\_wealth} for per-path starting capital. The existing
+\texttt{native\_command} upload, update and evaluation calls remain the
+application interface.
+
+At settlement the account liquidates the hedge, pays the liability and
+finances cash to the common final date. This makes the reported loss
+comparable across early and late exercise paths. Separate checks reconcile
+the payments, dividend credits, fees and parameter gradients, and the HTTP
+test reproduces the next optimizer update after checkpoint restoration.
+
+For frictionless interval hedging, the 2020 method fits stock holdings against
+changes in approximate option value. Write
+$P_n=e^{(q-r)t_n}S_{t_n}$ for discounted, dividend-reinvested stock and
+$v_{n+1}=\max(G_{n+1},c_{n+1})$ at the next exercise opportunity.
+The regression minimizes
+\[
+ \E^{\mathbb Q}\!\left[
+   \bigl(c_n+h_n(S_{t_n})(P_{n+1}-P_n)-v_{n+1}\bigr)^2
+ \right].
+\]
+Volt exposes this interval calculation separately from the complete-path
+after-cost writer objective. Fresh-path valuation reports the learned
+holder's payment estimate and a nested conditional-value martingale upper
+estimate, with sampling uncertainty. The implemented martingale uses a
+continuation proxy; the papers also describe policy-tail constructions.
+The numerical pricing model, exercise dates and financial assumptions remain
+part of each comparison.
+
+Our complete-account exercise study sells one put on one share, with spot
+and strike 100, one-year maturity, 20\% constant volatility and 5\% funding.
+The stock follows risk-neutral GBM. The holder uses the numerical rule on
+four quarterly exercise dates; the writer can hedge monthly. Three seeds
+per cost setting each trained for 3,000 updates on 16,384 paths, with 4,096
+validation paths. Each date has a width-16, two-hidden-layer network, using
+log stock price, remaining time and previous holdings. All six selections
+preceded generation of 16,384 fresh common assessment paths.
+
+\begin{center}
+\begin{minipage}{\linewidth}
+\centering
+\begin{tabular}{lrrr}
+\toprule
+Stock fee & Learned & Numerical delta & Trading band\\
+\midrule
+0 & 4.013 & 3.935 & 3.937\\
+10 basis points & 4.079 & 3.984 & 3.986\\
+\bottomrule
+\end{tabular}
+\captionof{table}{Fresh-path mean squared terminal-bank loss for the
+Bermudan writer. Learned entries average three selected policies.
+The stock-holdings band was selected on validation.}
+\end{minipage}
+\end{center}
+
+Leaving the liability unhedged gives mean squared loss of 61.443.
+The learned hedge therefore removes roughly 93\% of that squared loss and
+finishes about 2\% above numerical delta at this training budget. Adjusted
+95\% paired intervals for the learned-minus-delta difference are
+$[0.045,0.110]$ without fees and $[0.050,0.141]$ with fees. Replaying all
+98,304 learned-policy paths through a separate cash calculation agrees
+within $10^{-12}$. This study evaluates the writer against the numerical
+holder; learned-holder valuation and interval hedging have their own
+objectives and assessment paths.
+
+A separate holder study permits exercise at all twelve monthly dates.
+Each algorithm uses three seeds, 32,768 training paths, 8,192 validation
+paths and 500 updates per fitted date. After selecting all six holders and
+three interval hedges, assessment uses 65,536 paths for holder payments and
+4,096 outer paths with 64 conditional children for the martingale estimate.
+Across the six holders, payment estimates range from 5.952 to 5.983 and
+upper estimates from 6.262 to 6.292. Every asymptotic 95\% price enclosure
+contains the matching finite-difference value of 6.0428; doubling its mesh
+from 600 to 1,200 changes the value by about 0.00013. The roughly 0.3
+estimator gap leaves scope for more accurate continuation fits and additional
+conditional simulation.
+
+On 32,768 additional paths, the three interval hedges have discounted-error
+MSEs of 3.986--4.116, compared with 54.57--58.60 for cash alone at their
+declared training-derived initial capital. These studies establish the
+one-stock application and its checks. The papers' multidimensional max-call
+experiments, larger training schedules and published numerical tables provide
+the next replication comparison.
 
 Changing the liability or market model begins with a new scenario specification.
 Longer horizons, additional instruments and new market observations enter through
