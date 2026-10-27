@@ -87,6 +87,11 @@ develops the market model, cash accounting, objective and application calls.
 Its [LaTeX source](latex/hedging/volt_jormungandr_option_hedging.tex) and
 [complete client example](../examples/native_hedging_api.py) are maintained in this repository.
 
+For the underlying concepts, the companion
+[practical primer](https://github.com/ingvor-restrat/volt/blob/main/docs/latex/compute/volt_option_learning_primer.pdf)
+introduces contracts, probability, financed accounts, exercise, Greeks,
+learning objectives and automatic differentiation through worked examples.
+
 ## Early exercise and dividend payments
 
 The same upload and update calls support exercise-aware Volt batches. A scenario
