@@ -86,3 +86,29 @@ The [stock-and-option hedging tutorial](latex/hedging/volt_jormungandr_option_he
 develops the market model, cash accounting, objective and application calls.
 Its [LaTeX source](latex/hedging/volt_jormungandr_option_hedging.tex) and
 [complete client example](../examples/native_hedging_api.py) are maintained in this repository.
+
+## Early exercise and dividend payments
+
+The same upload and update calls support exercise-aware Volt batches. A scenario
+producer first follows the holder's exercise rule along a path. It sends
+`exercise: {settlement_step: [...], settlement_amounts: [...]}` with one entry
+per path and zero terminal `payoffs`. The writer's policy trades until settlement,
+closes its hedge, pays the signed liability and carries the remaining cash to
+the common final date. Positive settlement amounts are amounts owed by the writer.
+
+Optional `cash_income` supplies payments per held instrument unit with layout
+`[path, interval, instrument]`. Optional `initial_wealth` supplies per-path starting
+capital, useful for continuation-value interval hedging. Omitting it uses the
+configured premium. Evaluation identifies the comparison date through
+`pnl_reference: "common_terminal_bank_account_after_settlement"`.
+
+Volt's [Bermudan scenario application](https://github.com/ingvor-restrat/volt/blob/main/docs/bermudan-market.md)
+constructs these batches with dated exercise, cash dividends, a numerical holder
+rule and a financed delta control. The [worker account documentation](https://github.com/ingvor-restrat/volt/blob/main/crates/volt-compute/docs-native-learner.md#exercise-and-intermediate-cash-payments)
+defines event order and units. Jormungandr forwards the batch through the selected
+backend and preserves version checks, split identities and optimizer continuation.
+Clients finish the contract's action sequence when settlement occurs.
+
+The real-worker HTTP integration test covers both terminal-only and early-settled
+batches, including signed payments, intermediate cash income, per-path capital
+and the identical next training update after checkpoint restoration.

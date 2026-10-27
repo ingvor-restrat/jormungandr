@@ -92,7 +92,8 @@ def episode(prefix='train'):
 
 
 @pytest.mark.skipif(not os.environ.get('VOLT_LEARNER_TEST_BIN'), reason='set VOLT_LEARNER_TEST_BIN to test the real Rust worker')
-def test_http_real_burn_matches_direct_updates_and_checkpoint_restart():
+@pytest.mark.parametrize('stopped', [False, True])
+def test_http_real_burn_matches_direct_updates_and_checkpoint_restart(stopped):
     from jormungandr.service import JormungandrHttpServer, JormungandrRuntime
     backend = NativeBackend((os.environ['VOLT_LEARNER_TEST_BIN'],))
     runtime = JormungandrRuntime(native_backends={'volt_burn':backend}, inference_replicas=1)
@@ -100,6 +101,16 @@ def test_http_real_burn_matches_direct_updates_and_checkpoint_restart():
     thread = threading.Thread(target=server.serve_forever,daemon=True);thread.start()
     base=f'http://127.0.0.1:{server.server_address[1]}/v2/native'
     direct=NativeWorker(backend)
+
+    def batch(prefix='train'):
+        result = episode(prefix)
+        if stopped:
+            result.update(payoffs=[0]*4,
+                          exercise={'settlement_step':[0,1,2,2],
+                                    'settlement_amounts':[1,-1,.25,-.25]},
+                          cash_income=[.1,0,.2,0]*4,
+                          initial_wealth=[2,2.5,3,3.5])
+        return result
 
     def call(method, route, body=None):
         request=Request(base+route,data=None if body is None else json.dumps(body).encode(),headers={'Content-Type':'application/json'},method=method)
@@ -117,16 +128,20 @@ def test_http_real_burn_matches_direct_updates_and_checkpoint_restart():
         registration={'dataset_id':'train','partitions':[{'split':'train','first_path':0,'paths':4}]}
         assert call('POST','/models/hedge/register_dataset',registration)[0]==200
         direct.request({'op':'register_dataset',**registration})
-        body={'batch_id':'train','split':'train','batch':episode()}
+        body={'batch_id':'train','split':'train','batch':batch()}
         assert call('POST','/models/hedge/upload',body)[0]==200
         direct.request({'op':'upload',**body})
+        observed=call('POST','/models/hedge/evaluate',{'batch_id':'train'})[1]
+        assert observed=={'ok':True,**direct.request({'op':'evaluate','batch_id':'train'})}
+        if stopped:
+            assert observed['pnl_reference']=='common_terminal_bank_account_after_settlement'
         assert call('POST','/models/hedge/update',{'batch_id':'train','expected_version':0})[0]==200
         direct.request({'op':'update','batch_id':'train','expected_version':0})
         status,checkpoint=call('POST','/models/hedge/checkpoint',{})
         assert status==200 and checkpoint=={'ok':True,**direct.request({'op':'checkpoint'})}
         assert call('POST','/models/hedge/update',{'batch_id':'train','expected_version':0})[0]==400
         assert call('POST','/models/hedge/register_dataset',{'dataset_id':'test','partitions':[{'split':'test','first_path':0,'paths':4}]})[0]==200
-        assert call('POST','/models/hedge/upload',{'batch_id':'test','split':'test','batch':episode('test')})[0]==200
+        assert call('POST','/models/hedge/upload',{'batch_id':'test','split':'test','batch':batch('test')})[0]==200
         assert call('POST','/models/hedge/update',{'batch_id':'test','expected_version':1})[0]==400
         assert call('GET','/models/hedge')[1]['version']==1
         checkpoint=call('POST','/models/hedge/checkpoint',{})[1]
@@ -136,7 +151,7 @@ def test_http_real_burn_matches_direct_updates_and_checkpoint_restart():
             assert call('POST',f'/models/{name}/update',{'batch_id':'train','expected_version':1})[0]==200
         assert call('POST','/models/hedge/checkpoint',{})[1]==call('POST','/models/resume/checkpoint',{})[1]
         assert call('POST','/models/hedge/infer',{'step':0,'paths':1,'features':[0,0],'previous_holdings':[0,0]})[1]['version']==2
-        assert len(call('GET','/models/hedge/metrics')[1]['history'])==2
+        assert [entry['operation'] for entry in call('GET','/models/hedge/metrics')[1]['history']]==['evaluate','update','update']
         assert call('DELETE','/models/resume')[0]==200
     finally:
         direct.close();server.shutdown();thread.join(timeout=3);runtime.close_all();server.server_close()
