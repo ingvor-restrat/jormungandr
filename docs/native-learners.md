@@ -117,3 +117,10 @@ Clients finish the contract's action sequence when settlement occurs.
 The real-worker HTTP integration test covers both terminal-only and early-settled
 batches, including signed payments, intermediate cash income, per-path capital
 and the identical next training update after checkpoint restoration.
+
+Volt also supplies a [multi-asset holder-to-writer application](https://github.com/ingvor-restrat/volt/blob/main/docs/maxcall-application.md).
+Its selected exercise policy generates dated settlements for a vector stock
+account. The same upload, update, evaluation, inference and checkpoint operations
+carry those five-asset batches. Scenario generation and continuation learning
+remain Volt applications; Jormungandr manages the registered worker and model
+lifecycle through the existing native protocol.
