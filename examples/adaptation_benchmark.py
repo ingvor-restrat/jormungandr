@@ -256,9 +256,15 @@ def rollout(
     stage="",
     representation=None,
     observation_factory=observation,
+    sampling_trial=None,
 ):
     context = AgentContext("actor", scenario.identifier, split, max_events=history)
-    rng = seeded(seed, 3, int(scenario.identifier.split(":")[-1]))
+    trial_key = (
+        int(scenario.identifier.split(":")[-1])
+        if sampling_trial is None
+        else sampling_trial
+    )
+    rng = seeded(seed, 3, trial_key)
     trajectories, actions, rewards, distributions, timings = [], [], [], [], []
     # Explicit warm-up is not scored; it only initializes kernels/caches and
     # observes the same public initial state, with no environment feedback.

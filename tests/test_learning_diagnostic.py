@@ -201,3 +201,39 @@ def test_greedy_view_selects_maximum_and_keeps_exact_ties():
     score = GreedyView(agent).score_results_structured([None])[0]
     probabilities = torch.softmax(torch.tensor(score.candidate_logits), -1).numpy()
     np.testing.assert_array_equal(probabilities, [0.0, 0.5, 0.5])
+
+
+def test_coverage_comparison_pairs_initialization_sampling_and_budgets(tmp_path):
+    from examples.coverage_benchmark import parser, run
+
+    args = parser().parse_args(
+        [
+            "--output",
+            str(tmp_path / "coverage"),
+            "--seeds",
+            "41",
+            "--rounds",
+            "2",
+            "--train-trials",
+            "1",
+            "--eval-trials",
+            "2",
+            "--steps",
+            "16",
+        ]
+    )
+    repeated, fresh = run(args)
+    assert repeated["initial_digest"] == fresh["initial_digest"]
+    assert repeated["losses"][:16] == fresh["losses"][:16]
+    assert repeated["updates"] == fresh["updates"] == 32
+    assert repeated["interactions"] == fresh["interactions"] == 32
+    assert len({key for group in repeated["training_world_ids"] for key in group}) == 1
+    assert len({key for group in fresh["training_world_ids"] for key in group}) == 2
+    assert [t["trial_id"] for t in repeated["evaluation"]["sampled"]] == [
+        t["trial_id"] for t in fresh["evaluation"]["sampled"]
+    ]
+    assert all(
+        t["trial_id"].split(":")[1] == "2" for t in fresh["evaluation"]["sampled"]
+    )
+    with pytest.raises(FileExistsError):
+        run(args)

@@ -203,3 +203,45 @@ to 50.8% and 50.1%. The representational information loss is real, but we have
 not shown it to be the dominant performance bottleneck at this training budget.
 More features also require learning how to use them; the mean/count/age
 representation remains the supported default in the confirmed hybrid recipe.
+
+## Training-world coverage at a fixed budget
+
+`examples/coverage_benchmark.py` compares six collection rounds over the same two
+worlds against two fresh worlds in each round (12 unique training worlds).
+Both modes start from identical weights and use the same action-sampling streams,
+384 reward interactions, 384 replay updates of batch size 32, DQN settings, causal
+summaries and paired held-out scenarios. The first round is identical, including
+its losses. A regression test checks this pairing and both budgets.
+
+```bash
+PYTHONPATH=src python -m examples.coverage_benchmark --output runs/coverage
+```
+
+Fresh training worlds vary reliability, costs, latency, initial route, switch time
+and sampled outcomes within the same abrupt-change family. This is not extra
+training on the held-out gradual-change family. The three-seed cohort is 1709,
+1801 and 1901; each seed has 12 held-out worlds. Evaluation is frozen and includes
+greedy and no-history rollouts. Source snapshots, world audits, traces, checkpoint
+bundles and per-seed paired differences are written to the output directory.
+
+The [recorded coverage pilot](../benchmarks/training_coverage.json) gives:
+
+| Training coverage | Epsilon-0.1 accuracy | Mean reward | Expected regret | Greedy accuracy |
+|---|---:|---:|---:|---:|
+| Two worlds repeated | 76.3% | 0.598 | 0.137 | 79.9% |
+| Twelve fresh worlds | 77.1% | 0.609 | 0.130 | 79.9% |
+| Rolling baseline | 65.6% | 0.532 | 0.211 | — |
+
+The sampled accuracy differences by seed are -0.3, +1.3 and +1.3 percentage
+points. Broader coverage produces modest aggregate improvements in reward and
+regret, not a demonstrated large accuracy gain. Greedy accuracy is unchanged in
+aggregate, though its reward and regret improve slightly. Removing history gives
+48.2% and 50.5%, respectively. Three seeds do not establish statistical superiority.
+These absolute scores use a different cohort from the hybrid confirmation and
+should not be interpreted as a regression from its 79.6% result.
+
+The confirmed hybrid recipe remains unchanged. This experiment supports testing
+broader coverage in subsequent training, while the next distinct capability test
+should require language interpretation in addition to numeric adaptation. That
+would measure whether the language branch adds useful behavior instead of merely
+accompanying a competent numeric controller.

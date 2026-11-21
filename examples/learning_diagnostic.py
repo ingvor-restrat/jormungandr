@@ -208,12 +208,26 @@ def teach(agent, data, epochs, seed):
     return losses
 
 
-def train_q(agent, worlds, args, seed, trace, observation_factory=observation):
+def train_q(
+    agent,
+    worlds,
+    args,
+    seed,
+    trace,
+    observation_factory=observation,
+    world_schedule=None,
+):
+    if world_schedule is not None and (
+        len(world_schedule) != args.rounds
+        or any(len(batch) != args.train_trials for batch in world_schedule)
+    ):
+        raise ValueError("world schedule must match collection rounds and trial budget")
     view = QView(agent, epsilon=0.2)
     replay, losses = [], []
     rng = seeded(seed, 7, 0)
     for round_index in range(args.rounds):
-        for scenario in worlds:
+        current = worlds if world_schedule is None else world_schedule[round_index]
+        for trial_index, scenario in enumerate(current):
             episodes, _ = rollout(
                 scenario,
                 method="numeric",
@@ -225,6 +239,7 @@ def train_q(agent, worlds, args, seed, trace, observation_factory=observation):
                 trace=trace,
                 stage="training",
                 observation_factory=observation_factory,
+                sampling_trial=trial_index if world_schedule is not None else None,
             )
             for episode in episodes:
                 t = episode[0]
