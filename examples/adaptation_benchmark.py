@@ -113,7 +113,11 @@ def make_scenario(seed, split, trial, steps):
     )
 
 
-def observation(scenario, context, *, numeric_history=False):
+def observation(scenario, context, *, numeric_history=False, representation=None):
+    if representation not in (None, "raw", "summary", "both"):
+        raise ValueError("unknown history representation")
+    if representation is not None:
+        numeric_history = representation in ("summary", "both")
     entities = []
     for action in ACTION_IDS:
         recent = [e for e in context.events if e.action == action]
@@ -133,6 +137,18 @@ def observation(scenario, context, *, numeric_history=False):
     # disabling LLM history also removes every history-derived numeric feature.
     if not numeric_history:
         entities = np.zeros((2, 3)).tolist()
+    visible_context = context
+    if representation == "summary":
+        from dataclasses import replace
+
+        visible_context = replace(context, events=())
+    instruction = "Select a route. Reward = success - cost - 0.1 * latency. Reliability can change without notice."
+    if representation is not None:
+        instruction += (
+            " Entity features are recent mean reward, observed count divided by history capacity,"
+            " and requests since last observation divided by history capacity."
+            " Zero counts indicate no observations. Features are zero when summaries are disabled."
+        )
     return EntityCandidateObservation(
         global_features=np.zeros(1),
         entity_features=np.asarray(entities),
@@ -144,8 +160,8 @@ def observation(scenario, context, *, numeric_history=False):
         candidate_ids=ACTION_IDS,
         candidate_entity_indices=np.arange(2),
         legal_action_mask=np.ones(2, dtype=bool),
-        metadata=context.metadata(
-            "Select a route. Reward = success - cost - 0.1 * latency. Reliability can change without notice.",
+        metadata=visible_context.metadata(
+            instruction,
             {
                 action: f"Call tool {i}. Cost {scenario.costs[i]:.4f}; latency {scenario.latencies[i]:.4f}."
                 for i, action in enumerate(ACTION_IDS)
@@ -238,6 +254,7 @@ def rollout(
     split="validation",
     trace=None,
     stage="",
+    representation=None,
 ):
     context = AgentContext("actor", scenario.identifier, split, max_events=history)
     rng = seeded(seed, 3, int(scenario.identifier.split(":")[-1]))
@@ -246,13 +263,25 @@ def rollout(
     # observes the same public initial state, with no environment feedback.
     if agent is not None:
         agent.score_results_structured(
-            [observation(scenario, context, numeric_history=method == "numeric")]
+            [
+                observation(
+                    scenario,
+                    context,
+                    numeric_history=method == "numeric",
+                    representation=representation,
+                )
+            ]
         )
     for turn in range(len(scenario.probabilities)):
-        obs = observation(scenario, context, numeric_history=method == "numeric")
+        obs = observation(
+            scenario,
+            context,
+            numeric_history=method == "numeric",
+            representation=representation,
+        )
         if method == "llm":
             diagnostic = agent.policy.context_diagnostics(obs)
-            if diagnostic["retained_events"] != len(context.events):
+            if diagnostic["retained_events"] != len(obs.metadata["llm"]["history"]):
                 raise ValueError(
                     "benchmark history would be truncated; increase --max-tokens"
                 )
@@ -302,6 +331,7 @@ def rollout(
                             agent.update_steps if agent is not None else None
                         ),
                         "history_limit": history,
+                        "representation": representation,
                         "history_before_action": [asdict(e) for e in context.events],
                         "action": action,
                         "probabilities": probabilities.tolist(),
@@ -331,7 +361,15 @@ def rollout(
 
 
 def evaluate(
-    agent, scenarios, *, method, history, seed, trace=None, stage="evaluation"
+    agent,
+    scenarios,
+    *,
+    method,
+    history,
+    seed,
+    trace=None,
+    stage="evaluation",
+    representation=None,
 ):
     before = trainable_digest(agent) if agent is not None else None
     updates = agent.update_steps if agent is not None else None
@@ -344,6 +382,7 @@ def evaluate(
             seed=seed,
             trace=trace,
             stage=stage,
+            representation=representation,
         )[1]
         for s in scenarios
     ]

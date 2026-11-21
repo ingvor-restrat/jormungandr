@@ -5,3 +5,4 @@ recursive-include examples *.py
 recursive-include tests *.py
 include benchmarks/adaptation_pilot.json
 include benchmarks/adaptation_pilot.png
+include benchmarks/representation_pilot.json

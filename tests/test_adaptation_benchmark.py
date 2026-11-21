@@ -127,3 +127,30 @@ def test_numeric_benchmark_runs_and_refuses_to_overwrite(tmp_path):
     assert len(first["evaluation"]["numeric_trained"]) == 2
     with pytest.raises(FileExistsError):
         run(args)
+
+
+def test_representation_modes_preserve_causal_features_and_ablation():
+    scenario = make_scenario(101, 1, 0, 16)
+    context = AgentContext("a", scenario.identifier, "train", max_events=4)
+    context = context.append(
+        Experience("request-0", 0, "request", "route-a", "success", 0.9, 0)
+    )
+    numeric = observation(scenario, context, numeric_history=True)
+    raw = observation(scenario, context, representation="raw")
+    summary = observation(scenario, context, representation="summary")
+    both = observation(scenario, context, representation="both")
+    np.testing.assert_array_equal(summary.entity_features, numeric.entity_features)
+    np.testing.assert_array_equal(both.entity_features, numeric.entity_features)
+    assert not np.any(raw.entity_features)
+    assert summary.metadata["llm"]["history"] == []
+    assert raw.metadata["llm"]["history"] == both.metadata["llm"]["history"]
+    assert len(context.events) == 1
+    assert raw.metadata["llm"]["observation"] == summary.metadata["llm"]["observation"]
+    for mode in ("raw", "summary", "both"):
+        empty = observation(
+            scenario, replace(context, events=(), max_events=0), representation=mode
+        )
+        assert not np.any(empty.entity_features)
+        assert empty.metadata["llm"]["history"] == []
+    with pytest.raises(ValueError):
+        observation(scenario, context, representation="invalid")

@@ -386,3 +386,46 @@ def test_language_context_diagnostics_report_truncation(local_model):
     assert diagnostic["retained_events"] < 16
     assert diagnostic["max_sequence_tokens"] <= 512
     assert len(context.events) == 16
+
+
+def test_representation_benchmark_pairs_initialization_and_freezes_evaluation(
+    local_model, tmp_path
+):
+    from examples.representation_benchmark import parser, run
+
+    args = parser().parse_args(
+        [
+            "--output",
+            str(tmp_path / "representations"),
+            "--model",
+            local_model,
+            "--seeds",
+            "13",
+            "--rounds",
+            "1",
+            "--train-trials",
+            "1",
+            "--eval-trials",
+            "2",
+            "--steps",
+            "16",
+            "--history",
+            "2",
+        ]
+    )
+    args.revision = None
+    args.max_tokens = 1024
+    results = run(args)
+    assert len({r["initial_digest"] for r in results}) == 1
+    assert {r["representation"] for r in results} == {"raw", "summary", "both"}
+    for result in results:
+        assert result["final_digest"] != result["initial_digest"]
+        assert len(result["learning"]) == 1
+        evaluation = result["evaluation"]
+        assert [t["trial_id"] for t in evaluation["heldout"]] == [
+            t["trial_id"] for t in evaluation["heldout_no_history"]
+        ]
+        assert not {t["trial_id"] for t in evaluation["fit_after"]} & {
+            t["trial_id"] for t in evaluation["heldout"]
+        }
+    assert (tmp_path / "representations" / "summary.json").exists()

@@ -224,8 +224,110 @@ are about 0.38. These diagnostics suggest a nearly state-independent LLM choice
 in this setup; they do not isolate whether representation, optimization,
 initialization, model size, or the small data budget is responsible.
 
-The next controlled diagnostic should separate those factors—for example,
-training with the same explicit causal summary features used by numeric PPO,
-and assessing initialization of the action head—before committing to a larger
-model or more expensive hardware. Any follow-up optimization should treat these
-pilot scenarios as development data and reserve fresh seeds for confirmation.
+The controlled diagnostic below tests explicit causal summary features before
+committing to a larger model or more expensive hardware. Follow-up optimization
+should treat these pilot scenarios as development data and reserve fresh seeds
+for confirmation.
+
+## Controlled history representation diagnostic
+
+`examples/representation_benchmark.py` holds the pretrained backbone, initial
+LoRA/head weights, PPO settings, interaction budget, and potential outcomes fixed
+while comparing three inputs:
+
+- **Raw:** the recent action/outcome/reward events, with numeric summaries disabled.
+- **Summary:** per-route recent mean reward, normalized count, and normalized age;
+  these are exactly the features available to the numeric policy. Raw events are
+  omitted from the model's input, but retained in actor-owned memory.
+- **Both:** raw events and the same summaries together.
+
+All three receive identical instructions explaining the feature columns. The
+summaries cover the last four requests overall, not four observations per route.
+They include only feedback from actions already taken. No hidden reliability,
+unchosen outcome, or future observation is supplied to the policy.
+
+From a source checkout with the optional `llm` dependencies installed:
+
+```bash
+PYTHONPATH=src python -m examples.representation_benchmark \
+  --output runs/representation-comparison \
+  --device cuda --dtype bfloat16
+```
+
+CPU execution is supported with `--device cpu --dtype float32`. The defaults use
+a pinned SmolLM2-135M revision. Change `--model` and `--revision` together for
+another remote backbone. Model downloads require network access on the first
+run; cached weights can subsequently be used offline.
+
+For each of three seeds, the diagnostic first measures the untrained policy on
+two fixed training worlds. It then reuses those worlds for six PPO rounds
+(384 interactions), with a fresh action-sampling stream each round, and measures
+training performance again. This is a small-data learning sanity check, not a
+claim of successful fitting. Worlds have stochastic rewards drawn once and
+reused: improved training performance alone could reflect memorization.
+
+Only after training does it evaluate on four fresh worlds: two abrupt-switch
+worlds and two gradual-change worlds. It repeats evaluation with all history and
+summary features removed. Histories reset between trials. Evaluation checks that
+trainable parameters and update counters remain unchanged. Training uses no
+held-out results, early stopping, or selection of a winning checkpoint.
+
+The output contains configuration, source snapshots and hashes, dependency
+versions, evaluator-only world audits, per-step traces, PPO update metrics,
+per-trial results, aggregate seed means, and reloadable adapter policy bundles.
+An existing output configuration is never overwritten. The public input protocol
+is shared with the original benchmark, whose defaults remain unchanged.
+
+Assess both training improvement and held-out history benefit. A model that
+fails to improve even on these repeated training worlds has not yet demonstrated
+that this training setup can fit the task. A reward increase without lower
+expected regret can arise from sampled outcomes; optimal-action fraction and
+expected regret provide additional checks. Three seeds remain a small pilot,
+not a statistical demonstration of general adaptation. The original pilot and
+this diagnostic also differ in seed cohort, repeated-world training, and prompt
+instructions, so their aggregate scores are not a paired comparison.
+
+As in the original pilot, each request is a one-step episode and PPO uses
+`gamma=0`. History is an input across requests, but the objective does not credit
+an exploratory action for information useful on later requests. This diagnostic
+therefore tests a feedback-conditioned route selector, not long-horizon planning
+or language generation. Summaries also still pass through the text tokenizer and
+language backbone; they are not wired directly to a numeric decision head.
+
+### Recorded representation pilot
+
+The [public result artifact](../benchmarks/representation_pilot.json) records all
+nine runs on an RTX 4090, using seeds 101, 211, and 307 and the command above.
+Values below are means across seeds; training and held-out worlds are separate.
+“Best route” means the route with highest hidden expected utility, used only by
+the evaluator.
+
+| Input | Training best-route rate, before → after | Held-out best-route rate | Held-out reward | Held-out expected regret |
+|---|---:|---:|---:|---:|
+| Raw history | 56.3% → 69.3% | 49.5% | 0.431 | 0.336 |
+| Summary | 56.3% → 59.4% | 50.3% | 0.446 | 0.330 |
+| Both | 56.3% → 61.5% | 51.8% | 0.457 | 0.319 |
+| Rolling estimator | 68.8% (no training) | 64.3% | 0.549 | 0.219 |
+
+The raw-history training gain is concentrated in seed 307: its training accuracy
+rises from 56.3% to 90.6%, while held-out accuracy is only 42.2%. Seeds 101 and
+211 improve from 57.8% to 60.9% and from 54.7% to 56.3%, respectively. Thus the
+setup can fit at least one small repeated training set, but fitting is
+inconsistent and does not establish generalization. Memorization or learning a
+spurious pattern is possible; this experiment does not distinguish them.
+
+Removing history changes aggregate reward by +0.0067 for raw, +0.0001 for summary,
+and +0.0064 for both. There is no consistent positive held-out history benefit.
+The complete windows fit the token budget, starting trainable weights match
+across modes within each seed, and all PPO updates have finite nonzero gradient
+norms. The first two seeds show limited variation in route probabilities; seed
+307's raw policy varies strongly, yet still generalizes poorly. These checks
+rule out a universally stalled update path, not every possible optimization or
+representation problem.
+
+Explicit summaries alone do not solve the problem at this budget. Before scaling
+hardware or changing RL algorithms, a useful next diagnostic is supervised
+fitting of a known causal feedback-to-choice rule with the same language scorer,
+then frozen evaluation on fresh worlds. That would help separate the scorer's
+ability to represent the rule from PPO's ability to discover it. It would not,
+by itself, demonstrate autonomous strategy discovery.
