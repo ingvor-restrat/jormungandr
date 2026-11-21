@@ -650,3 +650,52 @@ def test_hybrid_dqn_transfer_experiment_runs_end_to_end(local_model, tmp_path):
         "mean_expected_regret",
         "optimal_action_fraction",
     }
+
+
+def test_language_tool_composition_runs_with_offline_backbone(local_model, tmp_path):
+    from examples.language_tool_benchmark import parser, run
+
+    args = parser().parse_args(
+        [
+            "--output",
+            str(tmp_path / "language-tools"),
+            "--model",
+            local_model,
+            "--seeds",
+            "41",
+            "--rounds",
+            "1",
+            "--train-trials",
+            "1",
+            "--eval-trials",
+            "2",
+            "--steps",
+            "16",
+            "--language-examples",
+            "4",
+            "--language-epochs",
+            "1",
+            "--max-tokens",
+            "1024",
+        ]
+    )
+    args.revision = None
+    result = run(args)[0]
+    assert len(result["numeric_losses"]) == 16
+    assert len(result["language_losses"]) == 1
+    assert set(result["evaluation"]) == {
+        "random",
+        "numeric_only",
+        "language_only",
+        "combined",
+        "language_rolling",
+        "oracle_numeric",
+        "oracle_rolling",
+        "combined_no_history",
+    }
+    assert all(
+        t["compatibility"] == 1.0 for t in result["evaluation"]["oracle_numeric"]
+    )
+    assert all(
+        t["compatibility"] == 1.0 for t in result["evaluation"]["oracle_rolling"]
+    )

@@ -10,3 +10,4 @@ include benchmarks/learning_diagnostic.json
 include benchmarks/hybrid_adaptation.json
 include benchmarks/history_order.json
 include benchmarks/training_coverage.json
+include benchmarks/language_tools.json

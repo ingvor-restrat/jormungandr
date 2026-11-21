@@ -21,6 +21,8 @@ and adapter checkpoints. A portable CPU/GPU example and offline tests are
 included; the prototype does not claim financial or meta-learning performance.
 [Learning sanity tests and independent controls](docs/learning_diagnostics.md)
 check basic learning, informative inputs, and an optional language/numeric actor.
+A [language/tool composition example](docs/language_tool_benchmark.md) separates
+request interpretation from history-dependent tool selection.
 
 The current release provides:
 

@@ -245,3 +245,7 @@ broader coverage in subsequent training, while the next distinct capability test
 should require language interpretation in addition to numeric adaptation. That
 would measure whether the language branch adds useful behavior instead of merely
 accompanying a competent numeric controller.
+
+The next [language/tool composition benchmark](language_tool_benchmark.md)
+separates request interpretation from numeric adaptation and includes
+language-only, numeric-only, combined and oracle-suitability controls.
