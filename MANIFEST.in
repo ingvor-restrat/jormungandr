@@ -3,3 +3,5 @@ include README.md
 recursive-include docs *.md *.gif *.py
 recursive-include examples *.py
 recursive-include tests *.py
+include benchmarks/adaptation_pilot.json
+include benchmarks/adaptation_pilot.png

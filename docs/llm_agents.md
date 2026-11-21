@@ -210,3 +210,12 @@ same checkpoint format.
 References: [ICRL paper](https://arxiv.org/abs/2501.14176),
 [PEFT](https://huggingface.co/docs/peft/index), and
 [TRL](https://huggingface.co/docs/trl/index).
+
+## Controlled adaptation experiment
+
+The next-stage [adaptation benchmark](adaptation_benchmark.md) compares frozen
+language policies with numeric PPO, a rolling estimator, and history ablations
+on paired held-out switching-tool scenarios. All task logic remains in the
+example. `LanguageCandidatePolicy.context_diagnostics(observation)` reports
+requested/retained history events and maximum sequence tokens without changing
+model weights or memory.

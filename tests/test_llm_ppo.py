@@ -339,3 +339,50 @@ def test_active_learner_isolates_validation_and_rejects_misattributed_history(
         assert before["items"] == after["items"]
     finally:
         runtime.close_all()
+
+
+def test_adaptation_benchmark_with_optional_language_policy(local_model, tmp_path):
+    from argparse import Namespace
+    from examples.adaptation_benchmark import run
+
+    result = run(
+        Namespace(
+            output=str(tmp_path / "adaptation"),
+            seeds="13",
+            rounds=1,
+            train_trials=1,
+            eval_trials=2,
+            steps=16,
+            history=2,
+            cpu_threads=1,
+            no_llm=False,
+            model=local_model,
+            revision=None,
+            device="cpu",
+            dtype="float32",
+            max_tokens=1024,
+            learning_rate=0.0001,
+        )
+    )
+    paired = result["results"]["paired_llm_reward_differences"]
+    assert set(paired) == {
+        "rolling",
+        "numeric_trained",
+        "llm_untrained_history",
+        "llm_trained_no_history",
+    }
+    assert len(paired["rolling"]["seed_differences"]) == 1
+
+
+def test_language_context_diagnostics_report_truncation(local_model):
+    agent = build(local_model)
+    context = AgentContext("actor", "trial", "validation", max_events=16)
+    for i in range(16):
+        context = context.append(
+            Experience(str(i), 0, "state " * 20, "left", "good", 1.0, 0)
+        )
+    diagnostic = agent.policy.context_diagnostics(observation(context))
+    assert diagnostic["requested_events"] == 16
+    assert diagnostic["retained_events"] < 16
+    assert diagnostic["max_sequence_tokens"] <= 512
+    assert len(context.events) == 16

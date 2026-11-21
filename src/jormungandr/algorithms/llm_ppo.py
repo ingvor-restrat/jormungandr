@@ -137,7 +137,7 @@ class LanguageCandidatePolicy(nn.Module):
         self.backbone.eval()
         return self
 
-    def _texts(self, observation):
+    def _prepare_texts(self, observation):
         raw = observation.metadata.get("llm")
         if (
             not isinstance(raw, Mapping)
@@ -205,16 +205,25 @@ class LanguageCandidatePolicy(nn.Module):
                 )
             )
             texts = [prompt + suffix for suffix in suffixes]
-            if (
-                max(len(self.tokenizer(text)["input_ids"]) for text in texts)
-                <= self.max_tokens
-            ):
-                return texts
+            max_tokens = max(len(self.tokenizer(text)["input_ids"]) for text in texts)
+            if max_tokens <= self.max_tokens:
+                return texts, {
+                    "requested_events": len(raw.get("history", [])),
+                    "retained_events": len(history),
+                    "max_sequence_tokens": max_tokens,
+                }
             if not history:
                 raise ValueError(
                     "current state and candidates exceed llm_max_tokens; shorten actor text or increase limit"
                 )
             history.pop(0)
+
+    def _texts(self, observation):
+        return self._prepare_texts(observation)[0]
+
+    def context_diagnostics(self, observation):
+        """Report effective context without model inference or memory mutation."""
+        return self._prepare_texts(observation)[1]
 
     def forward(self, batch):
         groups = [self._texts(observation) for observation in batch.observations]
