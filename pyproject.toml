@@ -25,6 +25,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+llm = [
+    "transformers>=4.45,<4.58",
+    "peft>=0.14,<0.18",
+]
 dev = [
     "build>=1.2",
     "pytest>=8.0",

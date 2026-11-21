@@ -14,6 +14,12 @@ strategynet.ai.
 The publishable Python distribution is named `jormungandr-rl`; its import name
 is `jormungandr`.
 
+An optional experimental [language-model agent plugin](docs/llm_agents.md)
+fine-tunes LoRA adapters through the existing structured PPO runtime. It supports
+actor-owned history, bounded legal action choices, shared-policy collection,
+and adapter checkpoints. A portable CPU/GPU example and offline tests are
+included; the prototype does not claim financial or meta-learning performance.
+
 The current release provides:
 
 - batched experience ingress from multiple concurrent actors;

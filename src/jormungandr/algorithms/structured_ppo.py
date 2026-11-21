@@ -187,29 +187,7 @@ class StructuredPPOAgent:
     ) -> None:
         self.spec = spec
         self.device = _resolve_device(device)
-        model_dim = max(8, int(cfg(config, "structured_model_dim", 64)))
-        heads = max(1, int(cfg(config, "structured_heads", 4)))
-        layers = max(1, int(cfg(config, "structured_layers", 2)))
-        feedforward = max(
-            model_dim,
-            int(cfg(config, "structured_feedforward_dim", model_dim * 2)),
-        )
-        self.policy = EntityCandidateTransformer(
-            global_dim=spec.global_dim,
-            entity_dim=spec.entity_dim,
-            candidate_dim=spec.candidate_dim,
-            entity_type_count=spec.entity_type_count,
-            model_dim=model_dim,
-            heads=heads,
-            layers=layers,
-            feedforward_dim=feedforward,
-            dropout=max(0.0, float(cfg(config, "structured_dropout", 0.0))),
-            prefix_dim=max(0, int(cfg(config, "structured_prefix_dim", 0))),
-            candidate_attention_layers=max(
-                0,
-                int(cfg(config, "structured_candidate_attention_layers", 0)),
-            ),
-        ).to(self.device)
+        self.policy = self._build_policy(spec, config)
         self.gamma = float(cfg(config, "gamma", 0.99))
         self.gae_lambda = float(cfg(config, "gae_lambda", 0.95))
         self.clip_ratio = max(0.0, float(cfg(config, "clip_ratio", 0.2)))
@@ -267,6 +245,36 @@ class StructuredPPOAgent:
         self.update_steps = 0
         self.last_metrics: Mapping[str, float] = {}
 
+    def _build_policy(self, spec, config):
+        """Override to supply an optional policy backbone."""
+        model_dim = max(8, int(cfg(config, "structured_model_dim", 64)))
+        heads = max(1, int(cfg(config, "structured_heads", 4)))
+        layers = max(1, int(cfg(config, "structured_layers", 2)))
+        feedforward = max(
+            model_dim,
+            int(cfg(config, "structured_feedforward_dim", model_dim * 2)),
+        )
+        return EntityCandidateTransformer(
+            global_dim=spec.global_dim,
+            entity_dim=spec.entity_dim,
+            candidate_dim=spec.candidate_dim,
+            entity_type_count=spec.entity_type_count,
+            model_dim=model_dim,
+            heads=heads,
+            layers=layers,
+            feedforward_dim=feedforward,
+            dropout=max(0.0, float(cfg(config, "structured_dropout", 0.0))),
+            prefix_dim=max(0, int(cfg(config, "structured_prefix_dim", 0))),
+            candidate_attention_layers=max(
+                0,
+                int(cfg(config, "structured_candidate_attention_layers", 0)),
+            ),
+        ).to(self.device)
+
+    def _collate_observations(self, observations):
+        """Override to retain additional policy inputs such as text history."""
+        return collate_entity_candidate_observations(observations).to_torch(self.device)
+
     def _backward_minibatch_objective(
         self,
         *,
@@ -323,9 +331,7 @@ class StructuredPPOAgent:
             return ()
         was_training = self.policy.training
         self.policy.eval()
-        batch = collate_entity_candidate_observations(observations).to_torch(
-            self.device
-        )
+        batch = self._collate_observations(observations)
         with torch.no_grad():
             output = self.policy(batch)
             results = select_dynamic_actions(
@@ -354,9 +360,7 @@ class StructuredPPOAgent:
             return ()
         was_training = self.policy.training
         self.policy.eval()
-        batch = collate_entity_candidate_observations(observations).to_torch(
-            self.device
-        )
+        batch = self._collate_observations(observations)
         with torch.no_grad():
             output = self.policy(batch)
         results = []
@@ -495,9 +499,9 @@ class StructuredPPOAgent:
             ).tolist()
             for start in range(0, len(permutation), self.minibatch_size):
                 indices = permutation[start : start + self.minibatch_size]
-                batch = collate_entity_candidate_observations(
+                batch = self._collate_observations(
                     [transitions[index].observation for index in indices]
-                ).to_torch(self.device)
+                )
                 output = self.policy(batch)
                 distribution = torch.distributions.Categorical(
                     logits=output.logits
@@ -864,9 +868,9 @@ class StructuredPPOAgent:
             for start in range(0, len(permutation), self.minibatch_size):
                 indices = permutation[start : start + self.minibatch_size]
                 selected_steps = [transitions[index] for index in indices]
-                batch = collate_entity_candidate_observations(
+                batch = self._collate_observations(
                     [step.observation for step in selected_steps]
-                ).to_torch(self.device)
+                )
                 output = self.policy(batch)
                 log_probability, joint_entropy = self._joint_statistics(
                     output, selected_steps
@@ -1027,9 +1031,9 @@ class StructuredPPOAgent:
         with torch.no_grad():
             for start in range(0, len(transitions), self.minibatch_size):
                 selected = transitions[start : start + self.minibatch_size]
-                batch = collate_entity_candidate_observations(
+                batch = self._collate_observations(
                     [step.observation for step in selected]
-                ).to_torch(self.device)
+                )
                 output = self.policy(batch)
                 if joint:
                     log_probability, _ = self._joint_statistics(

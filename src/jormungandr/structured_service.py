@@ -670,6 +670,12 @@ class StructuredServiceManager:
     ) -> dict[str, Any]:
         """Apply common duplicate, policy-lag, and split checks atomically."""
 
+        # Optional representation-specific checks run before any queue or
+        # provenance mutation, including for held-out trajectories.
+        validator = getattr(record.agent, "validate_trajectory", None)
+        if validator is not None:
+            for steps in parsed:
+                validator(steps)
         incoming_keys = [
             (steps[0].actor_id, steps[0].episode_id, steps[0].split)
             for steps in parsed
