@@ -6,3 +6,6 @@ recursive-include tests *.py
 include benchmarks/adaptation_pilot.json
 include benchmarks/adaptation_pilot.png
 include benchmarks/representation_pilot.json
+include benchmarks/learning_diagnostic.json
+include benchmarks/hybrid_adaptation.json
+include benchmarks/history_order.json

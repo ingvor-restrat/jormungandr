@@ -114,8 +114,12 @@ def build(model):
     )
 
 
-def test_adapter_update_frozen_base_masks_and_roundtrip(local_model, tmp_path):
-    agent = build(local_model)
+@pytest.mark.parametrize("hybrid", [False, True])
+def test_adapter_update_frozen_base_masks_and_roundtrip(local_model, tmp_path, hybrid):
+    agent_config = dict(config(local_model), llm_numeric_branch=hybrid)
+    agent = algorithm_registry.get("llm_ppo").build_structured(
+        StructuredPolicySpec(1, 1, 1, 1), agent_config, "cpu"
+    )
     obs = observation()
     before = {name: p.detach().clone() for name, p in agent.policy.named_parameters()}
     scores = agent.score_results_structured((obs,))[0]
@@ -169,7 +173,7 @@ def test_adapter_update_frozen_base_masks_and_roundtrip(local_model, tmp_path):
         agent=agent,
         spec=agent.spec,
         algorithm="llm_ppo",
-        agent_config=config(local_model),
+        agent_config=agent_config,
     )
     restored, _ = load_structured_policy_bundle(bundle["output_dir"])
     assert np.allclose(
@@ -429,3 +433,220 @@ def test_representation_benchmark_pairs_initialization_and_freezes_evaluation(
             t["trial_id"] for t in evaluation["heldout"]
         }
     assert (tmp_path / "representations" / "summary.json").exists()
+
+
+def test_language_scorer_can_fit_explicit_candidate_cues(local_model):
+    from examples.learning_diagnostic import teach, imitation_metrics
+
+    torch.manual_seed(7)
+    agent = build(local_model)
+    data = []
+    for action, word in enumerate(("left", "right")):
+        obs = observation()
+        meta = dict(obs.metadata)
+        meta["llm"] = dict(
+            meta["llm"],
+            candidate_descriptions={
+                key: "good" if key == word else "bad" for key in ("left", "right")
+            },
+        )
+        data.append((replace(obs, metadata=meta), np.eye(2)[action]))
+    before = imitation_metrics(agent, data)
+    teach(agent, data, 64, 7)
+    after = imitation_metrics(agent, data)
+    assert after["teacher_agreement"] == 1.0
+    assert after["cross_entropy"] < before["cross_entropy"] * 0.5
+    invalid = [
+        (replace(data[0][0], metadata={"llm": {"split": "validation"}}), data[0][1])
+    ]
+    with pytest.raises(ValueError, match="training context"):
+        teach(agent, invalid, 1, 7)
+
+
+def test_hybrid_actor_gradients_components_masks_and_checkpoint(local_model, tmp_path):
+    from examples.learning_diagnostic import teach
+
+    spec = StructuredPolicySpec(1, 1, 1, 1)
+    hybrid_config = dict(
+        config(local_model), llm_numeric_branch=True, llm_numeric_lr=0.003
+    )
+    agent = algorithm_registry.get("llm_ppo").build_structured(
+        spec, hybrid_config, "cpu"
+    )
+    observations = [
+        observation(),
+        replace(observation(), candidate_features=np.array([[1.0], [0.0]])),
+    ]
+    data = [
+        (observations[0], np.array([0.0, 1.0])),
+        (observations[1], np.array([1.0, 0.0])),
+    ]
+    branch = agent.policy.numeric_branch
+    before = {k: p.detach().clone() for k, p in branch.named_parameters()}
+    teach(agent, data, 8, 7)
+    assert any(
+        not torch.equal(before[k], p)
+        for k, p in branch.named_parameters()
+        if p.requires_grad
+    )
+    assert any(
+        p.grad is not None and torch.count_nonzero(p.grad)
+        for p in branch.parameters()
+        if p.requires_grad
+    )
+    assert all(
+        torch.equal(before[k], p)
+        for k, p in branch.named_parameters()
+        if k.startswith("value_head")
+    )
+    batch = agent._collate_observations(observations)
+    agent.policy.eval()
+    with torch.no_grad():
+        full = agent.policy(batch).logits
+        language = agent.policy(batch, numeric_scale=0).logits
+        numeric = agent.policy(batch, language_scale=0).logits
+    torch.testing.assert_close(full, language + numeric)
+    masked = agent._collate_observations([observation(legal=(True, False))])
+    for language_scale, numeric_scale in ((1, 1), (0, 1), (1, 0), (0, 0)):
+        assert (
+            agent.policy(
+                masked, language_scale=language_scale, numeric_scale=numeric_scale
+            ).logits[0, 1]
+            < -1e8
+        )
+    export_structured_policy_bundle(
+        tmp_path / "hybrid",
+        agent=agent,
+        spec=spec,
+        algorithm="llm_ppo",
+        agent_config=hybrid_config,
+    )
+    restored, _ = load_structured_policy_bundle(tmp_path / "hybrid", device="cpu")
+    assert restored.score_results_structured(
+        observations
+    ) == agent.score_results_structured(observations)
+    assert len(restored.optimizer.param_groups) == 2
+    with pytest.raises(ValueError, match="does not match"):
+        build(local_model).load_state_dict(agent.state_dict())
+
+
+def test_numeric_warmup_leaves_language_parameters_unchanged(local_model):
+    from examples.hybrid_adaptation import warmup_numeric
+
+    cfg = dict(config(local_model), llm_numeric_branch=True)
+    agent = algorithm_registry.get("llm_ppo").build_structured(
+        StructuredPolicySpec(1, 1, 1, 1), cfg, "cpu"
+    )
+    before = {name: p.detach().clone() for name, p in agent.policy.named_parameters()}
+    warmup_numeric(agent, [(observation(), np.array([0.0, 1.0]))], 3, 7)
+    assert any(
+        not torch.equal(before[name], p)
+        for name, p in agent.policy.named_parameters()
+        if name.startswith("numeric_branch")
+    )
+    assert all(
+        torch.equal(before[name], p)
+        for name, p in agent.policy.named_parameters()
+        if not name.startswith("numeric_branch")
+    )
+    restored = algorithm_registry.get("llm_ppo").build_structured(
+        agent.spec, cfg, "cpu"
+    )
+    restored.load_state_dict(deepcopy(agent.state_dict()))
+    for learner in (agent, restored):
+        warmup_numeric(learner, [(observation(), np.array([1.0, 0.0]))], 1, 11)
+    assert agent.score_results_structured(
+        [observation()]
+    ) == restored.score_results_structured([observation()])
+
+
+def test_legacy_language_checkpoint_without_numeric_field_loads(local_model):
+    agent = build(local_model)
+    state = agent.state_dict()
+    state.pop("numeric_branch")
+    restored = build(local_model)
+    restored.load_state_dict(state)
+    assert agent.score_results_structured(
+        [observation()]
+    ) == restored.score_results_structured([observation()])
+
+
+def test_hybrid_imports_only_compatible_fresh_numeric_actor(local_model):
+    spec = StructuredPolicySpec(1, 1, 1, 1)
+    cfg = dict(
+        config(local_model), llm_numeric_branch=True, llm_numeric_logit_scale=10.0
+    )
+    agent = algorithm_registry.get("llm_ppo").build_structured(spec, cfg, "cpu")
+    numeric = algorithm_registry.get("structured_dqn").build_structured(
+        spec,
+        dict(structured_model_dim=32, structured_heads=4, structured_layers=1),
+        "cpu",
+    )
+    language_before = {
+        n: p.detach().clone()
+        for n, p in agent.policy.named_parameters()
+        if not n.startswith("numeric_branch")
+    }
+    agent.initialize_numeric_actor_from_state(numeric.state_dict())
+    assert all(
+        torch.equal(language_before[n], p)
+        for n, p in agent.policy.named_parameters()
+        if n in language_before
+    )
+    batch = agent._collate_observations([observation()])
+    with torch.no_grad():
+        hybrid_scores = agent.policy(batch, language_scale=0).logits
+        numeric_scores = numeric.q(batch.numeric).logits
+    torch.testing.assert_close(hybrid_scores, 10.0 * numeric_scores)
+    bad = deepcopy(numeric.state_dict())
+    bad["spec"]["entity_dim"] = 2
+    with pytest.raises(ValueError, match="schema"):
+        agent.initialize_numeric_actor_from_state(bad)
+    bad = deepcopy(numeric.state_dict())
+    bad["q"].pop(next(iter(bad["q"])))
+    with pytest.raises(ValueError, match="architecture"):
+        agent.initialize_numeric_actor_from_state(bad)
+    agent.update_steps = 1
+    with pytest.raises(ValueError, match="fresh"):
+        agent.initialize_numeric_actor_from_state(numeric.state_dict())
+
+
+def test_hybrid_dqn_transfer_experiment_runs_end_to_end(local_model, tmp_path):
+    import json
+    from examples.hybrid_adaptation import parser, run
+
+    args = parser().parse_args(
+        [
+            "--output",
+            str(tmp_path / "hybrid-run"),
+            "--model",
+            local_model,
+            "--teacher",
+            "dqn",
+            "--seeds",
+            "13",
+            "--rounds",
+            "1",
+            "--train-trials",
+            "1",
+            "--eval-trials",
+            "2",
+            "--steps",
+            "16",
+            "--max-tokens",
+            "1024",
+        ]
+    )
+    args.revision = None
+    records = run(args)
+    assert len(records) == 1
+    assert len(records[0]["teacher_losses"]) == 16
+    assert "dqn_teacher" in records[0]["evaluation"]
+    assert records[0]["initial_digest"] != records[0]["final_digest"]
+    summary = json.loads((tmp_path / "hybrid-run" / "summary.json").read_text())
+    assert isinstance(summary["aggregate_target_met"], bool)
+    assert set(summary["hybrid_minus_rolling"]) == {
+        "mean_reward",
+        "mean_expected_regret",
+        "optimal_action_fraction",
+    }

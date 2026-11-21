@@ -7,13 +7,17 @@ arguments or implement the DQN/IA3 algorithm from arXiv:2501.14176.
 from dataclasses import asdict
 import hashlib
 import json
+import math
 from pathlib import Path
 from typing import Mapping
 
 import torch
 from torch import nn
 
-from jormungandr.structured import EntityCandidatePolicyOutput
+from jormungandr.structured import (
+    EntityCandidatePolicyOutput,
+    EntityCandidateTransformer,
+)
 from jormungandr.llm_context import Experience
 from .base import AlgorithmPlugin
 from .common import optimizer_to
@@ -31,7 +35,7 @@ class _TextBatch:
 
 
 class LanguageCandidatePolicy(nn.Module):
-    def __init__(self, config, device):
+    def __init__(self, config, device, spec=None):
         super().__init__()
         try:
             from transformers import AutoModel, AutoTokenizer
@@ -112,6 +116,34 @@ class LanguageCandidatePolicy(nn.Module):
             "max_tokens": self.max_tokens,
             "serialization": "jormungandr.llm_candidate.v1",
         }
+        self.numeric_branch = None
+        self.numeric_logit_scale = float(config.get("llm_numeric_logit_scale", 1.0))
+        if not math.isfinite(self.numeric_logit_scale) or self.numeric_logit_scale <= 0:
+            raise ValueError("llm_numeric_logit_scale must be finite and positive")
+        if bool(config.get("llm_numeric_branch", False)):
+            if spec is None:
+                raise ValueError(
+                    "numeric language branch requires a structured policy spec"
+                )
+            dimension = int(config.get("llm_numeric_model_dim", 32))
+            self.numeric_branch = EntityCandidateTransformer(
+                **asdict(spec),
+                model_dim=dimension,
+                heads=4,
+                layers=1,
+                feedforward_dim=dimension * 2,
+                dropout=0.0,
+            )
+            # The existing language value head remains the critic. Only the
+            # numeric actor is fused, preserving critic gradient-scale semantics.
+            for parameter in self.numeric_branch.value_head.parameters():
+                parameter.requires_grad_(False)
+            self.identity["numeric_branch"] = {
+                "schema": "jormungandr.llm_numeric_actor.v1",
+                "model_dim": dimension,
+            }
+        if self.numeric_branch is not None and self.numeric_logit_scale != 1.0:
+            self.identity["numeric_branch"]["logit_scale"] = self.numeric_logit_scale
         if Path(model_id).is_dir():
             # A mutable local pathname is not a sufficient base-model identity.
             digest = hashlib.sha256()
@@ -225,7 +257,8 @@ class LanguageCandidatePolicy(nn.Module):
         """Report effective context without model inference or memory mutation."""
         return self._prepare_texts(observation)[1]
 
-    def forward(self, batch):
+    def forward(self, batch, *, language_scale=1.0, numeric_scale=1.0):
+        """Fuse learned text and numeric logits; scales support pure ablations."""
         groups = [self._texts(observation) for observation in batch.observations]
         texts = [text for group in groups for text in group]
         features = []
@@ -257,13 +290,38 @@ class LanguageCandidatePolicy(nn.Module):
             ).squeeze(-1)
             rows.append(torch.nn.functional.pad(logits, (0, width - count), value=-1e9))
             offset += len(group)
-        logits = torch.stack(rows).masked_fill(
-            ~(batch.candidate_mask & batch.legal_action_mask), -1e9
-        )
+        legal = batch.candidate_mask & batch.legal_action_mask
+        logits = language_scale * torch.stack(rows).masked_fill(~legal, 0.0)
+        if self.numeric_branch is not None:
+            numeric = self.numeric_branch(batch.numeric).logits.masked_fill(~legal, 0.0)
+            logits = logits + numeric_scale * self.numeric_logit_scale * numeric
+        logits = logits.masked_fill(~legal, -1e9)
         return EntityCandidatePolicyOutput(logits=logits, values=torch.stack(values))
 
 
 class LLMPPOAgent(StructuredPPOAgent):
+    def __init__(self, spec, config, device="auto"):
+        super().__init__(spec, config, device)
+        if self.policy.numeric_branch is not None:
+            numeric = list(self.policy.numeric_branch.parameters())
+            numeric_ids = {id(parameter) for parameter in numeric}
+            self.optimizer = torch.optim.Adam(
+                [
+                    {
+                        "params": [
+                            p
+                            for p in self.policy.parameters()
+                            if id(p) not in numeric_ids
+                        ],
+                        "lr": float(config.get("lr", 3e-4)),
+                    },
+                    {
+                        "params": numeric,
+                        "lr": float(config.get("llm_numeric_lr", 1e-3)),
+                    },
+                ]
+            )
+
     def _build_policy(self, spec, config):
         if int(config.get("structured_prefix_dim", 0)):
             raise ValueError(
@@ -275,7 +333,7 @@ class LLMPPOAgent(StructuredPPOAgent):
             raise ValueError(
                 "llm_ppo does not support full-model transactional snapshots"
             )
-        return LanguageCandidatePolicy(config, self.device)
+        return LanguageCandidatePolicy(config, self.device, spec)
 
     def _collate_observations(self, observations):
         return _TextBatch(super()._collate_observations(observations), observations)
@@ -348,6 +406,11 @@ class LLMPPOAgent(StructuredPPOAgent):
             "spec": asdict(self.spec),
             "llm_identity": self.policy.identity,
             "adapter": get_peft_model_state_dict(self.policy.backbone),
+            "numeric_branch": (
+                self.policy.numeric_branch.state_dict()
+                if self.policy.numeric_branch is not None
+                else None
+            ),
             "action_head": self.policy.action_head.state_dict(),
             "value_head": self.policy.value_head.state_dict(),
             "optimizer": self.optimizer.state_dict(),
@@ -371,6 +434,10 @@ class LLMPPOAgent(StructuredPPOAgent):
             expected[k].shape != actual[k].shape for k in expected
         ):
             raise ValueError("LLM checkpoint adapter tensors do not match")
+        if self.policy.numeric_branch is not None:
+            if state.get("numeric_branch") is None:
+                raise ValueError("hybrid checkpoint is missing numeric actor weights")
+            self.policy.numeric_branch.load_state_dict(state["numeric_branch"])
         set_peft_model_state_dict(self.policy.backbone, actual)
         self.policy.action_head.load_state_dict(state["action_head"])
         self.policy.value_head.load_state_dict(state["value_head"])
@@ -379,6 +446,23 @@ class LLMPPOAgent(StructuredPPOAgent):
             optimizer_to(self.optimizer, self.device)
         self.update_steps = int(state.get("update_steps", 0))
         self.last_metrics = dict(state.get("last_metrics", {}))
+
+    def initialize_numeric_actor_from_state(self, state):
+        """Warm-start a new hybrid actor from a compatible numeric policy/Q model."""
+        branch = self.policy.numeric_branch
+        if branch is None or self.update_steps != 0 or self.optimizer.state:
+            raise ValueError("numeric initialization requires a fresh hybrid learner")
+        if state.get("spec") != asdict(self.spec):
+            raise ValueError("numeric initialization feature schema does not match")
+        weights = state.get("q", state.get("policy"))
+        expected = branch.state_dict()
+        if (
+            not isinstance(weights, Mapping)
+            or set(weights) != set(expected)
+            or any(expected[key].shape != weights[key].shape for key in expected)
+        ):
+            raise ValueError("numeric initialization architecture does not match")
+        branch.load_state_dict(weights)
 
     def initialize_policy_from_state(self, state):
         raise ValueError(

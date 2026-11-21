@@ -331,3 +331,7 @@ fitting of a known causal feedback-to-choice rule with the same language scorer,
 then frozen evaluation on fresh worlds. That would help separate the scorer's
 ability to represent the rule from PPO's ability to discover it. It would not,
 by itself, demonstrate autonomous strategy discovery.
+
+The follow-up [learning sanity suite and independent controls](learning_diagnostics.md)
+compare an independent PyTorch reward learner, Jormungandr DQN, supervised rule
+imitation, and explicit language cues.

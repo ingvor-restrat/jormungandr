@@ -154,3 +154,32 @@ def test_representation_modes_preserve_causal_features_and_ablation():
         assert empty.metadata["llm"]["history"] == []
     with pytest.raises(ValueError):
         observation(scenario, context, representation="invalid")
+
+
+def test_summary_discards_reward_order_even_when_recent_trends_differ():
+    scenario = make_scenario(41, 1, 0, 16)
+    contexts = []
+    for rewards in ([1.0, 0.0, 0.0, 1.0], [0.0, 1.0, 1.0, 0.0]):
+        context = AgentContext("a", "trial", "validation", max_events=4)
+        for i, reward in enumerate(rewards):
+            context = context.append(
+                Experience(
+                    str(i),
+                    0,
+                    "request",
+                    ("route-a", "route-b")[i % 2],
+                    "success" if reward else "failure",
+                    reward,
+                    0,
+                )
+            )
+        contexts.append(context)
+    first, second = [
+        observation(scenario, c, representation="summary") for c in contexts
+    ]
+    np.testing.assert_array_equal(first.entity_features, second.entity_features)
+    assert first.metadata == second.metadata
+    assert (
+        observation(scenario, contexts[0], representation="raw").metadata
+        != observation(scenario, contexts[1], representation="raw").metadata
+    )

@@ -255,6 +255,7 @@ def rollout(
     trace=None,
     stage="",
     representation=None,
+    observation_factory=observation,
 ):
     context = AgentContext("actor", scenario.identifier, split, max_events=history)
     rng = seeded(seed, 3, int(scenario.identifier.split(":")[-1]))
@@ -264,7 +265,7 @@ def rollout(
     if agent is not None:
         agent.score_results_structured(
             [
-                observation(
+                observation_factory(
                     scenario,
                     context,
                     numeric_history=method == "numeric",
@@ -273,7 +274,7 @@ def rollout(
             ]
         )
     for turn in range(len(scenario.probabilities)):
-        obs = observation(
+        obs = observation_factory(
             scenario,
             context,
             numeric_history=method == "numeric",
@@ -370,6 +371,7 @@ def evaluate(
     trace=None,
     stage="evaluation",
     representation=None,
+    observation_factory=observation,
 ):
     before = trainable_digest(agent) if agent is not None else None
     updates = agent.update_steps if agent is not None else None
@@ -383,6 +385,7 @@ def evaluate(
             trace=trace,
             stage=stage,
             representation=representation,
+            observation_factory=observation_factory,
         )[1]
         for s in scenarios
     ]

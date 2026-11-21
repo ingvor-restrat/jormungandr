@@ -219,3 +219,51 @@ on paired held-out switching-tool scenarios. All task logic remains in the
 example. `LanguageCandidatePolicy.context_diagnostics(observation)` reports
 requested/retained history events and maximum sequence tokens without changing
 model weights or memory.
+
+## Optional numeric actor branch
+
+Set `llm_numeric_branch: true` to combine language scores with a small structured
+numeric actor. Each legal candidate's logit is the sum of the two learned scores.
+The numeric branch consumes the existing global, entity, type, candidate and
+candidate/entity-link tensors directly, preserving numbers without tokenization.
+It uses the generic entity/candidate transformer; no task-specific summaries or
+finance logic are built into the runtime.
+
+`llm_numeric_model_dim` defaults to 32 and must be positive and divisible by four.
+The branch has one transformer layer, four heads and zero dropout.
+`llm_numeric_lr` defaults to 0.001, independently of the language branch's `lr`.
+The language value head remains the critic; the numeric branch's unused value
+head is frozen. Thus `value_backbone_gradient_scale` retains its existing meaning.
+This is an actor feature-fusion option, not a new RL objective.
+
+Checkpoints include the numeric branch and its architecture identity. Hybrid and
+language-only checkpoints are deliberately incompatible. Existing language-only
+checkpoints remain loadable with the feature disabled. Export bundles preserve
+the branch and reconstruct both optimizer groups when a learner is restored.
+
+For controlled inference diagnostics, the policy's `forward` accepts
+`language_scale=0.0` or `numeric_scale=0.0` to ablate either contribution without
+changing weights. Both default to one. Masks are reapplied after fusion, including
+when both scales are zero. These ablations currently still compute both branches;
+they measure behavior, not the latency of removing a branch from deployment.
+
+See the [learning sanity tests](learning_diagnostics.md) and the portable
+`examples/hybrid_adaptation.py` experiment. The experiment trains the hybrid by
+supervised imitation of a causal rolling rule, with PPO available for subsequent
+reward training. It should not be described as evidence that PPO itself has
+solved the task or that the language branch supplies the numeric capability.
+
+A fresh hybrid learner can also import an existing numeric actor with
+`hybrid.initialize_numeric_actor_from_state(numeric_agent.state_dict())`.
+Compatible structured DQN (`q`) or numeric policy (`policy`) weights are accepted;
+feature schema, parameter names and tensor shapes must match. This initializes
+only the numeric branch, leaving language parameters unchanged. It refuses an
+already updated learner and does not import the source optimizer or counters.
+
+`llm_numeric_logit_scale` is a finite positive multiplier (default one) applied
+to numeric logits before fusion. It is useful when transferring reward-valued
+Q scores into a categorical actor, where their ordering is useful but their
+scale differs from policy logits. Non-default scales are part of checkpoint
+identity. A scale of ten is used in the DQN-transfer example; it is an experiment
+setting, not a universal calibration. The source DQN remains a valid standalone
+policy when language inputs are unnecessary.
