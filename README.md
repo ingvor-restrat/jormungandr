@@ -33,6 +33,10 @@ A [causal feedback adaptation benchmark](docs/context_adaptation.md) adds native
 Its small two-service task matches the memory baseline with explicitly grouped
 past outcomes; it does not establish general tool understanding.
 
+The [multi-service extension](docs/multiservice_adaptation.md) adds noisy outcomes,
+repeated changes, held-out catalog sizes, statistical controls, and an executable
+HTTP tool sandbox with independently verified results.
+
 The current release provides:
 
 - batched experience ingress from multiple concurrent actors;

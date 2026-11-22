@@ -243,3 +243,9 @@ The optional `llm_dqn` structured plugin trains language candidate Q values with
 Double-DQN replay and Polyak target adapters. Its runtime defaults are batch size
 4 and minimum replay 32. See [context adaptation](context_adaptation.md) for the
 portable example and its bounded experimental results.
+
+`structured_dqn` and `llm_dqn` support `structured_microbatch_size` in plugin
+configuration. A positive value splits each replay batch into smaller gradient
+accumulation chunks while retaining one optimizer/target update per batch; zero
+(the default) uses the full batch. This bounds activation memory without changing
+the weighted TD or demonstration objective.

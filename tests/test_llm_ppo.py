@@ -993,3 +993,148 @@ def test_language_dqn_runtime_learns_replay(local_model, tmp_path):
         assert runtime.get_structured_model("context-dqn")["replay"]["size"] == 2
     finally:
         runtime.close_all()
+
+
+def test_local_language_scores_ignore_other_candidates_and_survive_export(
+    local_model, tmp_path
+):
+    from examples.multiservice_adaptation import Task, append, context, observe, world
+    from examples.adaptation_benchmark import SPEC
+
+    cfg = {
+        **config(local_model),
+        "llm_candidate_context": "local",
+        "llm_max_tokens": 768,
+    }
+    agent = algorithm_registry.get("llm_dqn").build_structured(SPEC, cfg, "cpu")
+    w = world(31, Task(4, 1.0, 0.0, 0), 0)
+    c = append(context(w), 0, w.ids[0], 1.0)
+    obs = observe(w, 1, c)
+    rev = observe(w, 1, c, reverse=True)
+    result, reordered = agent.action_results_structured([obs, rev], deterministic=True)
+    scores = dict(zip(obs.candidate_ids, result.candidate_values))
+    other = dict(zip(rev.candidate_ids, reordered.candidate_values))
+    assert scores == pytest.approx(other, abs=1e-6)
+    texts = dict(zip(obs.candidate_ids, agent.q._texts(obs)[1:]))
+    altered = replace(
+        obs,
+        metadata={
+            "llm": {
+                **obs.metadata["llm"],
+                "candidate_descriptions": {
+                    **obs.metadata["llm"]["candidate_descriptions"],
+                    w.ids[1]: "unrelated changed evidence",
+                },
+            }
+        },
+    )
+    altered_texts = dict(zip(altered.candidate_ids, agent.q._texts(altered)[1:]))
+    assert texts[w.ids[0]] == altered_texts[w.ids[0]]
+    assert texts[w.ids[1]] != altered_texts[w.ids[1]]
+    assert agent.q.identity["serialization"].endswith("local.v1")
+    export_structured_policy_bundle(
+        tmp_path / "local",
+        agent=agent,
+        spec=SPEC,
+        algorithm="llm_dqn",
+        agent_config=cfg,
+    )
+    restored, _ = load_structured_policy_bundle(tmp_path / "local", device="cpu")
+    actual = restored.action_results_structured([obs], deterministic=True)[0]
+    assert actual.candidate_values == pytest.approx(result.candidate_values, abs=1e-6)
+    joint = algorithm_registry.get("llm_dqn").build_structured(
+        SPEC, {**cfg, "llm_candidate_context": "joint"}, "cpu"
+    )
+    with pytest.raises(ValueError, match="identity"):
+        joint.load_state_dict(agent.state_dict())
+
+
+def test_local_sdpa_and_cached_history_free_evaluation(local_model):
+    from examples.multiservice_adaptation import Task, context, evaluate, observe, world
+    from examples.adaptation_benchmark import SPEC
+
+    cfg = {
+        **config(local_model),
+        "llm_candidate_context": "local",
+        "llm_attention_implementation": "sdpa",
+        "llm_max_tokens": 512,
+    }
+    agent = algorithm_registry.get("llm_dqn").build_structured(SPEC, cfg, "cpu")
+    worlds = [world(31, Task(4, 1.0, 0.0, 0, 8), i) for i in range(4)]
+    original = agent.action_results_structured
+    calls = []
+
+    def tracked(observations, **kwargs):
+        calls.append(len(observations))
+        return original(observations, **kwargs)
+
+    agent.action_results_structured = tracked
+    result = evaluate(agent, worlds, "no_history")
+    assert calls == [4]
+    assert result["weights_frozen"]
+    first = observe(worlds[0], 0, context(worlds[0]), "no_history")
+    later = observe(worlds[0], 7, context(worlds[0]), "no_history")
+    by_id = lambda obs: dict(zip(obs.candidate_ids, agent.q._texts(obs)[1:]))
+    assert by_id(first) == by_id(later)
+
+
+def test_local_bandit_chosen_only_loss_matches_full_candidate_loss(local_model):
+    from examples.multiservice_adaptation import collect
+    from examples.adaptation_benchmark import SPEC
+    from jormungandr.algorithms.structured_dqn import StructuredDQNAgent
+
+    cfg = {
+        **config(local_model),
+        "llm_candidate_context": "local",
+        "llm_max_tokens": 768,
+        "gamma": 0.0,
+        "demonstration_weight": 0.0,
+        "structured_microbatch_size": 2,
+    }
+    full = algorithm_registry.get("llm_dqn").build_structured(SPEC, cfg, "cpu")
+    reduced = algorithm_registry.get("llm_dqn").build_structured(SPEC, cfg, "cpu")
+    reduced.load_state_dict(deepcopy(full.state_dict()))
+    full.optimizer = torch.optim.SGD(full.q.parameters(), lr=0.01)
+    reduced.optimizer = torch.optim.SGD(reduced.q.parameters(), lr=0.01)
+    rows = collect(31, 1)[5:10]
+    weights = np.array([0.3, 0.7, 1.0, 0.2, 0.9])
+    a = StructuredDQNAgent.update_structured(full, rows, weights)
+    b = reduced.update_structured(rows, weights)
+    assert a.loss == pytest.approx(b.loss, abs=1e-6)
+    np.testing.assert_allclose(a.priorities, b.priorities, atol=1e-6)
+    assert reduced.update_steps == 1
+    for x, y in zip(full.q.parameters(), reduced.q.parameters()):
+        torch.testing.assert_close(x, y, atol=1e-6, rtol=1e-5)
+    for x, y in zip(full.q_target.parameters(), reduced.q_target.parameters()):
+        torch.testing.assert_close(x, y, atol=1e-6, rtol=1e-5)
+
+
+def test_language_reward_learner_estimates_stochastic_mean(local_model):
+    from examples.multiservice_adaptation import collect
+    from examples.adaptation_benchmark import SPEC
+
+    cfg = {
+        **config(local_model),
+        "llm_candidate_context": "local",
+        "gamma": 0.0,
+        "demonstration_weight": 0.0,
+        "structured_microbatch_size": 3,
+        "lr": 0.003,
+    }
+    torch.manual_seed(73)
+    agent = algorithm_registry.get("llm_dqn").build_structured(SPEC, cfg, "cpu")
+    row = collect(31, 1)[0]
+    # Identical inputs with stochastic outcomes: the target is a mean, not
+    # the last outcome or a majority-class label.
+    batch = [
+        replace(
+            row, reward=float(i % 3 == 0), next_observation=row.observation, done=True
+        )
+        for i in range(12)
+    ]
+    for _ in range(30):
+        agent.update_structured(batch)
+    result = agent.action_results_structured([row.observation], deterministic=True)[0]
+    prediction = result.candidate_values[row.candidate_index]
+    assert 0.23 < prediction < 0.43
+    assert agent.update_steps == 30

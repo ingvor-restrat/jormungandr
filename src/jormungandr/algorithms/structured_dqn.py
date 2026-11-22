@@ -41,6 +41,7 @@ class StructuredDQNAgent:
     ) -> None:
         self.spec = spec
         self.device = _resolve_device(device)
+        self.microbatch_size = max(0, int(config.get("structured_microbatch_size", 0)))
         self.q = self._build_q(spec, config)
         self.q_target = deepcopy(self.q).to(self.device)
         self.q_target.eval()
@@ -176,6 +177,55 @@ class StructuredDQNAgent:
     ) -> UpdateResult:
         if not transitions:
             raise ValueError("at least one structured transition is required")
+        if weights is not None and np.asarray(weights).shape != (len(transitions),):
+            raise ValueError("importance weights must align with transitions")
+        size = self.microbatch_size or len(transitions)
+        demo_total = sum(
+            bool(t.metadata.get("demonstration", False)) for t in transitions
+        )
+        self.optimizer.zero_grad(set_to_none=True)
+        metrics, priorities = {}, []
+        for start in range(0, len(transitions), size):
+            chunk = transitions[start : start + size]
+            chunk_weights = None if weights is None else weights[start : start + size]
+            td_loss, demo_loss, local, errors = self._loss_structured(
+                chunk, chunk_weights
+            )
+            fraction = len(chunk) / len(transitions)
+            demo_count = sum(
+                bool(t.metadata.get("demonstration", False)) for t in chunk
+            )
+            demo_fraction = demo_count / demo_total if demo_total else 0.0
+            loss = (
+                fraction * td_loss
+                + self.demonstration_weight * demo_fraction * demo_loss
+            )
+            loss.backward()
+            for key, value in local.items():
+                weight = demo_fraction if key == "demonstration_loss" else fraction
+                metrics[key] = metrics.get(key, 0.0) + weight * value
+            priorities.append(errors)
+        grad_norm = 0.0
+        if self.max_grad_norm > 0:
+            grad_norm = float(
+                torch.nn.utils.clip_grad_norm_(self.q.parameters(), self.max_grad_norm)
+                .detach()
+                .cpu()
+            )
+        self.optimizer.step()
+        self.update_steps += 1
+        self._update_target()
+        metrics["loss"] = (
+            metrics["td_loss"]
+            + self.demonstration_weight * metrics["demonstration_loss"]
+        )
+        metrics["grad_norm"] = grad_norm
+        self.last_metrics = metrics
+        return UpdateResult(
+            loss=metrics["loss"], priorities=np.concatenate(priorities), metrics=metrics
+        )
+
+    def _loss_structured(self, transitions, weights):
         observations = [item.observation for item in transitions]
         next_observations = [item.next_observation for item in transitions]
         batch = self._collate_observations(observations)
@@ -244,23 +294,8 @@ class StructuredDQNAgent:
             demonstration_loss = (
                 importance[demonstration_mask] * per_demo[demonstration_mask]
             ).mean()
-        loss = td_loss + self.demonstration_weight * demonstration_loss
-        self.optimizer.zero_grad(set_to_none=True)
-        loss.backward()
-        grad_norm = 0.0
-        if self.max_grad_norm > 0.0:
-            grad_norm = float(
-                torch.nn.utils.clip_grad_norm_(self.q.parameters(), self.max_grad_norm)
-                .detach()
-                .cpu()
-            )
-        self.optimizer.step()
-        self.update_steps += 1
-        self._update_target()
-
         priorities = td_error.detach().abs().cpu().numpy().astype(np.float32)
         metrics = {
-            "loss": float(loss.detach().cpu()),
             "td_loss": float(td_loss.detach().cpu()),
             "demonstration_loss": float(demonstration_loss.detach().cpu()),
             "demonstration_fraction": float(
@@ -269,12 +304,8 @@ class StructuredDQNAgent:
             "td_abs_mean": float(np.mean(priorities)),
             "q_mean": float(predicted.detach().mean().cpu()),
             "target_mean": float(targets.detach().mean().cpu()),
-            "grad_norm": grad_norm,
         }
-        self.last_metrics = metrics
-        return UpdateResult(
-            loss=metrics["loss"], priorities=priorities, metrics=metrics
-        )
+        return td_loss, demonstration_loss, metrics, priorities
 
     def state_dict(self) -> Mapping[str, Any]:
         return {

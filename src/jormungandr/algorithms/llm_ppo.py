@@ -11,6 +11,7 @@ import math
 from pathlib import Path
 from typing import Mapping
 
+import numpy as np
 import torch
 from torch import nn
 
@@ -60,6 +61,9 @@ class LanguageCandidatePolicy(nn.Module):
         if dtype_name not in {"float32", "bfloat16"}:
             raise ValueError("llm_dtype must be float32 or bfloat16")
         self.max_tokens = int(config.get("llm_max_tokens", 512))
+        self.candidate_context = config.get("llm_candidate_context", "joint")
+        if self.candidate_context not in {"joint", "local"}:
+            raise ValueError("llm_candidate_context must be joint or local")
         self.forward_batch_size = int(config.get("llm_forward_batch_size", 4))
         if self.max_tokens < 16 or self.forward_batch_size < 1:
             raise ValueError("invalid token or forward batch limit")
@@ -71,12 +75,15 @@ class LanguageCandidatePolicy(nn.Module):
             if self.tokenizer.eos_token_id is None:
                 raise ValueError("tokenizer needs a padding or EOS token")
             self.tokenizer.pad_token = self.tokenizer.eos_token
+        attention = config.get("llm_attention_implementation", "eager")
+        if attention not in {"eager", "sdpa"}:
+            raise ValueError("llm_attention_implementation must be eager or sdpa")
         backbone = AutoModel.from_pretrained(
             model_id,
             revision=revision,
             trust_remote_code=False,
             torch_dtype=getattr(torch, dtype_name),
-            attn_implementation="eager",
+            attn_implementation=attention,
         )
         if self.max_tokens > getattr(
             backbone.config, "max_position_embeddings", self.max_tokens
@@ -116,6 +123,10 @@ class LanguageCandidatePolicy(nn.Module):
             "max_tokens": self.max_tokens,
             "serialization": "jormungandr.llm_candidate.v1",
         }
+        if self.candidate_context == "local":
+            self.identity["serialization"] = "jormungandr.llm_candidate.local.v1"
+        if attention != "eager":
+            self.identity["attention_implementation"] = attention
         self.numeric_branch = None
         self.numeric_logit_scale = float(config.get("llm_numeric_logit_scale", 1.0))
         if not math.isfinite(self.numeric_logit_scale) or self.numeric_logit_scale <= 0:
@@ -219,6 +230,64 @@ class LanguageCandidatePolicy(nn.Module):
             }
             for i, key in enumerate(observation.candidate_ids)
         ]
+        if self.candidate_context == "local":
+            # Independent candidate scoring is useful when alternatives do not
+            # interact. It intentionally omits other candidates' evidence.
+            texts, retained = [], []
+            for choice in [None, *choices]:
+                local_state = dict(state)
+                local_state["entities"] = (
+                    []
+                    if choice is None
+                    else [
+                        entity
+                        for i, entity in enumerate(state["entities"])
+                        if i in np.atleast_1d(choice["entity_indices"]).tolist()
+                    ]
+                )
+                events = (
+                    []
+                    if choice is None
+                    else [e for e in history if e["action"] == choice["id"]]
+                )
+                while True:
+                    text = (
+                        "Score this candidate using its observed experience.\n"
+                        + json.dumps(
+                            {
+                                "history": events,
+                                "state": local_state,
+                                "candidate": (
+                                    None
+                                    if choice is None
+                                    else {
+                                        key: value
+                                        for key, value in choice.items()
+                                        if key != "entity_indices"
+                                    }
+                                ),
+                            },
+                            sort_keys=True,
+                            allow_nan=False,
+                        )
+                        + ("\nState value:" if choice is None else "\nCandidate value:")
+                    )
+                    if len(self.tokenizer(text)["input_ids"]) <= self.max_tokens:
+                        break
+                    if not events:
+                        raise ValueError(
+                            "current state and candidates exceed llm_max_tokens"
+                        )
+                    events.pop(0)
+                texts.append(text)
+                retained.append(len(events))
+            return texts, {
+                "requested_events": len(history),
+                "retained_events": sum(retained),
+                "max_sequence_tokens": max(
+                    len(self.tokenizer(t)["input_ids"]) for t in texts
+                ),
+            }
         suffixes = ["\nState value:"] + [
             "\nCandidate to score: "
             + json.dumps(choice, sort_keys=True, allow_nan=False)
@@ -261,6 +330,12 @@ class LanguageCandidatePolicy(nn.Module):
         """Fuse learned text and numeric logits; scales support pure ablations."""
         groups = [self._texts(observation) for observation in batch.observations]
         texts = [text for group in groups for text in group]
+        order = None
+        if self.candidate_context == "local" and not self.training:
+            # Canonical inference microbatches also remove padding/rounding
+            # differences under candidate permutations in reduced precision.
+            order = sorted(range(len(texts)), key=texts.__getitem__)
+            texts = [texts[i] for i in order]
         features = []
         device = self.action_head.weight.device
         for start in range(0, len(texts), self.forward_batch_size):
@@ -280,6 +355,9 @@ class LanguageCandidatePolicy(nn.Module):
                 hidden[torch.arange(len(last), device=device), last].float()
             )
         features = torch.cat(features)
+        if order is not None:
+            inverse = torch.argsort(torch.tensor(order, device=device))
+            features = features[inverse]
         rows, values, offset = [], [], 0
         width = batch.candidate_mask.shape[1]
         for group in groups:

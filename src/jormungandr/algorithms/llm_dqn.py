@@ -4,7 +4,7 @@ Uses native structured replay/TD updates. This is not a reproduction of the
 Llama 8B/IA3 experiments in arXiv:2501.14176.
 """
 
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from collections.abc import Mapping
 import math
 
@@ -90,6 +90,36 @@ class LLMDQNAgent(StructuredDQNAgent):
     def update_structured(self, transitions, weights=None):
         for step in transitions:
             self._validate_transition(step)
+        if (
+            self.gamma == 0
+            and self.q.candidate_context == "local"
+            and self.demonstration_weight == 0
+        ):
+            # The contextual reward loss uses only the chosen candidate. Local
+            # serialization makes this exactly equivalent to scoring every arm.
+            # Preserve original entity indices and the causal source history.
+            selected = []
+            for step in transitions:
+                obs, i = step.observation, step.candidate_index
+                metadata = dict(obs.metadata)
+                metadata["llm"] = {
+                    **metadata["llm"],
+                    "candidate_descriptions": {
+                        step.candidate_id: metadata["llm"]["candidate_descriptions"][
+                            step.candidate_id
+                        ]
+                    },
+                }
+                current = replace(
+                    obs,
+                    candidate_features=obs.candidate_features[[i]],
+                    candidate_ids=(step.candidate_id,),
+                    candidate_entity_indices=obs.candidate_entity_indices[[i]],
+                    legal_action_mask=obs.legal_action_mask[[i]],
+                    metadata=metadata,
+                )
+                selected.append(replace(step, observation=current))
+            transitions = selected
         return super().update_structured(transitions, weights)
 
     @staticmethod

@@ -178,3 +178,10 @@ budget; it does not establish that the raw-history model could never learn, that
 LLMs are necessary for this task, or that the same result holds with many services,
 noisy rewards, longer histories, or broader language variation. The instruction
 baseline is specific to its small model and restricted A/B prompt.
+
+## Extension beyond two services
+
+See [multi-service adaptation](multiservice_adaptation.md) for 4–8-service
+evaluation, noisy rewards, repeated changes, and actual HTTP tool execution.
+Those tasks require separate evaluation; the perfect two-service result does
+not imply success on them.

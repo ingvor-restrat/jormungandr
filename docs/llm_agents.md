@@ -275,3 +275,11 @@ native transition replay, Double-DQN targets, and adapter-only checkpoints. See
 [causal feedback adaptation](context_adaptation.md) for configuration, provenance
 contracts, independent controls, and measured limits. Numeric branches are not
 supported by this plugin.
+
+For independent candidate valuation, `llm_candidate_context: local` supplies each
+score with only its associated entities and experience. This intentionally omits
+interactions between alternatives. The default remains `joint`, and checkpoint
+identity distinguishes serializations. `llm_attention_implementation: sdpa` is an
+optional memory-saving attention backend; `eager` remains the default. See the
+[multi-service example](multiservice_adaptation.md) for the complete information
+contract, explicit exploration, and executable tools.
