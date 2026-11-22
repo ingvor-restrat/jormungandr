@@ -7,6 +7,7 @@ import json
 from jormungandr.export import (
     compare_checkpoints,
     export_inference_bundle,
+    export_onnx_from_checkpoint,
     export_torchscript_from_checkpoint,
     inspect_checkpoint,
     load_obs_json,
@@ -42,6 +43,21 @@ def _build_parser() -> argparse.ArgumentParser:
     sp_bundle.add_argument("--manifest-name", default="manifest.json")
     sp_bundle.add_argument("--header-name", default="jormungandr_model_spec.hpp")
 
+    sp_onnx = sub.add_parser(
+        "export-onnx",
+        help="Export an ONNX model, verify its outputs, and allow dynamic batches.",
+    )
+    sp_onnx.add_argument("--checkpoint", required=True)
+    sp_onnx.add_argument("--out", required=True)
+    sp_onnx.add_argument(
+        "--module", choices=["auto", "policy", "q", "heads"], default="auto"
+    )
+    sp_onnx.add_argument("--metadata-out", default="")
+    sp_onnx.add_argument("--opset", type=int, default=18)
+    sp_onnx.add_argument("--parity-rows", type=int, default=16)
+    sp_onnx.add_argument("--atol", type=float, default=1e-5)
+    sp_onnx.add_argument("--rtol", type=float, default=1e-4)
+
     sp_compare = sub.add_parser(
         "compare",
         help="Compare two checkpoints on the same observation batch.",
@@ -72,6 +88,20 @@ def main() -> None:
             torchscript_name=args.torchscript_name,
             manifest_name=args.manifest_name,
             header_name=args.header_name,
+        )
+        print(json.dumps(out, indent=2))
+        return
+
+    if args.cmd == "export-onnx":
+        out = export_onnx_from_checkpoint(
+            checkpoint_path=args.checkpoint,
+            out_path=args.out,
+            module=args.module,
+            metadata_path=args.metadata_out or None,
+            opset_version=args.opset,
+            parity_rows=args.parity_rows,
+            atol=args.atol,
+            rtol=args.rtol,
         )
         print(json.dumps(out, indent=2))
         return

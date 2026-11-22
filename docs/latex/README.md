@@ -6,7 +6,9 @@ boundary, algorithm and selector plugins, checkpoint lifecycle, noise and
 return-risk taxonomy, QUBO rollout allocation, Volt set/graph integration,
 the controlled QUBO frontier-search result, a seeded online-agent convergence
 comparison, structured joint PPO and reward-free behavior-cloning contracts,
-the BC-to-PPO initialization path, and the staged Rust boundary.
+the BC-to-PPO initialization path, hardware-aware replicated inference and
+load balancing, window/state inputs, verified ONNX checkpoint exports, the
+Jormungandr SBE endpoint, and the staged Rust boundary.
 
 The paper follows the plain 11-point article format used by the public Volt
 and Hypercube papers: Palatino and Helvetica typefaces, compact margins, and a
@@ -129,3 +131,10 @@ PYTHONPATH=src python examples/benchmark_structured_ppo_safety.py \
 
 Plotting uses the optional `plot` dependency group; GIF rendering additionally
 uses `record`.
+
+## Stock-and-option hedging tutorial
+
+[Learning to Hedge with Stocks and Options](hedging/volt_jormungandr_option_hedging.pdf)
+explains the financial control problem and native learner API. Its
+[canonical source and build instructions](hedging/README.md) live in the
+`hedging/` subdirectory, with a scoped journal template.

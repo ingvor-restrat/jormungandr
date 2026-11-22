@@ -29,6 +29,43 @@ VECTOR_ALGORITHMS = {
     "qrdqn",
     "sac",
 }
+
+
+@pytest.mark.parametrize(
+    ("algorithm", "method_name"),
+    [("c51", "dist"), ("dqn", "forward"), ("qrdqn", "forward")],
+)
+def test_core_value_plugins_use_one_network_call_per_inference_batch(
+    algorithm: str,
+    method_name: str,
+) -> None:
+    plugin = algorithm_registry.get(algorithm)
+    agent = plugin.build(
+        4,
+        {
+            "action_values": [-1.0, 0.0, 1.0],
+            "hidden": 16,
+            "quantiles": 17,
+        },
+        "cpu",
+    )
+    calls = 0
+    original = getattr(agent.q, method_name)
+
+    def counted(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return original(*args, **kwargs)
+
+    setattr(agent.q, method_name, counted)
+    results = agent.inference_batch(
+        np.zeros((11, 4), dtype=np.float32),
+        deterministic=True,
+        epsilon=0.0,
+        action_masks=np.tile([True, False, True], (11, 1)),
+    )
+    assert len(results) == 11
+    assert calls == 1
 BUILTIN_ALGORITHMS = VECTOR_ALGORITHMS | {"structured_bc", "structured_ppo"}
 
 

@@ -90,6 +90,30 @@ def test_return_parameters_and_double_aggregation_are_rejected():
         n_step_transitions(n_step_transitions(raw, n=1, gamma=0.9), n=2, gamma=0.9)
 
 
+def test_indexed_replay_preserves_n_step_returns_after_priority_updates_and_wrap():
+    from jormungandr.structured_replay import StructuredPrioritizedReplayBuffer
+
+    raw = episode()[:3]
+    raw = (*raw[:-1], replace(raw[-1], truncated=True))
+    rows = n_step_transitions(raw, n=4, gamma=0.95)
+    replay = StructuredPrioritizedReplayBuffer(capacity=2, alpha=1.0)
+    replay.add(rows[0], priority=1)
+    replay.add(rows[1], priority=2)
+    replay.add(rows[2], priority=4)  # Replace slot zero, retaining slot one.
+    replay.update_priorities([1], [8])
+    sampled, indices, weights = replay.sample(2, beta=1.0)
+    expected = (rows[2], rows[1])
+    probabilities = np.asarray([4, 8], dtype=np.float64) / 12
+    expected_weights = (2 * probabilities[indices]) ** -1
+    expected_weights /= expected_weights.max()
+    np.testing.assert_allclose(weights, expected_weights)
+    for transition, index in zip(sampled, indices):
+        assert transition is expected[index]
+        assert transition.return_gamma == 0.95
+        assert transition.truncated and not transition.done
+        assert transition.bootstrap_steps == expected[index].bootstrap_steps
+
+
 def test_delay_and_sparse_feedback_do_not_change_decision_inputs():
     dense = collect(13, Task(0, 1.0, 0.8), 8)
     delayed = collect(13, Task(12, 1.0, 0.8), 8)

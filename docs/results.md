@@ -1,6 +1,6 @@
 # Reproducible Results
 
-These functional results were recorded for Jörmungandr 0.2.0 through 5 August
+These functional results were recorded for Jörmungandr 0.2.0 through 23 August
 2026.
 They validate framework behavior and packaging; they are not learning-quality
 or performance benchmark claims.
@@ -15,11 +15,7 @@ Result:
 
 | Suite | Tests | Result |
 | --- | ---: | --- |
-| classic algorithms, runtime, actors, artifacts, and examples | 45 | passed |
-| bounded integers, pairwise ranking, search, composition, assignment, and routing | 44 | passed |
-| structured representation, supervision, trajectory, service, and export | 58 | passed |
-| independent benchmarks and supervision/provenance diagnostics | 22 | passed |
-| **Total** | **169** | **passed** |
+| complete Python suite | 210 | passed |
 
 The tests cover zero-priority replay safety, probability preservation in the
 C51 projection, legal masking, graph-reference GAE, held-out evaluation
@@ -45,6 +41,29 @@ The trainer tests verify deterministic environment behavior and the declared
 interleaving schedule. The OU tests additionally verify finite accounting,
 same-seed path identity, and positive expected reward for the stated
 same-path reference.
+
+## Shared-host inference throughput
+
+The local inference benchmark ran on 23 August 2026 with 256 logical AMD EPYC
+CPUs and two NVIDIA RTX PRO 6000 Blackwell Server Edition GPUs. The model used
+256 observations, a 512-unit hidden layer, 32 actions, batches up to 256, 128
+concurrent callers, 4,096 direct items, and 1,024 requests per HTTP format.
+
+| Devices | Concurrent runtime | Explicit batches | JSON HTTP | SBE HTTP | Errors |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| CPU, one replica | 7,325 items/s | 40,218 items/s | 666 items/s | 1,046 items/s | 0 |
+| GPU 0, one replica | 9,774 items/s | 40,044 items/s | 787 items/s | 1,033 items/s | 0 |
+| GPU 0 and GPU 1, two replicas | 7,896 items/s | 53,945 items/s | 830 items/s | 1,184 items/s | 0 |
+
+This was a shared-host stress sample. An active background workload occupied
+roughly half the logical CPUs; GPU 0 had about 0.9 GiB allocated and GPU 1 had
+about 85.8 GiB allocated. The two-GPU row therefore measures operation under
+contention. A dedicated-host run supplies the appropriate scaling baseline.
+
+The first 128-client HTTP run exposed the five-connection accept backlog
+inherited from Python's TCP server. Jörmungandr now allows 256 queued
+connections. The table records the repeat runs after that change. The
+[throughput guide](throughput.md) contains the commands and measurement fields.
 
 ## Syntax and package checks
 

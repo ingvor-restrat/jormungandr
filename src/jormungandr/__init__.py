@@ -9,6 +9,11 @@ __all__ = [
     "__version__",
     "JormungandrRuntime",
     "JormungandrHttpServer",
+    "InferencePoolConfig",
+    "InferencePoolError",
+    "InferenceResult",
+    "ReplicatedInferencePool",
+    "available_cuda_devices",
     "BoundedIntegerRadixCodec",
     "PAIRWISE_SUMMARY_SCHEMA",
     "PairwiseOutcome",
@@ -275,6 +280,15 @@ def __getattr__(name: str) -> Any:
         return getattr(module, name)
     if name in {"JormungandrRuntime", "JormungandrHttpServer"}:
         module = import_module("jormungandr.service")
+        return getattr(module, name)
+    if name in {
+        "InferencePoolConfig",
+        "InferencePoolError",
+        "InferenceResult",
+        "ReplicatedInferencePool",
+        "available_cuda_devices",
+    }:
+        module = import_module("jormungandr.inference_pool")
         return getattr(module, name)
     if name in {
         "compare_checkpoints",

@@ -10,7 +10,7 @@ import torch
 from jormungandr.core import C51Agent
 
 from .base import ActionResult, AlgorithmPlugin, UpdateResult
-from .common import cfg, optimizer_to
+from .common import action_mask_tensor, cfg, epsilon_greedy_batch, optimizer_to
 from .registry import algorithm_registry
 
 
@@ -77,40 +77,59 @@ class C51PluginAgent(C51Agent):
         return np.asarray(rows, dtype=np.bool_)
 
     def action_result(self, obs: np.ndarray, *, deterministic: bool, epsilon: float = 0.0, action_mask=None):
-        action, index = super().act(
-            obs,
-            epsilon=epsilon,
+        masks = None if action_mask is None else np.asarray([action_mask])
+        return self.inference_batch(
+            np.asarray(obs, dtype=np.float32).reshape(1, -1),
             deterministic=deterministic,
-            action_mask=action_mask,
-        )
-        obs_t = torch.as_tensor(obs, dtype=torch.float32, device=self.device).reshape(1, -1)
-        with torch.no_grad():
-            q_values = self._q_values(self.q.dist(obs_t))[0]
-            decision_values = q_values
-            if action_mask is not None:
-                mask_t = torch.as_tensor(action_mask, dtype=torch.bool, device=self.device)
-                decision_values = q_values.masked_fill(~mask_t, -torch.inf)
-            legal_count = len(self.action_values) if action_mask is None else int(np.asarray(action_mask).sum())
-            eps = 0.0 if deterministic else min(1.0, max(0.0, epsilon))
-            greedy = int(decision_values.argmax().item())
-            probability = eps / max(1, legal_count) + (1.0 - eps if index == greedy else 0.0)
-        return ActionResult(
-            action=float(action),
-            action_idx=int(index),
-            log_probability=float(np.log(max(probability, 1e-8))),
-            value=float(q_values[index].item()),
-            extras={"q_values": [float(x) for x in q_values.cpu().tolist()]},
-        )
+            epsilon=epsilon,
+            action_masks=masks,
+        )[0]
 
     def inference_batch(self, obs: np.ndarray, *, deterministic: bool, epsilon: float, action_masks=None):
-        return [
-            self.action_result(
-                row,
+        obs_t = torch.as_tensor(
+            np.asarray(obs, dtype=np.float32),
+            dtype=torch.float32,
+            device=self.device,
+        )
+        legal = action_mask_tensor(
+            action_masks,
+            rows=obs_t.shape[0],
+            actions=len(self.action_values),
+            device=self.device,
+        )
+        with torch.no_grad():
+            q_values = self._q_values(self.q.dist(obs_t))
+            indices, probabilities = epsilon_greedy_batch(
+                q_values,
+                legal,
                 deterministic=deterministic,
                 epsilon=epsilon,
-                action_mask=None if action_masks is None else action_masks[index],
             )
-            for index, row in enumerate(np.asarray(obs, dtype=np.float32))
+            selected_values = q_values.gather(1, indices.unsqueeze(1)).squeeze(1)
+            selected_probabilities = probabilities.gather(
+                1, indices.unsqueeze(1)
+            ).squeeze(1)
+        q_rows = q_values.cpu().tolist()
+        decision_rows = q_values.masked_fill(~legal, -1e30).cpu().tolist()
+        index_rows = indices.cpu().tolist()
+        value_rows = selected_values.cpu().tolist()
+        probability_rows = selected_probabilities.cpu().tolist()
+        return [
+            ActionResult(
+                action=float(self.action_values[int(index)]),
+                action_idx=int(index),
+                log_probability=float(
+                    np.log(max(float(probability_rows[row]), 1e-8))
+                ),
+                value=float(value_rows[row]),
+                extras={
+                    "q_values": [float(value) for value in q_rows[row]],
+                    "decision_values": [
+                        float(value) for value in decision_rows[row]
+                    ],
+                },
+            )
+            for row, index in enumerate(index_rows)
         ]
 
     def update(self, batch, weights, *, metadata=None, **kwargs):

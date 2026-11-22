@@ -1,0 +1,61 @@
+{
+  "format": "jormungandr-inference-protocol-schema-v1",
+  "package": "jormungandr",
+  "description": "Jormungandr portable fixed-vector policy-inference transport. This JSON is the canonical protocol source.",
+  "byte_order": "littleEndian",
+  "sbe": {
+    "schema_id": 902,
+    "version": 1,
+    "semantic_version": "1.0.0",
+    "header": {
+      "encoded_length": 12,
+      "fields": [
+        {"name": "blockLength", "type": "uint16"},
+        {"name": "templateId", "type": "uint16"},
+        {"name": "schemaId", "type": "uint16"},
+        {"name": "version", "type": "uint16"},
+        {"name": "numGroups", "type": "uint16"},
+        {"name": "numVarDataFields", "type": "uint16"}
+      ]
+    }
+  },
+  "messages": [
+    {
+      "name": "PolicyInferRequest",
+      "template_id": 1,
+      "block_length": 20,
+      "num_var_data_fields": 1,
+      "fields": [
+        {"name": "requestId", "type": "uint64", "offset": 0},
+        {"name": "epsilon", "type": "float", "offset": 8},
+        {"name": "observationCount", "type": "uint32", "offset": 12},
+        {"name": "flags", "type": "uint8", "offset": 16}
+      ],
+      "var_data": [
+        {"name": "observation", "length_type": "uint32", "element_type": "float"}
+      ]
+    },
+    {
+      "name": "PolicyInferResponse",
+      "template_id": 2,
+      "block_length": 48,
+      "num_var_data_fields": 3,
+      "fields": [
+        {"name": "requestId", "type": "uint64", "offset": 0},
+        {"name": "actionIndex", "type": "uint32", "offset": 8},
+        {"name": "action", "type": "float", "offset": 12},
+        {"name": "policyVersion", "type": "uint64", "offset": 16},
+        {"name": "updates", "type": "uint64", "offset": 24},
+        {"name": "replicaId", "type": "int32", "offset": 32},
+        {"name": "qValueCount", "type": "uint32", "offset": 36},
+        {"name": "decisionValueCount", "type": "uint32", "offset": 40},
+        {"name": "auxProbabilityCount", "type": "uint32", "offset": 44}
+      ],
+      "var_data": [
+        {"name": "qValues", "length_type": "uint32", "element_type": "float"},
+        {"name": "decisionValues", "length_type": "uint32", "element_type": "float"},
+        {"name": "auxProbabilities", "length_type": "uint32", "element_type": "float"}
+      ]
+    }
+  ]
+}

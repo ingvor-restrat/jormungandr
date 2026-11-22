@@ -160,6 +160,8 @@ def test_shared_frame_update_matches_expanded_examples_without_candidate_couplin
         SPEC, config, "cpu"
     )
 
+    shared_bias = framed_agent.policy.candidate_scorer[-1].bias.detach().clone()
+    assert not framed_agent.policy.candidate_scorer[-1].bias.requires_grad
     framed = framed_agent.update_structured_supervision_frames((frame,))
     expanded = expanded_agent.update_structured_supervision(examples)
 
@@ -168,6 +170,8 @@ def test_shared_frame_update_matches_expanded_examples_without_candidate_couplin
     assert framed.accuracy == expanded.accuracy
     assert framed.metrics["frames"] == 1.0
     assert framed.metrics["labels_per_frame"] == 2.0
+    assert torch.equal(framed_agent.policy.candidate_scorer[-1].bias, shared_bias)
+    assert torch.equal(expanded_agent.policy.candidate_scorer[-1].bias, shared_bias)
     # The two objectives are algebraically identical.  Duplicate transformer
     # rows and an index-selected shared row accumulate a few near-zero
     # gradients in a different floating-point order; Adam can amplify those

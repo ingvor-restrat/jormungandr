@@ -42,7 +42,7 @@ The current release provides:
 
 - batched experience ingress from multiple concurrent actors;
 - explicit interleaving of `train` and `validation` samples;
-- prioritized training replay with annealed importance weights;
+- O(log N) prioritized training replay with annealed importance weights;
 - independently discoverable algorithm and rollout-selector plugins;
 - C51, QR-DQN, DQN, discrete CQL, maximum-entropy soft Q, BC, MARWIL,
   PPO, IMPALA, APPO/IMPACT, categorical SAC, and a compact vector DreamerV3
@@ -53,10 +53,14 @@ The current release provides:
   fragments;
 - bounded beam search with utility and QUBO frontier-pruner plugins;
 - held-out validation that never changes weights or normalization state;
-- online single-observation and batched policy inference;
+- hardware-aware CPU/GPU serving replicas, dynamic batching across requests,
+  automatic tuning of batch delay and active replicas, vectorized inference,
+  and synchronized model updates across replicas;
 - an optional auxiliary classification head with delayed-label attachment;
 - running observation normalization learned only from training data;
 - model lifecycle, metrics, runtime statistics, and checkpoints over HTTP;
+- an optional windowed-X/state input layout that validates and consistently
+  flattens fixed-size observations for training and inference;
 - variable-size typed entity observations, state-local semantic action
   candidates, padded collation, central HTTP inference, prioritized replay,
   complete joint-trajectory ingress, exact conditional-log-probability PPO,
@@ -68,7 +72,10 @@ The current release provides:
 - actor-owned sequential constraint masking with one reward per joint
   environment turn, policy-lag validation, direct structured-BC-to-PPO policy
   initialization, and structured inference bundles;
-- TorchScript bundles with manifests and generated C++ model specifications;
+- TorchScript bundles with manifests and generated C++ model specifications,
+  plus optional background ONNX checkpoint exports verified against PyTorch;
+- a standalone FIX SBE schema and codec for fixed-vector inference, while
+  variable entity/candidate payloads retain size-limited JSON/gzip transport;
   and
 - TensorBoard namespaces and internal APIs for comparing algorithm runs.
 
@@ -111,6 +118,42 @@ python -m pytest
 jormungandr-service --host 127.0.0.1 --port 8811 --top
 ```
 
+By default the service discovers usable resources conservatively and tunes the
+number of active serving replicas. It works with CPU or the GPUs visible to
+the process. For a reproducible deployment with two serving replicas on GPU 0:
+
+```bash
+jormungandr-service --inference-devices cuda:0 --inference-replicas 2 --top
+```
+
+Use `--no-inference-auto-tune` to keep that replica count and batch delay
+fixed. One learner updates model weights in both modes.
+
+## Binary SBE inference
+
+Fixed-vector models expose a Simple Binary Encoding endpoint through the
+standard client:
+
+```python
+from jormungandr.client import JormungandrClient
+
+client = JormungandrClient("http://127.0.0.1:8811")
+result = client.infer_policy_sbe(
+    "my-model",
+    [0.25, -0.5, 0.75, 1.0],
+    deterministic=True,
+    request_id=42,
+)
+print(result["action_idx"], result["policy_version"])
+```
+
+The [SBE protocol guide](docs/sbe.md) documents the endpoint, byte layout,
+message fields, schema/version rules, errors, and raw HTTP use.
+
+The [inference throughput benchmark](docs/throughput.md) measures direct
+runtime batching, JSON HTTP, and SBE HTTP on the local machine and records the
+host load and available devices with each report.
+
 In another terminal, run the distributed actor example:
 
 ```bash
@@ -141,6 +184,14 @@ python examples/train_synthetic_control.py
 The [generic trainer walkthrough](docs/example-trainer.md) explains its
 environment interface, split scheduler, delayed auxiliary labels, run
 artifacts, and the future Volt adapter boundary.
+
+## Episode-training application API
+
+An optional native episode learner keeps its policy, optimizer and scenario tensors
+inside a persistent Rust worker. Actors submit complete batches through Jormungandr's
+HTTP API; the worker differentiates through continuous hedge decisions and portfolio
+cash flows. See the [native learner setup and API](docs/native-learners.md) and the
+[two-actor example](examples/native_hedging.py).
 
 ## See distributed learning
 
@@ -292,5 +343,8 @@ Continue with:
 - [Experience and inference protocol](docs/protocol.md)
 - [Reproducible results](docs/results.md)
 - [Jörmungandr research paper](docs/latex/jormungandr_learning_systems.pdf)
+- [Learning to Hedge with Stocks and Options](docs/latex/hedging/volt_jormungandr_option_hedging.pdf)
+  ([LaTeX source and build](docs/latex/hedging/README.md),
+  [complete API client](examples/native_hedging_api.py))
 
 Licensed under Apache-2.0.

@@ -12,9 +12,11 @@ from .base import ActionResult, UpdateResult
 from .common import (
     AuxiliaryMixin,
     DuelingQNet,
+    action_mask_tensor,
     as_tensors,
     cfg,
     clip_rewards,
+    epsilon_greedy_batch,
     legal_mask_from_metadata,
     mask_logits,
     noisy_observations,
@@ -75,49 +77,13 @@ class DiscreteQAgent(AuxiliaryMixin):
         epsilon: float = 0.0,
         action_mask: Optional[np.ndarray] = None,
     ) -> ActionResult:
-        obs_t = torch.as_tensor(obs, dtype=torch.float32, device=self.device).reshape(1, -1)
-        mask_t = None
-        if action_mask is not None:
-            mask_t = torch.as_tensor(action_mask, dtype=torch.bool, device=self.device).reshape(1, -1)
-            if mask_t.shape != (1, self.num_actions) or not bool(mask_t.any()):
-                raise ValueError("action_mask must align with action_values and admit an action")
-        with torch.no_grad():
-            raw_q_values = self.q(obs_t)
-            q_values = mask_logits(raw_q_values, mask_t)
-            legal = (
-                torch.arange(self.num_actions, device=self.device)
-                if mask_t is None
-                else torch.nonzero(mask_t[0], as_tuple=False).flatten()
-            )
-            if self.objective == "maxent":
-                logits = q_values / self.temperature
-                distribution = torch.distributions.Categorical(logits=logits)
-                idx_t = logits.argmax(dim=-1) if deterministic else distribution.sample()
-                logp = distribution.log_prob(idx_t)
-                probs = distribution.probs[0]
-            else:
-                greedy = q_values.argmax(dim=-1)
-                eps = 0.0 if deterministic else min(1.0, max(0.0, float(epsilon)))
-                if eps > 0.0 and float(torch.rand((), device=self.device)) < eps:
-                    idx_t = legal[torch.randint(len(legal), (1,), device=self.device)]
-                else:
-                    idx_t = greedy
-                probs = torch.zeros(self.num_actions, device=self.device)
-                probs[legal] = eps / float(len(legal))
-                probs[int(greedy.item())] += 1.0 - eps
-                logp = torch.log(probs[idx_t].clamp_min(1e-8))
-            idx = int(idx_t.item())
-            q_row = raw_q_values[0]
-        return ActionResult(
-            action=float(self.action_values[idx]),
-            action_idx=idx,
-            log_probability=float(logp.item()),
-            value=float(q_row[idx].item()),
-            extras={
-                "q_values": [float(x) for x in q_row.cpu().tolist()],
-                "policy_probs": [float(x) for x in probs.cpu().tolist()],
-            },
-        )
+        masks = None if action_mask is None else np.asarray([action_mask])
+        return self.inference_batch(
+            np.asarray(obs, dtype=np.float32).reshape(1, -1),
+            deterministic=deterministic,
+            epsilon=epsilon,
+            action_masks=masks,
+        )[0]
 
     def act(
         self,
@@ -142,15 +108,66 @@ class DiscreteQAgent(AuxiliaryMixin):
         epsilon: float,
         action_masks: Optional[np.ndarray] = None,
     ) -> list[ActionResult]:
-        rows = np.asarray(obs, dtype=np.float32)
+        obs_t = torch.as_tensor(
+            np.asarray(obs, dtype=np.float32),
+            dtype=torch.float32,
+            device=self.device,
+        )
+        legal = action_mask_tensor(
+            action_masks,
+            rows=obs_t.shape[0],
+            actions=self.num_actions,
+            device=self.device,
+        )
+        with torch.no_grad():
+            raw_q = self.q(obs_t)
+            decision_q = raw_q.masked_fill(~legal, -torch.inf)
+            if self.objective == "maxent":
+                logits = decision_q / self.temperature
+                distribution = torch.distributions.Categorical(logits=logits)
+                indices = (
+                    logits.argmax(dim=-1)
+                    if deterministic
+                    else distribution.sample()
+                )
+                probabilities = distribution.probs
+            else:
+                indices, probabilities = epsilon_greedy_batch(
+                    raw_q,
+                    legal,
+                    deterministic=deterministic,
+                    epsilon=epsilon,
+                )
+            chosen_probabilities = probabilities.gather(
+                1, indices.unsqueeze(1)
+            ).squeeze(1)
+            chosen_values = raw_q.gather(1, indices.unsqueeze(1)).squeeze(1)
+        q_rows = raw_q.cpu().tolist()
+        decision_rows = raw_q.masked_fill(~legal, -1e30).cpu().tolist()
+        probability_rows = probabilities.cpu().tolist()
+        index_rows = indices.cpu().tolist()
+        value_rows = chosen_values.cpu().tolist()
+        chosen_probability_rows = chosen_probabilities.cpu().tolist()
         return [
-            self.action_result(
-                row,
-                deterministic=deterministic,
-                epsilon=epsilon,
-                action_mask=None if action_masks is None else action_masks[index],
+            ActionResult(
+                action=float(self.action_values[int(index)]),
+                action_idx=int(index),
+                log_probability=float(
+                    np.log(max(float(chosen_probability_rows[row]), 1e-8))
+                ),
+                value=float(value_rows[row]),
+                extras={
+                    "q_values": [float(value) for value in q_rows[row]],
+                    "decision_values": [
+                        float(value)
+                        for value in decision_rows[row]
+                    ],
+                    "policy_probs": [
+                        float(value) for value in probability_rows[row]
+                    ],
+                },
             )
-            for index, row in enumerate(rows)
+            for row, index in enumerate(index_rows)
         ]
 
     def _target_values(
