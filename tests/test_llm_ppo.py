@@ -1204,3 +1204,35 @@ def test_evidence_inference_encodes_identical_public_inputs_once(local_model):
     assert len(results[0].candidate_values) == 8
     assert len(set(results[0].candidate_values)) == 1
     assert results[0].candidate_values == results[1].candidate_values
+
+
+def test_language_auxiliary_hook_receives_original_catalog(local_model):
+    from examples.multiservice_adaptation import collect
+    from examples.adaptation_benchmark import SPEC
+    from jormungandr.algorithms.llm_dqn import LLMDQNAgent
+    from jormungandr.auxiliary import AuxiliaryLoss
+
+    seen = []
+
+    class WithAuxiliary(LLMDQNAgent):
+        def _auxiliary_losses(self, transitions, weights=None):
+            seen.extend(len(t.observation.candidate_ids) for t in transitions)
+            return [
+                AuxiliaryLoss(
+                    "head_norm", self.q.action_head.weight.square().mean(), 0.01
+                )
+            ]
+
+    cfg = {
+        **config(local_model),
+        "gamma": 0.0,
+        "demonstration_weight": 0.0,
+        "llm_candidate_context": "evidence",
+        "llm_max_tokens": 1024,
+    }
+    agent = WithAuxiliary(SPEC, cfg, "cpu")
+    rows = collect(31, 1)[4:6]
+    result = agent.update_structured(rows)
+    assert seen == [len(t.observation.candidate_ids) for t in rows]
+    assert min(seen) > 1
+    assert result.metrics["auxiliary_total"] > 0

@@ -17,6 +17,7 @@ from jormungandr.structured import (
     collate_entity_candidate_observations,
 )
 from jormungandr.structured_replay import StructuredReplayTransition
+from jormungandr.auxiliary import compose_losses
 
 from .base import AlgorithmPlugin, UpdateResult
 from .common import cfg, optimizer_to
@@ -94,6 +95,22 @@ class StructuredDQNAgent:
     def _update_target(self):
         if self.update_steps % self.target_update == 0:
             self.q_target.load_state_dict(self.q.state_dict())
+
+    def _auxiliary_losses(self, transitions, weights=None):
+        """Optional AuxiliaryLoss terms, each averaged across this entire chunk.
+
+        Subclasses register shared encoders/extra heads inside `_build_q` so
+        optimizer, clipping, target copies and checkpoints include their weights.
+        Replay importance weights are supplied for application-specific weighting.
+        Synthetic context pairs belong in this objective, not TD replay.
+        """
+        return ()
+
+    def _has_auxiliary_objectives(self):
+        return (
+            getattr(self._auxiliary_losses, "__func__", None)
+            is not StructuredDQNAgent._auxiliary_losses
+        )
 
     def action_results_structured(
         self,
@@ -177,6 +194,10 @@ class StructuredDQNAgent:
     ) -> UpdateResult:
         if not transitions:
             raise ValueError("at least one structured transition is required")
+        if self._has_auxiliary_objectives() and any(
+            t.split != "train" for t in transitions
+        ):
+            raise ValueError("auxiliary objectives require training transitions")
         if weights is not None and np.asarray(weights).shape != (len(transitions),):
             raise ValueError("importance weights must align with transitions")
         size = self.microbatch_size or len(transitions)
@@ -191,6 +212,7 @@ class StructuredDQNAgent:
             td_loss, demo_loss, local, errors = self._loss_structured(
                 chunk, chunk_weights
             )
+            terms = tuple(self._auxiliary_losses(chunk, chunk_weights))
             fraction = len(chunk) / len(transitions)
             demo_count = sum(
                 bool(t.metadata.get("demonstration", False)) for t in chunk
@@ -200,6 +222,12 @@ class StructuredDQNAgent:
                 fraction * td_loss
                 + self.demonstration_weight * demo_fraction * demo_loss
             )
+            if terms:
+                auxiliary, auxiliary_metrics = compose_losses(
+                    td_loss.new_zeros(()), terms
+                )
+                local.update(auxiliary_metrics)
+                loss = loss + fraction * auxiliary
             loss.backward()
             for key, value in local.items():
                 weight = demo_fraction if key == "demonstration_loss" else fraction
@@ -218,6 +246,7 @@ class StructuredDQNAgent:
         metrics["loss"] = (
             metrics["td_loss"]
             + self.demonstration_weight * metrics["demonstration_loss"]
+            + metrics.get("auxiliary_total", 0.0)
         )
         metrics["grad_norm"] = grad_norm
         self.last_metrics = metrics

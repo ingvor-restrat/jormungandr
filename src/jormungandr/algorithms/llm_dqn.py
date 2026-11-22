@@ -94,6 +94,9 @@ class LLMDQNAgent(StructuredDQNAgent):
             self.gamma == 0
             and self.q.candidate_context in {"local", "evidence"}
             and self.demonstration_weight == 0
+            # Auxiliary objectives may need alternatives omitted by TD's
+            # chosen-candidate shortcut. Preserve their full input contract.
+            and not self._has_auxiliary_objectives()
         ):
             # The contextual reward loss uses only the chosen candidate. Local
             # serialization makes this exactly equivalent to scoring every arm.

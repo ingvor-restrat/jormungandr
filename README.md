@@ -280,6 +280,8 @@ Continue with:
 - [How Jörmungandr fits together](docs/architecture.md)
 - [Algorithm choices, noise, and quantile return models](docs/algorithms.md)
 - [Algorithm and selector plugin contract](docs/plugins.md)
+- [Auxiliary objectives](docs/auxiliary_objectives.md)
+- [Context auxiliary research pilot](docs/context_auxiliary_research.md)
 - [QUBO rollout-selection experiment](docs/qubo-rollout-selection.md)
 - [Guided tour](docs/guide.md)
 - [Generic example trainer](docs/example-trainer.md)
