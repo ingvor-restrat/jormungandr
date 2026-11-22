@@ -35,7 +35,8 @@ past outcomes; it does not establish general tool understanding.
 
 The [multi-service extension](docs/multiservice_adaptation.md) adds noisy outcomes,
 repeated changes, held-out catalog sizes, statistical controls, and an executable
-HTTP tool sandbox with independently verified results.
+HTTP tool sandbox with independently verified results. Its follow-up adds compact
+public evidence, on-policy language training, and a fixed two-seed performance gate.
 
 The current release provides:
 

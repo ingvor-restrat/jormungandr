@@ -20,13 +20,52 @@ flowchart LR
 During evaluation the replay-to-learner path is disabled: only actor history
 changes, while model weights remain frozen.
 
-**Current result: the infrastructure and all four experiment stages are complete,
-but reliable learned-policy generalization is not established.** The two fresh
-training seeds fail to match simple baselines consistently on reserved tasks.
-See the recorded results below; the successful development runs are not sufficient
-evidence for deployment.
+**Current result: all 298 software tests and the fixed two-seed confirmation gate
+pass for the `counts_v2` policy with on-policy refinement.** Earlier static-replay
+failures remain recorded below. This result covers the known-job tool-routing
+benchmark, including noisy outcomes and unseen change cadences.
 
-## Task and information boundary
+## Confirmed follow-up
+
+Two independently trained models were frozen before evaluating reserved cases:
+32 worlds per task per seed, seven tasks, 128 calls per world (57,344 primary
+model decisions). The gate was fixed before confirmation: no more than five
+percentage points below the strongest matched reference on any task, plus stable
+floors of 85%/80% for four/eight services. The worst observed shortfall was 2.002
+percentage points. References are last-outcome, window-mean, and window-UCB.
+Entries below are mean verified reward, with each model compared to references
+on its own matched worlds.
+
+| Task | LLM 5101 | Best reference 5101 | LLM 5203 | Best reference 5203 |
+|---|---:|---:|---:|---:|
+| four stable | 91.3% | 91.3% | 91.6% | 91.6% |
+| eight stable | 88.2% | 88.2% | 88.5% | 88.5% |
+| four changes | 80.7% | 81.0% | 81.4% | 78.7% |
+| eight changes | 76.3% | 77.5% | 78.0% | 78.9% |
+| four noisy | 54.7% | 55.2% | 60.9% | 55.9% |
+| eight noisy | 49.7% | 51.5% | 53.0% | 50.8% |
+| eight harder | 44.0% | 45.6% | 43.9% | 45.9% |
+
+Both exported models also passed candidate-order and actual HTTP equivalence
+checks (384 verified HTTP calls in total). Balanced history-free controls scored
+exactly 25%/12.5%; model weights remained frozen throughout evaluation. The
+Blackwell-trained bundle also loaded and passed an eight-candidate inference
+smoke check on the local CPU. Wheel/source builds and source compilation pass.
+
+The important changes were causal on-policy training coverage and explicit public
+counts together with recency/history. No numeric actor was transferred into the
+language policy. Input changes and additional training were combined, so the
+results do not isolate the effect of each individual change. The benchmark uses
+a canonical typed job; arbitrary API semantics and production financial strategies
+are outside this result's scope. Noisy-task expected reward is limited by service
+success probabilities and shared exploration.
+
+[Full follow-up results and provenance](../benchmarks/multiservice_followup.json)
+include both passing confirmation runs, earlier failures, the interrupted obsolete
+validation run, runtime versions, and all comparison controls. These confirmation
+cases are now consumed; future model tuning requires new reserved cases.
+
+## Original experiment: task and information boundary
 
 Training uses 3 or 5 services, success probabilities of 1/0, 0.9/0.1, or 0.75/0.25,
 and stable sessions or changes every 12 or 24 calls. Development evaluation uses 4 or 8
