@@ -1,0 +1,238 @@
+{
+  "protocol": "independent_tool_suitability_v1",
+  "model": "HuggingFaceTB/SmolLM2-135M",
+  "revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+  "configuration": {
+    "seeds": "2129,2131",
+    "epochs": 32,
+    "learning_rate": 0.0001,
+    "eval_trials": 12,
+    "device": "cuda",
+    "model": "HuggingFaceTB/SmolLM2-135M",
+    "revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2"
+  },
+  "training": {
+    "examples": 136,
+    "batch_size": 8,
+    "epochs": 32,
+    "optimizer_updates": 544,
+    "learning_rate": 0.0001
+  },
+  "evaluation": {
+    "pairs_per_seed": 36,
+    "controlled_catalogs_per_seed": 30,
+    "worlds_per_seed": 12,
+    "steps_per_world": 32,
+    "threshold": 0.5
+  },
+  "interpretation": "The learned gate does not meet the lexical baseline. Do not promote it based on aggregate pair accuracy.",
+  "limitations": [
+    "Seed 2111 is development; seeds 2129 and 2131 use a fixed recipe but share the same small wording suite.",
+    "The previous benchmark test wording is training data here; old and new accuracy metrics are not directly comparable.",
+    "Scores are not calibrated. Invariance follows from input canonicalization, not learned invariance.",
+    "No actual API execution, argument generation, multi-step planning, or end-to-end language RL is evaluated."
+  ],
+  "records": [
+    {
+      "seed": 2111,
+      "role": "development",
+      "training_accuracy": 0.9632352941176471,
+      "final_training_loss": 0.10679643201943048,
+      "semantics": {
+        "pair_accuracy": 0.8055555555555556,
+        "positive_recall": 0.5833333333333334,
+        "negative_recall": 0.9166666666666666,
+        "brier_score": 0.1853845139718403,
+        "parser_pair_accuracy": 1.0,
+        "catalogs": [
+          {
+            "suitable_count": 0,
+            "exact_set_accuracy": 0.6666666666666666,
+            "cases": 6
+          },
+          {
+            "suitable_count": 1,
+            "exact_set_accuracy": 0.5,
+            "cases": 6
+          },
+          {
+            "suitable_count": 2,
+            "exact_set_accuracy": 0.3333333333333333,
+            "cases": 6
+          },
+          {
+            "suitable_count": 3,
+            "exact_set_accuracy": 0.3333333333333333,
+            "cases": 6
+          },
+          {
+            "suitable_count": 4,
+            "exact_set_accuracy": 0.3333333333333333,
+            "cases": 6
+          }
+        ],
+        "cases": 36
+      },
+      "numeric_artifact": {
+        "path": "structured_policy.pt",
+        "sha256": "c4663dd25a5a01227015bd02dd312abe5f1fbab7401fd395e91867311445773d"
+      },
+      "evaluation": {
+        "learned": {
+          "mean_reward": 0.3611359600061825,
+          "optimal_action_fraction": 0.4869791666666667,
+          "compatibility": 0.7526041666666666,
+          "mean_expected_regret": 0.37632031440692476,
+          "abstention_rate": 0.041666666666666664
+        },
+        "parser": {
+          "mean_reward": 0.5628947227121018,
+          "optimal_action_fraction": 0.7083333333333334,
+          "compatibility": 1.0,
+          "mean_expected_regret": 0.1784562404860127,
+          "abstention_rate": 0.0
+        },
+        "oracle_numeric": {
+          "compatibility": 1.0,
+          "optimal_action_fraction": 0.7083333333333334,
+          "mean_reward": 0.5628947227121018,
+          "mean_expected_regret": 0.1784562404860127
+        }
+      }
+    },
+    {
+      "seed": 2129,
+      "role": "fixed_recipe",
+      "training_accuracy": 1.0,
+      "final_training_loss": 0.0014211178959425631,
+      "semantics": {
+        "pair_accuracy": 0.7222222222222222,
+        "positive_recall": 0.16666666666666666,
+        "negative_recall": 1.0,
+        "brier_score": 0.27724669634513055,
+        "parser_pair_accuracy": 1.0,
+        "catalogs": [
+          {
+            "suitable_count": 0,
+            "exact_set_accuracy": 1.0,
+            "cases": 6
+          },
+          {
+            "suitable_count": 1,
+            "exact_set_accuracy": 0.16666666666666666,
+            "cases": 6
+          },
+          {
+            "suitable_count": 2,
+            "exact_set_accuracy": 0.0,
+            "cases": 6
+          },
+          {
+            "suitable_count": 3,
+            "exact_set_accuracy": 0.0,
+            "cases": 6
+          },
+          {
+            "suitable_count": 4,
+            "exact_set_accuracy": 0.0,
+            "cases": 6
+          }
+        ],
+        "cases": 36
+      },
+      "numeric_artifact": {
+        "path": "structured_policy.pt",
+        "sha256": "2f107b554a081a59e851c21458ed4e91d417d10a5bb553934baa0d510577917f"
+      },
+      "evaluation": {
+        "learned": {
+          "mean_reward": 0.10176399981400251,
+          "optimal_action_fraction": 0.13541666666666666,
+          "compatibility": 0.2760416666666667,
+          "mean_expected_regret": 0.6316431489953481,
+          "abstention_rate": 0.7239583333333334
+        },
+        "parser": {
+          "mean_reward": 0.5485104558782038,
+          "optimal_action_fraction": 0.7083333333333334,
+          "compatibility": 1.0,
+          "mean_expected_regret": 0.17584919140885868,
+          "abstention_rate": 0.0
+        },
+        "oracle_numeric": {
+          "compatibility": 1.0,
+          "optimal_action_fraction": 0.7083333333333334,
+          "mean_reward": 0.5485104558782038,
+          "mean_expected_regret": 0.17584919140885868
+        }
+      }
+    },
+    {
+      "seed": 2131,
+      "role": "fixed_recipe",
+      "training_accuracy": 1.0,
+      "final_training_loss": 0.10190705338187828,
+      "semantics": {
+        "pair_accuracy": 0.6944444444444444,
+        "positive_recall": 0.16666666666666666,
+        "negative_recall": 0.9583333333333334,
+        "brier_score": 0.28131229606508873,
+        "parser_pair_accuracy": 1.0,
+        "catalogs": [
+          {
+            "suitable_count": 0,
+            "exact_set_accuracy": 0.8333333333333334,
+            "cases": 6
+          },
+          {
+            "suitable_count": 1,
+            "exact_set_accuracy": 0.16666666666666666,
+            "cases": 6
+          },
+          {
+            "suitable_count": 2,
+            "exact_set_accuracy": 0.0,
+            "cases": 6
+          },
+          {
+            "suitable_count": 3,
+            "exact_set_accuracy": 0.0,
+            "cases": 6
+          },
+          {
+            "suitable_count": 4,
+            "exact_set_accuracy": 0.0,
+            "cases": 6
+          }
+        ],
+        "cases": 36
+      },
+      "numeric_artifact": {
+        "path": "structured_policy.pt",
+        "sha256": "5c8b6f0624792554c5a5b004d2ab24e7d54043bfd4f3bc5bd6cb808d6a9ad1d5"
+      },
+      "evaluation": {
+        "learned": {
+          "mean_reward": 0.12661193864486633,
+          "optimal_action_fraction": 0.16666666666666666,
+          "compatibility": 0.2994791666666667,
+          "mean_expected_regret": 0.6143811301022258,
+          "abstention_rate": 0.4973958333333333
+        },
+        "parser": {
+          "mean_reward": 0.5525042768978408,
+          "optimal_action_fraction": 0.6744791666666666,
+          "compatibility": 1.0,
+          "mean_expected_regret": 0.20084727291523163,
+          "abstention_rate": 0.0
+        },
+        "oracle_numeric": {
+          "compatibility": 1.0,
+          "optimal_action_fraction": 0.6744791666666666,
+          "mean_reward": 0.5525042768978408,
+          "mean_expected_regret": 0.20084727291523163
+        }
+      }
+    }
+  ]
+}

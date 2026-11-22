@@ -23,6 +23,8 @@ included; the prototype does not claim financial or meta-learning performance.
 check basic learning, informative inputs, and an optional language/numeric actor.
 A [language/tool composition example](docs/language_tool_benchmark.md) separates
 request interpretation from history-dependent tool selection.
+An [independent suitability benchmark](docs/tool_suitability_benchmark.md) adds
+variable eligible sets, explicit abstention, and a lexical baseline.
 
 The current release provides:
 

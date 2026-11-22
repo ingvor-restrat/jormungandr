@@ -167,3 +167,8 @@ numeric-only selection uses operational feedback but chooses a suitable
 capability only about half the time. The oracle-suitability gap identifies
 interpretation/generalization as a concrete next target, rather than evidence
 that the numeric learning machinery is broken.
+
+The follow-up [independent suitability benchmark](tool_suitability_benchmark.md)
+removes the exactly-two eligibility assumption, adds explicit abstention and
+controlled catalog invariance, and evaluates new wording with a frozen numeric
+actor. The wording evaluated here becomes development data in that follow-up.

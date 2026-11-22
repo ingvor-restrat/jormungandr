@@ -699,3 +699,90 @@ def test_language_tool_composition_runs_with_offline_backbone(local_model, tmp_p
     assert all(
         t["compatibility"] == 1.0 for t in result["evaluation"]["oracle_rolling"]
     )
+
+
+def test_independent_suitability_training_export_and_frozen_scoring(
+    local_model, tmp_path
+):
+    from examples.adaptation_benchmark import SPEC, trainable_digest
+    from examples.tool_suitability_benchmark import (
+        pair_observation,
+        score_pairs,
+        train_suitability,
+    )
+
+    config = dict(
+        llm_model=local_model,
+        llm_max_tokens=768,
+        llm_forward_batch_size=3,
+        llm_lora_rank=2,
+        llm_lora_alpha=4,
+        lr=0.0001,
+    )
+    agent = algorithm_registry.get("llm_ppo").build_structured(SPEC, config, "cpu")
+    pairs = [("translate", "translates"), ("summarize", "translates")]
+    data = [
+        (pair_observation(*p, split="train"), np.array(y))
+        for p, y in zip(pairs, ([0.0, 1.0], [1.0, 0.0]))
+    ]
+    initial_digest = trainable_digest(agent)
+    losses = train_suitability(agent, data, 1, 11, batch_size=2)
+    assert np.isfinite(losses).all()
+    digest, updates = trainable_digest(agent), agent.update_steps
+    assert digest != initial_digest and updates == 1
+    scores, probabilities = score_pairs(agent, pairs)
+    export_structured_policy_bundle(
+        tmp_path / "suitability",
+        agent=agent,
+        spec=SPEC,
+        algorithm="llm_ppo",
+        agent_config=config,
+    )
+    restored, _ = load_structured_policy_bundle(tmp_path / "suitability")
+    restored_scores, restored_probabilities = score_pairs(restored, pairs)
+    np.testing.assert_allclose(scores, restored_scores, atol=1e-6)
+    np.testing.assert_allclose(probabilities, restored_probabilities, atol=1e-6)
+    assert trainable_digest(agent) == digest and agent.update_steps == updates
+
+
+def test_suitability_experiment_runs_offline(local_model, tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from examples import tool_suitability_benchmark as benchmark
+    from examples.adaptation_benchmark import SPEC
+
+    numeric_config = dict(
+        structured_model_dim=16, structured_heads=2, structured_layers=1
+    )
+    numeric = algorithm_registry.get("structured_dqn").build_structured(
+        SPEC, numeric_config, "cpu"
+    )
+    export_structured_policy_bundle(
+        tmp_path / "numeric-41",
+        agent=numeric,
+        spec=SPEC,
+        algorithm="structured_dqn",
+        agent_config=numeric_config,
+    )
+    data = benchmark.training_data()[:2]
+    monkeypatch.setattr(benchmark, "training_data", lambda: data)
+    result = benchmark.run(
+        SimpleNamespace(
+            output=str(tmp_path / "run"),
+            numeric_root=str(tmp_path),
+            seeds="41",
+            epochs=1,
+            learning_rate=0.0001,
+            model=local_model,
+            revision=None,
+            device="cpu",
+            eval_trials=1,
+        )
+    )[0]
+    assert result["semantics"]["cases"] == 36
+    assert len(result["semantics"]["catalogs"]) == 5
+    assert (
+        result["evaluation"]["parser"][0]["mean_reward"]
+        == result["evaluation"]["oracle_numeric"][0]["mean_reward"]
+    )
+    assert (tmp_path / "run" / "41" / "language" / "manifest.json").is_file()
+    assert (tmp_path / "run" / "41" / "semantic-traces.json").is_file()
