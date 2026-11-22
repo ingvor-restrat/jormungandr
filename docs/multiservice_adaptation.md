@@ -20,6 +20,12 @@ flowchart LR
 During evaluation the replay-to-learner path is disabled: only actor history
 changes, while model weights remain frozen.
 
+**Current result: the infrastructure and all four experiment stages are complete,
+but reliable learned-policy generalization is not established.** The two fresh
+training seeds fail to match simple baselines consistently on reserved tasks.
+See the recorded results below; the successful development runs are not sufficient
+evidence for deployment.
+
 ## Task and information boundary
 
 Training uses 3 or 5 services, success probabilities of 1/0, 0.9/0.1, or 0.75/0.25,
@@ -156,3 +162,93 @@ Each run saves its protocol before learning, source snapshots (including the
 learner implementation), adapter bundle,
 training losses, evaluation metrics, and traces. The standard suite includes 192
 actual HTTP calls. No private hostname or external credentials are required.
+
+## Recorded results
+
+[Full results and provenance](../benchmarks/multiservice_adaptation.json) include
+failed development runs, both confirmations, controls, and post-hoc diagnostics.
+The implementation used for confirmation is commit `9ead6fa`. Source snapshots,
+training configurations, reserved world hashes, and actual HTTP trace rewards
+were independently checked. Each primary condition has 12 trials of 112 calls
+per training seed; all evaluation weights remain frozen.
+
+| Reserved task | LLM seed 4201 | LLM seed 4303 | Last outcome, mean | Window mean, mean | Random, mean |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| four stable | 92.5% | 89.1% | 91.3% | 91.3% | 24.8% |
+| eight stable | 88.8% | 50.8% | 89.3% | 89.3% | 12.2% |
+| four changes | 37.6% | 38.8% | 76.0% | 54.1% | 24.9% |
+| eight changes | 44.4% | 39.4% | 76.7% | 61.6% | 13.5% |
+| four noisy | 40.5% | 45.8% | 44.5% | 50.2% | 34.9% |
+| eight noisy | 37.6% | 35.8% | 38.2% | 51.1% | 28.2% |
+| eight harder | 37.5% | 41.1% | 39.4% | 41.8% | 38.1% |
+
+These are total verified successes per call, including exploration and change
+errors. Noisy tasks have a best-service success probability below 100%. Window
+UCB and regret/recovery metrics are also retained in the JSON artifact.
+
+![Held-out results, including training-seed variation](../benchmarks/multiservice_adaptation.png)
+
+The learned policy is not consistently competitive with the references. In
+particular, both seeds perform poorly under the reserved deterministic change
+schedules, and the eight-service stable result varies sharply by training seed.
+Averaging the seeds would conceal that instability.
+
+Development reached 91.8% and 87.3% on stable four/eight-service tasks, close to
+its memory references, after increasing effective batch size, lowering the
+learning rate, and improving evidence-count coverage. Those changes were bundled,
+not a one-factor causal ablation. Before confirmation, source review also removed
+a training-name-prefix/change-schedule correlation and canonicalized inference
+microbatches. Both corrections are recorded in the frozen protocol and limit
+causal attribution of the development-to-confirmation gap. No confirmation
+outcomes were used to retrain or select checkpoints.
+
+The two confirmation tool tests made **384 actual HTTP calls**. Every recorded
+reward was rechecked against the returned array, and HTTP execution matched
+simulation. This verifies execution and feedback plumbing, not routing quality:
+the learned routers achieved 50.0% and 58.9% on those separate noisy sandbox trials.
+
+## Additional information audits
+
+The original history-free scores on small stable cohorts can be high by luck:
+a fixed service choice succeeds for the entire session when it happens to be the
+winner. Calls within such a trial are not independent samples. The original
+scores remain in the artifact.
+
+A post-hoc balanced audit rotates every service through the hidden winning role
+while preserving public inputs and exploration randomness. Both frozen models
+score exactly **25% with four services and 12.5% with eight**, as required without
+feedback. This is an information-boundary check, not a new training result or a
+replacement for the original confirmation scores.
+
+```sh
+PYTHONPATH=src:. python -m examples.multiservice_balanced_control \
+  --output runs/balanced-4201 --device cuda --seed 4201 \
+  --bundle runs/multiservice-confirmation-4201/language
+```
+
+A second matched post-hoc diagnostic holds dynamics and weights fixed while
+canonicalizing opaque service names, request wording, or both. Its four trials
+have 64 calls and deterministic changes every 20 calls; these are distinct from
+the primary comparison table.
+
+| Seed | Raw inputs | Familiar request | Canonical names | Both |
+| --- | ---: | ---: | ---: | ---: |
+| 4201 | 45.7% | 44.5% | 44.1% | 44.1% |
+| 4303 | 41.0% | 59.4% | 56.6% | 66.4% |
+
+Normalization helps one seed but does not rescue the other. It therefore does
+not resolve the generalization failure. The canonicalization example assumes a
+single known job type and opaque service identities; it is not a parser for
+arbitrary requests and is not promoted as the validated policy.
+
+```sh
+PYTHONPATH=src:. python -m examples.multiservice_input_diagnostic \
+  --output runs/input-diagnostic-4201 --device cuda --seed 4201 \
+  --bundle runs/multiservice-confirmation-4201/language
+```
+
+The remaining research problem is robust history-to-value learning across task
+changes and training seeds. These results do not isolate whether more varied
+training data, a different state representation, optimization changes, or model
+capacity will solve it. Further tuning must use development data and reserve new
+untouched evaluations; the confirmation cases reported here have been examined.
