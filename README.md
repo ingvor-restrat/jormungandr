@@ -25,6 +25,8 @@ A [language/tool composition example](docs/language_tool_benchmark.md) separates
 request interpretation from history-dependent tool selection.
 An [independent suitability benchmark](docs/tool_suitability_benchmark.md) adds
 variable eligible sets, explicit abstention, and a lexical baseline.
+A [controlled comparison](docs/tool_gate_comparison.md) separates decision format
+from training coverage with matched catalog exposure and reserved evaluation wording.
 
 The current release provides:
 

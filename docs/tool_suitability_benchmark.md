@@ -102,3 +102,7 @@ the learned gate is preferable to a parser. The original language/tool benchmark
 is retained unchanged. A larger and more varied training corpus or a stronger
 language baseline needs evaluation before promoting a learned gate; a larger GPU
 is not demonstrated to be necessary.
+
+The [controlled gate comparison](tool_gate_comparison.md) follows this pilot by
+matching ranking and binary models on the same fixed-two task, separately varying
+wording coverage, and reserving new wording for confirmation.

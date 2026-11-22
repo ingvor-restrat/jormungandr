@@ -1,0 +1,431 @@
+{
+  "protocol": "matched_language_gate_comparison_v1",
+  "selection": {
+    "representation": "ranking",
+    "coverage": "broad",
+    "updates": 544,
+    "reserved_confirmation_digest": "78df6c0ad850d786b31890be8a8cea35b56f6fdc7c26f981bba9ccddadc365d2"
+  },
+  "model": "HuggingFaceTB/SmolLM2-135M",
+  "revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+  "controls": {
+    "initial_weights_matched_within_seed": true,
+    "training_catalogs_matched_between_formats": true,
+    "frozen_numeric_actor_shared": true,
+    "catalogs_per_update": 2,
+    "updates": 544,
+    "numeric_seed": 2111,
+    "confirmation_wording_hash_verified": true
+  },
+  "scope": {
+    "development_primary_catalogs": 12,
+    "confirmation_primary_catalogs": 16,
+    "primary_contract": "Exactly two suitable tools; both formats select top two.",
+    "native_contract": "Binary zero-margin threshold, reported separately; fixed-two ranking has no native abstention.",
+    "training_fit": "First 64 training catalogs only.",
+    "caveat": "Small authored wording suites. One development seed; confirmation tests selected recipe only."
+  },
+  "development": [
+    {
+      "seed": 2111,
+      "representation": "ranking",
+      "coverage": "narrow",
+      "initial_digest": "a5b50937231b20048f04c3351f069cc6ffea1f4f92978ff3f5efae73b62ad718",
+      "training_catalog_digest": "e2fbf47e5478dd47fe3cc500ca3961444f54fd10cee5aeaf44abd0fda22efdf7",
+      "numeric_artifact": {
+        "path": "structured_policy.pt",
+        "sha256": "c4663dd25a5a01227015bd02dd312abe5f1fbab7401fd395e91867311445773d"
+      },
+      "training_sample": {
+        "primary_cases": 64,
+        "primary_exact_set": 0.96875,
+        "primary_selected_precision": 0.984375
+      },
+      "evaluation": {
+        "primary_cases": 12,
+        "primary_exact_set": 0.75,
+        "primary_selected_precision": 0.75,
+        "invariance": {
+          "cases": 12,
+          "reordered_changed_sets": 2,
+          "renamed_changed_sets": 2
+        },
+        "parser_exact_set": 1.0,
+        "parser_primary_exact_set": 1.0
+      },
+      "composition": {
+        "top_two": {
+          "mean_reward": 0.3364942285042673,
+          "optimal_action_fraction": 0.4479166666666667,
+          "compatibility": 0.6614583333333334,
+          "mean_expected_regret": 0.4095617743691031,
+          "abstention_rate": 0.0
+        },
+        "parser": {
+          "mean_reward": 0.5791711119911193,
+          "optimal_action_fraction": 0.7161458333333334,
+          "compatibility": 1.0,
+          "mean_expected_regret": 0.16784210354964654,
+          "abstention_rate": 0.0
+        },
+        "oracle": {
+          "mean_reward": 0.5791711119911193,
+          "optimal_action_fraction": 0.7161458333333334,
+          "compatibility": 1.0,
+          "mean_expected_regret": 0.16784210354964654,
+          "abstention_rate": 0.0
+        }
+      },
+      "optimizer_updates": 544
+    },
+    {
+      "seed": 2111,
+      "representation": "ranking",
+      "coverage": "broad",
+      "initial_digest": "a5b50937231b20048f04c3351f069cc6ffea1f4f92978ff3f5efae73b62ad718",
+      "training_catalog_digest": "3a6e8abbd21714db64338048e0e9b2de08c1c9e5933068ca131ea23105b6f6ff",
+      "numeric_artifact": {
+        "path": "structured_policy.pt",
+        "sha256": "c4663dd25a5a01227015bd02dd312abe5f1fbab7401fd395e91867311445773d"
+      },
+      "training_sample": {
+        "primary_cases": 64,
+        "primary_exact_set": 0.921875,
+        "primary_selected_precision": 0.953125
+      },
+      "evaluation": {
+        "primary_cases": 12,
+        "primary_exact_set": 0.8333333333333334,
+        "primary_selected_precision": 0.8333333333333334,
+        "invariance": {
+          "cases": 12,
+          "reordered_changed_sets": 0,
+          "renamed_changed_sets": 1
+        },
+        "parser_exact_set": 1.0,
+        "parser_primary_exact_set": 1.0
+      },
+      "composition": {
+        "top_two": {
+          "mean_reward": 0.4596544348383673,
+          "optimal_action_fraction": 0.5807291666666666,
+          "compatibility": 0.7708333333333334,
+          "mean_expected_regret": 0.3056303693611205,
+          "abstention_rate": 0.0
+        },
+        "parser": {
+          "mean_reward": 0.5791711119911193,
+          "optimal_action_fraction": 0.7161458333333334,
+          "compatibility": 1.0,
+          "mean_expected_regret": 0.16784210354964654,
+          "abstention_rate": 0.0
+        },
+        "oracle": {
+          "mean_reward": 0.5791711119911193,
+          "optimal_action_fraction": 0.7161458333333334,
+          "compatibility": 1.0,
+          "mean_expected_regret": 0.16784210354964654,
+          "abstention_rate": 0.0
+        }
+      },
+      "optimizer_updates": 544
+    },
+    {
+      "seed": 2111,
+      "representation": "binary",
+      "coverage": "narrow",
+      "initial_digest": "a5b50937231b20048f04c3351f069cc6ffea1f4f92978ff3f5efae73b62ad718",
+      "training_catalog_digest": "e2fbf47e5478dd47fe3cc500ca3961444f54fd10cee5aeaf44abd0fda22efdf7",
+      "numeric_artifact": {
+        "path": "structured_policy.pt",
+        "sha256": "c4663dd25a5a01227015bd02dd312abe5f1fbab7401fd395e91867311445773d"
+      },
+      "training_sample": {
+        "primary_cases": 64,
+        "primary_exact_set": 1.0,
+        "primary_selected_precision": 1.0,
+        "native": {
+          "exact_set": 1.0,
+          "positive_recall": 1.0,
+          "negative_recall": 1.0,
+          "none_fit_accuracy": null,
+          "by_suitable_count": {
+            "0": null,
+            "1": null,
+            "2": 1.0,
+            "3": null,
+            "4": null
+          }
+        }
+      },
+      "evaluation": {
+        "primary_cases": 12,
+        "primary_exact_set": 0.5,
+        "primary_selected_precision": 0.625,
+        "native": {
+          "exact_set": 0.3787878787878788,
+          "positive_recall": 0.3333333333333333,
+          "negative_recall": 0.8402777777777778,
+          "none_fit_accuracy": 0.7777777777777778,
+          "by_suitable_count": {
+            "0": 0.7777777777777778,
+            "1": 0.3333333333333333,
+            "2": 0.25,
+            "3": 0.16666666666666666,
+            "4": 0.16666666666666666
+          }
+        },
+        "invariance": {
+          "cases": 12,
+          "reordered_changed_sets": 0,
+          "renamed_changed_sets": 0
+        },
+        "parser_exact_set": 1.0,
+        "parser_primary_exact_set": 1.0
+      },
+      "composition": {
+        "top_two": {
+          "mean_reward": 0.38842841035229725,
+          "optimal_action_fraction": 0.5494791666666666,
+          "compatibility": 0.75,
+          "mean_expected_regret": 0.333202674411995,
+          "abstention_rate": 0.0
+        },
+        "parser": {
+          "mean_reward": 0.5791711119911193,
+          "optimal_action_fraction": 0.7161458333333334,
+          "compatibility": 1.0,
+          "mean_expected_regret": 0.16784210354964654,
+          "abstention_rate": 0.0
+        },
+        "oracle": {
+          "mean_reward": 0.5791711119911193,
+          "optimal_action_fraction": 0.7161458333333334,
+          "compatibility": 1.0,
+          "mean_expected_regret": 0.16784210354964654,
+          "abstention_rate": 0.0
+        },
+        "native": {
+          "mean_reward": 0.212071672837586,
+          "optimal_action_fraction": 0.2942708333333333,
+          "compatibility": 0.515625,
+          "mean_expected_regret": 0.5226262621947864,
+          "abstention_rate": 0.19791666666666666
+        }
+      },
+      "optimizer_updates": 544
+    },
+    {
+      "seed": 2111,
+      "representation": "binary",
+      "coverage": "broad",
+      "initial_digest": "a5b50937231b20048f04c3351f069cc6ffea1f4f92978ff3f5efae73b62ad718",
+      "training_catalog_digest": "3a6e8abbd21714db64338048e0e9b2de08c1c9e5933068ca131ea23105b6f6ff",
+      "numeric_artifact": {
+        "path": "structured_policy.pt",
+        "sha256": "c4663dd25a5a01227015bd02dd312abe5f1fbab7401fd395e91867311445773d"
+      },
+      "training_sample": {
+        "primary_cases": 64,
+        "primary_exact_set": 0.90625,
+        "primary_selected_precision": 0.953125,
+        "native": {
+          "exact_set": 0.765625,
+          "positive_recall": 0.9921875,
+          "negative_recall": 0.8203125,
+          "none_fit_accuracy": null,
+          "by_suitable_count": {
+            "0": null,
+            "1": null,
+            "2": 0.765625,
+            "3": null,
+            "4": null
+          }
+        }
+      },
+      "evaluation": {
+        "primary_cases": 12,
+        "primary_exact_set": 0.5,
+        "primary_selected_precision": 0.6666666666666666,
+        "native": {
+          "exact_set": 0.5909090909090909,
+          "positive_recall": 0.7416666666666667,
+          "negative_recall": 0.7569444444444444,
+          "none_fit_accuracy": 0.5555555555555556,
+          "by_suitable_count": {
+            "0": 0.5555555555555556,
+            "1": 0.5833333333333334,
+            "2": 0.5,
+            "3": 0.6666666666666666,
+            "4": 0.6666666666666666
+          }
+        },
+        "invariance": {
+          "cases": 12,
+          "reordered_changed_sets": 0,
+          "renamed_changed_sets": 0
+        },
+        "parser_exact_set": 1.0,
+        "parser_primary_exact_set": 1.0
+      },
+      "composition": {
+        "top_two": {
+          "mean_reward": 0.3663455523169851,
+          "optimal_action_fraction": 0.5078125,
+          "compatibility": 0.6692708333333334,
+          "mean_expected_regret": 0.37207720994781285,
+          "abstention_rate": 0.0
+        },
+        "parser": {
+          "mean_reward": 0.5791711119911193,
+          "optimal_action_fraction": 0.7161458333333334,
+          "compatibility": 1.0,
+          "mean_expected_regret": 0.16784210354964654,
+          "abstention_rate": 0.0
+        },
+        "oracle": {
+          "mean_reward": 0.5791711119911193,
+          "optimal_action_fraction": 0.7161458333333334,
+          "compatibility": 1.0,
+          "mean_expected_regret": 0.16784210354964654,
+          "abstention_rate": 0.0
+        },
+        "native": {
+          "mean_reward": 0.4326007043113959,
+          "optimal_action_fraction": 0.5572916666666666,
+          "compatibility": 0.7864583333333334,
+          "mean_expected_regret": 0.31582445180488367,
+          "abstention_rate": 0.015625
+        }
+      },
+      "optimizer_updates": 544
+    }
+  ],
+  "confirmation": [
+    {
+      "seed": 2129,
+      "representation": "ranking",
+      "coverage": "broad",
+      "initial_digest": "2a4f90473aa4e781384ab32876772d197a76e4e527cd1ba0271fd3b9282df32f",
+      "training_catalog_digest": "ddb1c1ef61871da97eb61c126b6f15789168429a912db7641a8b02847c4c0a75",
+      "numeric_artifact": {
+        "path": "structured_policy.pt",
+        "sha256": "c4663dd25a5a01227015bd02dd312abe5f1fbab7401fd395e91867311445773d"
+      },
+      "training_sample": {
+        "primary_cases": 64,
+        "primary_exact_set": 1.0,
+        "primary_selected_precision": 1.0
+      },
+      "evaluation": {
+        "primary_cases": 16,
+        "primary_exact_set": 0.9375,
+        "primary_selected_precision": 0.96875,
+        "invariance": {
+          "cases": 16,
+          "reordered_changed_sets": 5,
+          "renamed_changed_sets": 4
+        },
+        "parser_exact_set": 0.18181818181818182,
+        "parser_primary_exact_set": 0.0
+      },
+      "composition": {
+        "top_two": {
+          "mean_reward": 0.3755512504189093,
+          "optimal_action_fraction": 0.4661458333333333,
+          "compatibility": 0.71875,
+          "mean_expected_regret": 0.37852284366692707,
+          "abstention_rate": 0.0
+        },
+        "parser": {
+          "mean_reward": -0.034938703080046846,
+          "optimal_action_fraction": 0.0,
+          "compatibility": 0.0,
+          "mean_expected_regret": 0.7754002573706286,
+          "abstention_rate": 0.6041666666666666
+        },
+        "oracle": {
+          "mean_reward": 0.5702557303541739,
+          "optimal_action_fraction": 0.7057291666666666,
+          "compatibility": 1.0,
+          "mean_expected_regret": 0.18068842017588815,
+          "abstention_rate": 0.0
+        }
+      },
+      "optimizer_updates": 544
+    },
+    {
+      "seed": 2131,
+      "representation": "ranking",
+      "coverage": "broad",
+      "initial_digest": "1c14e3a54564f1cb462dd2ab561f76a442685a4609ce04a9a985351131d990c3",
+      "training_catalog_digest": "4d706b31968d338c86e6248c776559c5fa32a3909426dbd41752d1e5d397a74d",
+      "numeric_artifact": {
+        "path": "structured_policy.pt",
+        "sha256": "c4663dd25a5a01227015bd02dd312abe5f1fbab7401fd395e91867311445773d"
+      },
+      "training_sample": {
+        "primary_cases": 64,
+        "primary_exact_set": 0.9375,
+        "primary_selected_precision": 0.9609375
+      },
+      "evaluation": {
+        "primary_cases": 16,
+        "primary_exact_set": 0.5625,
+        "primary_selected_precision": 0.6875,
+        "invariance": {
+          "cases": 16,
+          "reordered_changed_sets": 4,
+          "renamed_changed_sets": 3
+        },
+        "parser_exact_set": 0.18181818181818182,
+        "parser_primary_exact_set": 0.0
+      },
+      "composition": {
+        "top_two": {
+          "mean_reward": 0.26493796612158427,
+          "optimal_action_fraction": 0.390625,
+          "compatibility": 0.5859375,
+          "mean_expected_regret": 0.46667459287218177,
+          "abstention_rate": 0.0
+        },
+        "parser": {
+          "mean_reward": -0.035229852052148715,
+          "optimal_action_fraction": 0.0,
+          "compatibility": 0.0,
+          "mean_expected_regret": 0.7716632513779916,
+          "abstention_rate": 0.59375
+        },
+        "oracle": {
+          "mean_reward": 0.5706906806789267,
+          "optimal_action_fraction": 0.7447916666666666,
+          "compatibility": 1.0,
+          "mean_expected_regret": 0.15196451139424297,
+          "abstention_rate": 0.0
+        }
+      },
+      "optimizer_updates": 544
+    }
+  ],
+  "posthoc_audits": {
+    "workflow_eligible_sets": {
+      "2129": {
+        "requests": 384,
+        "correct_eligible_sets": 217,
+        "exact_set_fraction": 0.5651041666666666
+      },
+      "2131": {
+        "requests": 384,
+        "correct_eligible_sets": 149,
+        "exact_set_fraction": 0.3880208333333333
+      }
+    },
+    "batching": {
+      "cases": 4,
+      "device": "cpu",
+      "max_absolute_score_difference": 0.0,
+      "changed_top_two_sets": 0
+    },
+    "note": "Read-only diagnostics after confirmation; not used for selection or training."
+  }
+}

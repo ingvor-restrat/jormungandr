@@ -786,3 +786,35 @@ def test_suitability_experiment_runs_offline(local_model, tmp_path, monkeypatch)
     )
     assert (tmp_path / "run" / "41" / "language" / "manifest.json").is_file()
     assert (tmp_path / "run" / "41" / "semantic-traces.json").is_file()
+
+
+def test_matched_gate_training_uses_same_initial_weights_and_update_budget(local_model):
+    from examples.adaptation_benchmark import SPEC, trainable_digest
+    from examples.tool_gate_comparison import train, score, training_cases, metrics
+
+    cases = training_cases(11, "narrow", 2)
+    initial = []
+    for representation in ("ranking", "binary"):
+        torch.manual_seed(11)
+        agent = algorithm_registry.get("llm_ppo").build_structured(
+            SPEC,
+            dict(
+                llm_model=local_model,
+                llm_max_tokens=1024,
+                llm_forward_batch_size=24,
+                llm_lora_rank=2,
+                lr=0.0001,
+            ),
+            "cpu",
+        )
+        initial.append(trainable_digest(agent))
+        losses = train(agent, cases, representation)
+        assert len(losses) == agent.update_steps == 1
+        assert np.isfinite(losses).all()
+        assert trainable_digest(agent) != initial[-1]
+        digest = trainable_digest(agent)
+        scores = score(agent, cases, representation)
+        assert scores.shape == (2, 4)
+        assert metrics(cases, scores, representation)["primary_cases"] == 2
+        assert trainable_digest(agent) == digest
+    assert initial[0] == initial[1]
