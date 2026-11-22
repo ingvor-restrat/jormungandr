@@ -41,6 +41,29 @@ class StructuredDQNAgent:
     ) -> None:
         self.spec = spec
         self.device = _resolve_device(device)
+        self.q = self._build_q(spec, config)
+        self.q_target = deepcopy(self.q).to(self.device)
+        self.q_target.eval()
+        for parameter in self.q_target.parameters():
+            parameter.requires_grad_(False)
+        self.optimizer = torch.optim.Adam(
+            self.q.parameters(), lr=float(cfg(config, "lr", 3e-4))
+        )
+        self.gamma = min(1.0, max(0.0, float(cfg(config, "gamma", 0.99))))
+        self.target_update = max(1, int(cfg(config, "target_update", 500)))
+        self.max_grad_norm = max(0.0, float(cfg(config, "max_grad", 1.0)))
+        self.huber_delta = max(1e-6, float(cfg(config, "huber_delta", 1.0)))
+        self.default_epsilon = min(1.0, max(0.0, float(cfg(config, "epsilon", 0.1))))
+        self.demonstration_margin = max(
+            0.0, float(cfg(config, "demonstration_margin", 0.2))
+        )
+        self.demonstration_weight = max(
+            0.0, float(cfg(config, "demonstration_weight", 1.0))
+        )
+        self.update_steps = 0
+        self.last_metrics: Mapping[str, float] = {}
+
+    def _build_q(self, spec, config):
         model_dim = max(8, int(cfg(config, "structured_model_dim", 64)))
         heads = max(1, int(cfg(config, "structured_heads", 4)))
         layers = max(1, int(cfg(config, "structured_layers", 2)))
@@ -48,7 +71,7 @@ class StructuredDQNAgent:
             model_dim,
             int(cfg(config, "structured_feedforward_dim", model_dim * 2)),
         )
-        self.q = EntityCandidateTransformer(
+        return EntityCandidateTransformer(
             global_dim=spec.global_dim,
             entity_dim=spec.entity_dim,
             candidate_dim=spec.candidate_dim,
@@ -63,28 +86,13 @@ class StructuredDQNAgent:
                 int(cfg(config, "structured_candidate_attention_layers", 0)),
             ),
         ).to(self.device)
-        self.q_target = deepcopy(self.q).to(self.device)
-        self.q_target.eval()
-        for parameter in self.q_target.parameters():
-            parameter.requires_grad_(False)
-        self.optimizer = torch.optim.Adam(
-            self.q.parameters(), lr=float(cfg(config, "lr", 3e-4))
-        )
-        self.gamma = min(1.0, max(0.0, float(cfg(config, "gamma", 0.99))))
-        self.target_update = max(1, int(cfg(config, "target_update", 500)))
-        self.max_grad_norm = max(0.0, float(cfg(config, "max_grad", 1.0)))
-        self.huber_delta = max(1e-6, float(cfg(config, "huber_delta", 1.0)))
-        self.default_epsilon = min(
-            1.0, max(0.0, float(cfg(config, "epsilon", 0.1)))
-        )
-        self.demonstration_margin = max(
-            0.0, float(cfg(config, "demonstration_margin", 0.2))
-        )
-        self.demonstration_weight = max(
-            0.0, float(cfg(config, "demonstration_weight", 1.0))
-        )
-        self.update_steps = 0
-        self.last_metrics: Mapping[str, float] = {}
+
+    def _collate_observations(self, observations):
+        return collate_entity_candidate_observations(observations).to_torch(self.device)
+
+    def _update_target(self):
+        if self.update_steps % self.target_update == 0:
+            self.q_target.load_state_dict(self.q.state_dict())
 
     def action_results_structured(
         self,
@@ -108,25 +116,21 @@ class StructuredDQNAgent:
         )
         was_training = self.q.training
         self.q.eval()
-        batch = collate_entity_candidate_observations(observations).to_torch(
-            self.device
-        )
+        batch = self._collate_observations(observations)
         with torch.no_grad():
             values = self.q(batch).logits
             greedy = torch.argmax(values, dim=-1)
             selected = greedy.clone()
             if exploration > 0.0:
-                explore_rows = torch.rand(
-                    len(observations), device=self.device
-                ) < exploration
+                explore_rows = (
+                    torch.rand(len(observations), device=self.device) < exploration
+                )
                 effective_mask = batch.candidate_mask & batch.legal_action_mask
                 for row in torch.nonzero(explore_rows, as_tuple=False).flatten():
                     legal = torch.nonzero(
                         effective_mask[int(row)], as_tuple=False
                     ).flatten()
-                    choice = torch.randint(
-                        0, len(legal), (1,), device=self.device
-                    )
+                    choice = torch.randint(0, len(legal), (1,), device=self.device)
                     selected[int(row)] = legal[choice]
         self.q.train(was_training)
 
@@ -174,12 +178,8 @@ class StructuredDQNAgent:
             raise ValueError("at least one structured transition is required")
         observations = [item.observation for item in transitions]
         next_observations = [item.next_observation for item in transitions]
-        batch = collate_entity_candidate_observations(observations).to_torch(
-            self.device
-        )
-        next_batch = collate_entity_candidate_observations(
-            next_observations
-        ).to_torch(self.device)
+        batch = self._collate_observations(observations)
+        next_batch = self._collate_observations(next_observations)
         actions = torch.as_tensor(
             [item.candidate_index for item in transitions],
             dtype=torch.long,
@@ -196,9 +196,11 @@ class StructuredDQNAgent:
             device=self.device,
         )
         importance = torch.as_tensor(
-            np.ones(len(transitions), dtype=np.float32)
-            if weights is None
-            else np.asarray(weights, dtype=np.float32),
+            (
+                np.ones(len(transitions), dtype=np.float32)
+                if weights is None
+                else np.asarray(weights, dtype=np.float32)
+            ),
             dtype=torch.float32,
             device=self.device,
         ).reshape(-1)
@@ -207,16 +209,19 @@ class StructuredDQNAgent:
 
         self.q.train()
         action_values = self.q(batch).logits
-        predicted = action_values.gather(
-            1, actions.unsqueeze(1)
-        ).squeeze(1)
+        predicted = action_values.gather(1, actions.unsqueeze(1)).squeeze(1)
         with torch.no_grad():
-            online_next = self.q(next_batch).logits
-            next_actions = torch.argmax(online_next, dim=1)
-            target_next = self.q_target(next_batch).logits.gather(
-                1, next_actions.unsqueeze(1)
-            ).squeeze(1)
-            targets = rewards + self.gamma * (1.0 - dones) * target_next
+            if self.gamma == 0.0:
+                targets = rewards
+            else:
+                online_next = self.q(next_batch).logits
+                next_actions = torch.argmax(online_next, dim=1)
+                target_next = (
+                    self.q_target(next_batch)
+                    .logits.gather(1, next_actions.unsqueeze(1))
+                    .squeeze(1)
+                )
+                targets = rewards + self.gamma * (1.0 - dones) * target_next
         td_error = targets - predicted
         per_item = torch.nn.functional.huber_loss(
             predicted,
@@ -226,10 +231,7 @@ class StructuredDQNAgent:
         )
         td_loss = (importance * per_item).mean()
         demonstration_mask = torch.as_tensor(
-            [
-                bool(item.metadata.get("demonstration", False))
-                for item in transitions
-            ],
+            [bool(item.metadata.get("demonstration", False)) for item in transitions],
             dtype=torch.bool,
             device=self.device,
         )
@@ -240,8 +242,7 @@ class StructuredDQNAgent:
             best_margin_value = torch.max(action_values + margins, dim=1).values
             per_demo = torch.clamp(best_margin_value - predicted, min=0.0)
             demonstration_loss = (
-                importance[demonstration_mask]
-                * per_demo[demonstration_mask]
+                importance[demonstration_mask] * per_demo[demonstration_mask]
             ).mean()
         loss = td_loss + self.demonstration_weight * demonstration_loss
         self.optimizer.zero_grad(set_to_none=True)
@@ -249,14 +250,13 @@ class StructuredDQNAgent:
         grad_norm = 0.0
         if self.max_grad_norm > 0.0:
             grad_norm = float(
-                torch.nn.utils.clip_grad_norm_(
-                    self.q.parameters(), self.max_grad_norm
-                ).detach().cpu()
+                torch.nn.utils.clip_grad_norm_(self.q.parameters(), self.max_grad_norm)
+                .detach()
+                .cpu()
             )
         self.optimizer.step()
         self.update_steps += 1
-        if self.update_steps % self.target_update == 0:
-            self.q_target.load_state_dict(self.q.state_dict())
+        self._update_target()
 
         priorities = td_error.detach().abs().cpu().numpy().astype(np.float32)
         metrics = {

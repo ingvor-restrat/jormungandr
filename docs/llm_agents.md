@@ -267,3 +267,11 @@ scale differs from policy logits. Non-default scales are part of checkpoint
 identity. A scale of ten is used in the DQN-transfer example; it is an experiment
 setting, not a universal calibration. The source DQN remains a valid standalone
 policy when language inputs are unnecessary.
+
+## Language Double-DQN
+
+The optional `llm_dqn` plugin uses the same language candidate representation with
+native transition replay, Double-DQN targets, and adapter-only checkpoints. See
+[causal feedback adaptation](context_adaptation.md) for configuration, provenance
+contracts, independent controls, and measured limits. Numeric branches are not
+supported by this plugin.

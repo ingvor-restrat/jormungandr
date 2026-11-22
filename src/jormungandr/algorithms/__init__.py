@@ -32,6 +32,7 @@ from . import structured_dqn as _structured_dqn  # noqa: F401,E402
 from . import structured_bc as _structured_bc  # noqa: F401,E402
 from . import structured_ppo as _structured_ppo  # noqa: F401,E402
 from . import llm_ppo as _llm_ppo  # noqa: F401,E402
+from . import llm_dqn as _llm_dqn  # noqa: F401,E402
 
 
 def available_algorithms() -> list[str]:

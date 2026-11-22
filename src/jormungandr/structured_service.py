@@ -201,7 +201,6 @@ class StructuredServiceManager:
     ) -> tuple[StructuredServiceConfig, Any, bool]:
         if not isinstance(raw, Mapping):
             raise ValueError("learner must be an object")
-        trainable = bool(raw.get("enabled", True))
         algo = canonical_algorithm_name(
             str(raw.get("algo", "structured_dqn"))
         )
@@ -212,6 +211,8 @@ class StructuredServiceManager:
             )
         if plugin.build_structured is None:
             raise ValueError(f"algorithm {algo!r} has no structured builder")
+        raw = {**dict(plugin.runtime_defaults), **dict(raw)}
+        trainable = bool(raw.get("enabled", True))
         if plugin.replay_mode not in {
             "transition",
             "trajectory",
@@ -580,6 +581,9 @@ class StructuredServiceManager:
                 split=self._split(item.get("split", "train")),
                 metadata=dict(metadata),
             )
+            validator = getattr(record.agent, "validate_transition", None)
+            if validator is not None:
+                validator(transition)
             priority_raw = item.get("priority")
             priority = None if priority_raw is None else float(priority_raw)
             parsed.append((transition, priority))

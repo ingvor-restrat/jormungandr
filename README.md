@@ -28,6 +28,11 @@ variable eligible sets, explicit abstention, and a lexical baseline.
 A [controlled comparison](docs/tool_gate_comparison.md) separates decision format
 from training coverage with matched catalog exposure and reserved evaluation wording.
 
+A [causal feedback adaptation benchmark](docs/context_adaptation.md) adds native
+`llm_dqn`, frozen-weight evaluation, and history removal/corruption controls.
+Its small two-service task matches the memory baseline with explicitly grouped
+past outcomes; it does not establish general tool understanding.
+
 The current release provides:
 
 - batched experience ingress from multiple concurrent actors;

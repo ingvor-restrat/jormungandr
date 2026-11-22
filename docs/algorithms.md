@@ -236,3 +236,10 @@ The internal comparison API exposes the latest aligned rows at
 are available at `GET /v1/models/{id}/metrics`. Compare held-out reward and
 domain risk measures at equal environment steps and evaluation paths. Raw
 losses from different objectives are diagnostic and are not directly ranked.
+
+## Structured language learning
+
+The optional `llm_dqn` structured plugin trains language candidate Q values with
+Double-DQN replay and Polyak target adapters. Its runtime defaults are batch size
+4 and minimum replay 32. See [context adaptation](context_adaptation.md) for the
+portable example and its bounded experimental results.

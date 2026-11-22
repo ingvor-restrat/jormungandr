@@ -818,3 +818,178 @@ def test_matched_gate_training_uses_same_initial_weights_and_update_budget(local
         assert metrics(cases, scores, representation)["primary_cases"] == 2
         assert trainable_digest(agent) == digest
     assert initial[0] == initial[1]
+
+
+def test_language_dqn_bootstrap_target_and_adapter_checkpoint(local_model, tmp_path):
+    from examples.adaptation_benchmark import SPEC
+    from examples.context_adaptation_benchmark import collect
+
+    cfg = dict(
+        llm_model=local_model,
+        llm_max_tokens=1024,
+        llm_forward_batch_size=6,
+        llm_lora_rank=2,
+        lr=0.0001,
+        gamma=0.9,
+        llm_target_tau=0.25,
+        demonstration_weight=0.0,
+    )
+    agent = algorithm_registry.get("llm_dqn").build_structured(SPEC, cfg, "cpu")
+    replay = collect(31, 4, 8, 1)
+    step = replace(replay[0], reward=1.0)
+    with torch.no_grad():
+        agent.q.action_head.weight.zero_()
+        agent.q.action_head.bias.zero_()
+        agent.q_target.action_head.weight.zero_()
+        agent.q_target.action_head.bias.fill_(2.0)
+    result = agent.update_structured([step])
+    assert result.metrics["target_mean"] == pytest.approx(2.8)
+    torch.testing.assert_close(
+        agent.q_target.action_head.bias,
+        0.75 * torch.full_like(agent.q.action_head.bias, 2.0)
+        + 0.25 * agent.q.action_head.bias,
+    )
+    assert all(not p.requires_grad for p in agent.q_target.parameters())
+    with torch.no_grad():
+        agent.q_target.action_head.weight.zero_()
+        agent.q_target.action_head.bias.fill_(100.0)
+    terminal = agent.update_structured([replace(step, done=True)])
+    assert terminal.metrics["target_mean"] == pytest.approx(1.0)
+    state = agent.state_dict()
+    assert all("lora_" in k for k in state["q"]["adapter"])
+    assert "backbone" not in state["q"]
+    export_structured_policy_bundle(
+        tmp_path / "dqn", agent=agent, spec=SPEC, algorithm="llm_dqn", agent_config=cfg
+    )
+    restored, _ = load_structured_policy_bundle(tmp_path / "dqn")
+    a = agent.action_result_structured(step.observation, deterministic=True)
+    b = restored.action_result_structured(step.observation, deterministic=True)
+    assert a.candidate_values == b.candidate_values
+    torch.testing.assert_close(
+        agent.q_target.action_head.bias, restored.q_target.action_head.bias
+    )
+    assert restored.update_steps == 2
+
+
+def test_language_dqn_public_text_cannot_reveal_hidden_winner(local_model):
+    from examples.adaptation_benchmark import SPEC
+    from examples.context_adaptation_benchmark import (
+        make_trial,
+        context_for,
+        observation,
+    )
+
+    agent = algorithm_registry.get("llm_dqn").build_structured(
+        SPEC, dict(llm_model=local_model, llm_max_tokens=1024, llm_lora_rank=2), "cpu"
+    )
+    worlds = [make_trial(31, 2, i, 8) for i in (0, 1)]
+    texts = [agent.q._texts(observation(w, 0, context_for(w, 1))) for w in worlds]
+    assert texts[0] == texts[1]
+
+
+def test_language_dqn_uses_existing_frozen_runtime(local_model, tmp_path):
+    from examples.context_adaptation_benchmark import (
+        make_trial,
+        context_for,
+        observation as context_observation,
+    )
+
+    runtime = JormungandrRuntime(checkpoint_root=str(tmp_path))
+    learner = dict(
+        enabled=False,
+        algo="llm_dqn",
+        device="cpu",
+        plugin_config=dict(llm_model=local_model, llm_max_tokens=1024, llm_lora_rank=2),
+    )
+    representation = dict(
+        global_dim=1, entity_dim=3, candidate_dim=3, entity_type_count=1
+    )
+    world = make_trial(31, 2, 0, 8)
+    payload = entity_candidate_observation_to_payload(
+        context_observation(world, 0, context_for(world, 1))
+    )
+    try:
+        runtime.create_structured_model(
+            model_id="source", representation=representation, learner=learner
+        )
+        before = runtime.structured_policy_infer(
+            "source", observations=[payload], deterministic=True, epsilon=0.0
+        )
+        checkpoint = runtime.force_structured_checkpoint("source")["checkpoint"]
+        runtime.create_structured_model(
+            model_id="restored",
+            representation=representation,
+            learner=learner,
+            checkpoint_path=checkpoint,
+        )
+        after = runtime.structured_policy_infer(
+            "restored", observations=[payload], deterministic=True, epsilon=0.0
+        )
+        assert (
+            before["items"][0]["candidate_values"]
+            == after["items"][0]["candidate_values"]
+        )
+        with pytest.raises(ValueError, match="frozen"):
+            runtime.structured_experience_add("restored", [{}])
+    finally:
+        runtime.close_all()
+
+
+def test_language_dqn_runtime_learns_replay(local_model, tmp_path):
+    import time
+    from examples.context_adaptation_benchmark import collect
+
+    runtime = JormungandrRuntime(checkpoint_root=str(tmp_path))
+    learner = dict(
+        enabled=True,
+        algo="llm_dqn",
+        device="cpu",
+        batch_size=2,
+        min_replay=2,
+        max_updates=1,
+        tick_interval_s=0.001,
+        checkpoint_every=0,
+        plugin_config=dict(
+            llm_model=local_model, llm_max_tokens=1024, llm_lora_rank=2, gamma=0.9
+        ),
+    )
+    try:
+        runtime.create_structured_model(
+            model_id="context-dqn",
+            representation=dict(
+                global_dim=1, entity_dim=3, candidate_dim=3, entity_type_count=1
+            ),
+            learner=learner,
+        )
+        rows = []
+        for t in collect(31, 4, 8, 1)[:2]:
+            rows.append(
+                dict(
+                    actor_id=t.actor_id,
+                    episode_id=t.episode_id,
+                    timestep=t.timestep,
+                    policy_version=0,
+                    split="train",
+                    candidate_id=t.candidate_id,
+                    reward=t.reward,
+                    done=t.done,
+                    observation=entity_candidate_observation_to_payload(t.observation),
+                    next_observation=entity_candidate_observation_to_payload(
+                        t.next_observation
+                    ),
+                )
+            )
+        runtime.structured_experience_add("context-dqn", rows)
+        deadline = time.monotonic() + 10
+        model = runtime.get_structured_model("context-dqn")
+        while model["updates"] < 1 and time.monotonic() < deadline:
+            time.sleep(0.02)
+            model = runtime.get_structured_model("context-dqn")
+        assert model["updates"] == 1
+        assert model["last_error"] == ""
+        bad = {**rows[0], "observation": rows[0]["next_observation"]}
+        with pytest.raises(ValueError, match="future"):
+            runtime.structured_experience_add("context-dqn", [rows[0], bad])
+        assert runtime.get_structured_model("context-dqn")["replay"]["size"] == 2
+    finally:
+        runtime.close_all()

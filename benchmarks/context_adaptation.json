@@ -1,0 +1,1060 @@
+{
+  "scope": "Deterministic two-service feedback adaptation; grouped public history; not a full paper reproduction.",
+  "protocol": {
+    "development_config": {
+      "seed": 3109,
+      "trials": 128,
+      "eval_trials": 24,
+      "steps": 12,
+      "history": 1,
+      "group_history": true,
+      "updates": 768,
+      "batch_size": 4,
+      "lr": 0.0001,
+      "gamma": 0.9,
+      "stage": "development",
+      "device": "cuda",
+      "model": "HuggingFaceTB/SmolLM2-135M",
+      "revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2"
+    },
+    "seeds": [
+      3203,
+      3301
+    ],
+    "reserved_requests": [
+      "Please get this job done successfully. Select a service using the feedback from earlier attempts.",
+      "Which service should handle this request? Use the recorded results to guide your choice."
+    ],
+    "world_digest": "b64cfbd7cc9874b15f15844dbaead766311bbdc31d1c328bf078eabdd39e616c",
+    "source_digest": "ba8a3086c9c21ef5218fcd0e15870cde26447446dc1ff02704d40029a432f9b1",
+    "requirements": {
+      "stable_after_first": 0.9,
+      "post_change_after_one": 0.85,
+      "no_history_mean": 0.5
+    },
+    "note": "Frozen before confirmation model training; no changes to training recipe based on confirmation results."
+  },
+  "verification": {
+    "confirmation_source_snapshots_match_frozen_digest": true,
+    "confirmation_worlds_match_frozen_digest": true,
+    "confirmation_training_recipe_matches_development": true
+  },
+  "instruction_baseline": {
+    "model": "HuggingFaceTB/SmolLM2-135M-Instruct",
+    "revision": "12fd25f77366fa6b3b4b768ec3050bf629380bac",
+    "decoding": "Native LM logits restricted to A/B; no fine-tuning"
+  },
+  "runs": {
+    "context-adaptation-dev": {
+      "initial": {
+        "first": 0.5,
+        "mean_reward": 0.5,
+        "stable_after_first": 0.5,
+        "post_change_after_one": 0.5,
+        "curve": [
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ]
+      },
+      "evaluation": {
+        "history": {
+          "first": 0.5,
+          "mean_reward": 0.5,
+          "stable_after_first": 0.5,
+          "post_change_after_one": 0.5,
+          "curve": [
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5
+          ]
+        },
+        "no_history": {
+          "first": 0.5,
+          "mean_reward": 0.5,
+          "stable_after_first": 0.5,
+          "post_change_after_one": 0.5,
+          "curve": [
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5
+          ]
+        },
+        "flipped_feedback": {
+          "first": 0.5,
+          "mean_reward": 0.5,
+          "stable_after_first": 0.5,
+          "post_change_after_one": 0.5,
+          "curve": [
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5
+          ]
+        },
+        "renamed": {
+          "first": 0.5,
+          "mean_reward": 0.5,
+          "stable_after_first": 0.5,
+          "post_change_after_one": 0.5,
+          "curve": [
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5
+          ]
+        }
+      },
+      "memory_baseline": {
+        "mean_reward": 0.9166666666666666,
+        "curve": [
+          0.5,
+          1.0,
+          1.0,
+          1.0,
+          0.9166666666666666,
+          0.9166666666666666,
+          1.0,
+          1.0,
+          0.8333333333333334,
+          0.8333333333333334,
+          1.0,
+          1.0
+        ]
+      },
+      "targets": {
+        "stable_after_first": 0.9,
+        "post_change_after_one": 0.85
+      },
+      "target_met": false,
+      "weights_frozen_during_evaluation": true
+    },
+    "context-bandit-dev": {
+      "initial": {
+        "first": 0.5,
+        "mean_reward": 0.5,
+        "stable_after_first": 0.5,
+        "post_change_after_one": 0.5,
+        "curve": [
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ]
+      },
+      "evaluation": {
+        "history": {
+          "first": 0.5,
+          "mean_reward": 0.5,
+          "stable_after_first": 0.5,
+          "post_change_after_one": 0.5,
+          "curve": [
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5
+          ]
+        },
+        "no_history": {
+          "first": 0.5,
+          "mean_reward": 0.5,
+          "stable_after_first": 0.5,
+          "post_change_after_one": 0.5,
+          "curve": [
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5
+          ]
+        },
+        "flipped_feedback": {
+          "first": 0.5,
+          "mean_reward": 0.5,
+          "stable_after_first": 0.5,
+          "post_change_after_one": 0.5,
+          "curve": [
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5
+          ]
+        },
+        "renamed": {
+          "first": 0.5,
+          "mean_reward": 0.5,
+          "stable_after_first": 0.5,
+          "post_change_after_one": 0.5,
+          "curve": [
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5
+          ]
+        }
+      },
+      "memory_baseline": {
+        "mean_reward": 0.9166666666666666,
+        "curve": [
+          0.5,
+          1.0,
+          1.0,
+          1.0,
+          0.9166666666666666,
+          0.9166666666666666,
+          1.0,
+          1.0,
+          0.8333333333333334,
+          0.8333333333333334,
+          1.0,
+          1.0
+        ]
+      },
+      "targets": {
+        "stable_after_first": 0.9,
+        "post_change_after_one": 0.85
+      },
+      "target_met": false,
+      "weights_frozen_during_evaluation": true
+    },
+    "context-grouped-bandit-dev": {
+      "initial": {
+        "first": 0.5,
+        "mean_reward": 0.5,
+        "stable_after_first": 0.5,
+        "post_change_after_one": 0.5,
+        "curve": [
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ]
+      },
+      "evaluation": {
+        "history": {
+          "first": 0.5,
+          "mean_reward": 0.9166666666666666,
+          "stable_after_first": 1.0,
+          "post_change_after_one": 1.0,
+          "curve": [
+            0.5,
+            1.0,
+            1.0,
+            1.0,
+            0.9166666666666666,
+            0.9166666666666666,
+            1.0,
+            1.0,
+            0.8333333333333334,
+            0.8333333333333334,
+            1.0,
+            1.0
+          ]
+        },
+        "no_history": {
+          "first": 0.5,
+          "mean_reward": 0.5,
+          "stable_after_first": 0.5,
+          "post_change_after_one": 0.5,
+          "curve": [
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5
+          ]
+        },
+        "flipped_feedback": {
+          "first": 0.5,
+          "mean_reward": 0.08333333333333333,
+          "stable_after_first": 0.0,
+          "post_change_after_one": 0.0,
+          "curve": [
+            0.5,
+            0.0,
+            0.0,
+            0.0,
+            0.08333333333333333,
+            0.08333333333333333,
+            0.0,
+            0.0,
+            0.16666666666666666,
+            0.16666666666666666,
+            0.0,
+            0.0
+          ]
+        },
+        "renamed": {
+          "first": 0.5,
+          "mean_reward": 0.9166666666666666,
+          "stable_after_first": 1.0,
+          "post_change_after_one": 1.0,
+          "curve": [
+            0.5,
+            1.0,
+            1.0,
+            1.0,
+            0.9166666666666666,
+            0.9166666666666666,
+            1.0,
+            1.0,
+            0.8333333333333334,
+            0.8333333333333334,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "memory_baseline": {
+        "mean_reward": 0.9166666666666666,
+        "curve": [
+          0.5,
+          1.0,
+          1.0,
+          1.0,
+          0.9166666666666666,
+          0.9166666666666666,
+          1.0,
+          1.0,
+          0.8333333333333334,
+          0.8333333333333334,
+          1.0,
+          1.0
+        ]
+      },
+      "targets": {
+        "stable_after_first": 0.9,
+        "post_change_after_one": 0.85
+      },
+      "target_met": true,
+      "weights_frozen_during_evaluation": true
+    },
+    "context-grouped-dqn-dev": {
+      "initial": {
+        "first": 0.5,
+        "mean_reward": 0.5,
+        "stable_after_first": 0.5,
+        "post_change_after_one": 0.5,
+        "curve": [
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ]
+      },
+      "evaluation": {
+        "history": {
+          "first": 0.5,
+          "mean_reward": 0.9166666666666666,
+          "stable_after_first": 1.0,
+          "post_change_after_one": 1.0,
+          "curve": [
+            0.5,
+            1.0,
+            1.0,
+            1.0,
+            0.9166666666666666,
+            0.9166666666666666,
+            1.0,
+            1.0,
+            0.8333333333333334,
+            0.8333333333333334,
+            1.0,
+            1.0
+          ]
+        },
+        "no_history": {
+          "first": 0.5,
+          "mean_reward": 0.5,
+          "stable_after_first": 0.5,
+          "post_change_after_one": 0.5,
+          "curve": [
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5
+          ]
+        },
+        "flipped_feedback": {
+          "first": 0.5,
+          "mean_reward": 0.08333333333333333,
+          "stable_after_first": 0.0,
+          "post_change_after_one": 0.0,
+          "curve": [
+            0.5,
+            0.0,
+            0.0,
+            0.0,
+            0.08333333333333333,
+            0.08333333333333333,
+            0.0,
+            0.0,
+            0.16666666666666666,
+            0.16666666666666666,
+            0.0,
+            0.0
+          ]
+        },
+        "renamed": {
+          "first": 0.5,
+          "mean_reward": 0.9166666666666666,
+          "stable_after_first": 1.0,
+          "post_change_after_one": 1.0,
+          "curve": [
+            0.5,
+            1.0,
+            1.0,
+            1.0,
+            0.9166666666666666,
+            0.9166666666666666,
+            1.0,
+            1.0,
+            0.8333333333333334,
+            0.8333333333333334,
+            1.0,
+            1.0
+          ]
+        },
+        "reordered": {
+          "first": 0.5,
+          "mean_reward": 0.9166666666666666,
+          "stable_after_first": 1.0,
+          "post_change_after_one": 1.0,
+          "curve": [
+            0.5,
+            1.0,
+            1.0,
+            1.0,
+            0.9166666666666666,
+            0.9166666666666666,
+            1.0,
+            1.0,
+            0.8333333333333334,
+            0.8333333333333334,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "memory_baseline": {
+        "mean_reward": 0.9166666666666666,
+        "curve": [
+          0.5,
+          1.0,
+          1.0,
+          1.0,
+          0.9166666666666666,
+          0.9166666666666666,
+          1.0,
+          1.0,
+          0.8333333333333334,
+          0.8333333333333334,
+          1.0,
+          1.0
+        ]
+      },
+      "targets": {
+        "stable_after_first": 0.9,
+        "post_change_after_one": 0.85
+      },
+      "target_met": true,
+      "weights_frozen_during_evaluation": true
+    },
+    "context-numeric-control": {
+      "seed": 3109,
+      "evaluation": {
+        "history": {
+          "first": 0.5,
+          "mean_reward": 0.9166666666666666,
+          "stable_after_first": 1.0,
+          "post_change_after_one": 1.0,
+          "curve": [
+            0.5,
+            1.0,
+            1.0,
+            1.0,
+            0.9166666666666666,
+            0.9166666666666666,
+            1.0,
+            1.0,
+            0.8333333333333334,
+            0.8333333333333334,
+            1.0,
+            1.0
+          ]
+        },
+        "no_history": {
+          "first": 0.5,
+          "mean_reward": 0.5,
+          "stable_after_first": 0.5,
+          "post_change_after_one": 0.5,
+          "curve": [
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5
+          ]
+        },
+        "flipped_feedback": {
+          "first": 0.5,
+          "mean_reward": 0.08333333333333333,
+          "stable_after_first": 0.0,
+          "post_change_after_one": 0.0,
+          "curve": [
+            0.5,
+            0.0,
+            0.0,
+            0.0,
+            0.08333333333333333,
+            0.08333333333333333,
+            0.0,
+            0.0,
+            0.16666666666666666,
+            0.16666666666666666,
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    "context-instruction-dev": {
+      "history": {
+        "first": 0.5,
+        "mean_reward": 0.5,
+        "stable_after_first": 0.5,
+        "post_change_after_one": 0.5,
+        "curve": [
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ]
+      },
+      "no_history": {
+        "first": 0.5,
+        "mean_reward": 0.5,
+        "stable_after_first": 0.5,
+        "post_change_after_one": 0.5,
+        "curve": [
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ]
+      },
+      "flipped_feedback": {
+        "first": 0.5,
+        "mean_reward": 0.5,
+        "stable_after_first": 0.5,
+        "post_change_after_one": 0.5,
+        "curve": [
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ]
+      }
+    },
+    "context-instruction-grouped-dev": {
+      "history": {
+        "first": 0.5,
+        "mean_reward": 0.5,
+        "stable_after_first": 0.5,
+        "post_change_after_one": 0.5,
+        "curve": [
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ]
+      },
+      "no_history": {
+        "first": 0.5,
+        "mean_reward": 0.5,
+        "stable_after_first": 0.5,
+        "post_change_after_one": 0.5,
+        "curve": [
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ]
+      },
+      "flipped_feedback": {
+        "first": 0.5,
+        "mean_reward": 0.5,
+        "stable_after_first": 0.5,
+        "post_change_after_one": 0.5,
+        "curve": [
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ]
+      }
+    },
+    "context-grouped-dqn-confirmation-3203": {
+      "initial": {
+        "first": 0.5,
+        "mean_reward": 0.5,
+        "stable_after_first": 0.5,
+        "post_change_after_one": 0.5,
+        "curve": [
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ]
+      },
+      "evaluation": {
+        "history": {
+          "first": 0.5,
+          "mean_reward": 0.9166666666666666,
+          "stable_after_first": 1.0,
+          "post_change_after_one": 1.0,
+          "curve": [
+            0.5,
+            1.0,
+            1.0,
+            1.0,
+            0.75,
+            1.0,
+            0.9166666666666666,
+            0.8333333333333334,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "no_history": {
+          "first": 0.5,
+          "mean_reward": 0.5,
+          "stable_after_first": 0.5,
+          "post_change_after_one": 0.5,
+          "curve": [
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5
+          ]
+        },
+        "flipped_feedback": {
+          "first": 0.5,
+          "mean_reward": 0.08333333333333333,
+          "stable_after_first": 0.0,
+          "post_change_after_one": 0.0,
+          "curve": [
+            0.5,
+            0.0,
+            0.0,
+            0.0,
+            0.25,
+            0.0,
+            0.08333333333333333,
+            0.16666666666666666,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "renamed": {
+          "first": 0.5,
+          "mean_reward": 0.9166666666666666,
+          "stable_after_first": 1.0,
+          "post_change_after_one": 1.0,
+          "curve": [
+            0.5,
+            1.0,
+            1.0,
+            1.0,
+            0.75,
+            1.0,
+            0.9166666666666666,
+            0.8333333333333334,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "reordered": {
+          "first": 0.5,
+          "mean_reward": 0.9166666666666666,
+          "stable_after_first": 1.0,
+          "post_change_after_one": 1.0,
+          "curve": [
+            0.5,
+            1.0,
+            1.0,
+            1.0,
+            0.75,
+            1.0,
+            0.9166666666666666,
+            0.8333333333333334,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "memory_baseline": {
+        "mean_reward": 0.9166666666666666,
+        "curve": [
+          0.5,
+          1.0,
+          1.0,
+          1.0,
+          0.75,
+          1.0,
+          0.9166666666666666,
+          0.8333333333333334,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "targets": {
+        "stable_after_first": 0.9,
+        "post_change_after_one": 0.85
+      },
+      "target_met": true,
+      "weights_frozen_during_evaluation": true
+    },
+    "context-grouped-dqn-confirmation-3301": {
+      "initial": {
+        "first": 0.5,
+        "mean_reward": 0.5,
+        "stable_after_first": 0.5,
+        "post_change_after_one": 0.5,
+        "curve": [
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ]
+      },
+      "evaluation": {
+        "history": {
+          "first": 0.5,
+          "mean_reward": 0.9166666666666666,
+          "stable_after_first": 1.0,
+          "post_change_after_one": 1.0,
+          "curve": [
+            0.5,
+            1.0,
+            1.0,
+            1.0,
+            0.9166666666666666,
+            0.9166666666666666,
+            0.9166666666666666,
+            1.0,
+            0.9166666666666666,
+            0.8333333333333334,
+            1.0,
+            1.0
+          ]
+        },
+        "no_history": {
+          "first": 0.5,
+          "mean_reward": 0.5,
+          "stable_after_first": 0.5,
+          "post_change_after_one": 0.5,
+          "curve": [
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5
+          ]
+        },
+        "flipped_feedback": {
+          "first": 0.5,
+          "mean_reward": 0.08333333333333333,
+          "stable_after_first": 0.0,
+          "post_change_after_one": 0.0,
+          "curve": [
+            0.5,
+            0.0,
+            0.0,
+            0.0,
+            0.08333333333333333,
+            0.08333333333333333,
+            0.08333333333333333,
+            0.0,
+            0.08333333333333333,
+            0.16666666666666666,
+            0.0,
+            0.0
+          ]
+        },
+        "renamed": {
+          "first": 0.5,
+          "mean_reward": 0.9166666666666666,
+          "stable_after_first": 1.0,
+          "post_change_after_one": 1.0,
+          "curve": [
+            0.5,
+            1.0,
+            1.0,
+            1.0,
+            0.9166666666666666,
+            0.9166666666666666,
+            0.9166666666666666,
+            1.0,
+            0.9166666666666666,
+            0.8333333333333334,
+            1.0,
+            1.0
+          ]
+        },
+        "reordered": {
+          "first": 0.5,
+          "mean_reward": 0.9166666666666666,
+          "stable_after_first": 1.0,
+          "post_change_after_one": 1.0,
+          "curve": [
+            0.5,
+            1.0,
+            1.0,
+            1.0,
+            0.9166666666666666,
+            0.9166666666666666,
+            0.9166666666666666,
+            1.0,
+            0.9166666666666666,
+            0.8333333333333334,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "memory_baseline": {
+        "mean_reward": 0.9166666666666666,
+        "curve": [
+          0.5,
+          1.0,
+          1.0,
+          1.0,
+          0.9166666666666666,
+          0.9166666666666666,
+          0.9166666666666666,
+          1.0,
+          0.9166666666666666,
+          0.8333333333333334,
+          1.0,
+          1.0
+        ]
+      },
+      "targets": {
+        "stable_after_first": 0.9,
+        "post_change_after_one": 0.85
+      },
+      "target_met": true,
+      "weights_frozen_during_evaluation": true
+    }
+  }
+}
