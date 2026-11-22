@@ -204,3 +204,7 @@ state. Broader experiments should introduce multiple consequential decisions and
 check off-policy corrections before drawing conclusions about general n-step
 control. The ranked-shortlist feedback contract described above is a separate
 next capability, not an implemented preference-learning feature in this change.
+
+The follow-up [ranked-shortlist library and preference benchmark](shortlist_preferences.md)
+now implements the record/join/loss primitives. HTTP preference ingestion remains
+outside that library milestone.

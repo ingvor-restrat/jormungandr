@@ -192,6 +192,7 @@ def entity_candidate_observation_to_payload(
         "global_features": observation.global_features.tolist(),
         "entities": {
             "features": observation.entity_features.tolist(),
+            "feature_dim": observation.entity_dim,
             "type_ids": observation.entity_type_ids.tolist(),
             "ids": list(observation.entity_ids),
         },
@@ -227,13 +228,29 @@ def entity_candidate_observation_from_payload(
         raise ValueError("structured observation candidates must be an object")
     if not isinstance(metadata, Mapping):
         raise ValueError("structured observation metadata must be an object")
+    entity_features = np.asarray(entities.get("features", []), dtype=np.float32)
+    feature_dim = entities.get("feature_dim")
+    if feature_dim is not None and (
+        isinstance(feature_dim, bool) or not isinstance(feature_dim, int)
+        or feature_dim < 0
+    ):
+        raise ValueError("entity feature_dim must be a nonnegative integer")
+    if entity_features.shape == (0,):
+        width = feature_dim if feature_dim is not None else (
+            spec.entity_dim if spec is not None else None
+        )
+        if width is None:
+            raise ValueError("empty entities require feature_dim or a model spec")
+        entity_features = entity_features.reshape(0, width)
+    if feature_dim is not None and (
+        entity_features.ndim != 2 or entity_features.shape[1] != feature_dim
+    ):
+        raise ValueError("entity feature_dim does not match features")
     observation = EntityCandidateObservation(
         global_features=np.asarray(
             payload.get("global_features", []), dtype=np.float32
         ),
-        entity_features=np.asarray(
-            entities.get("features", []), dtype=np.float32
-        ),
+        entity_features=entity_features,
         entity_type_ids=np.asarray(
             entities.get("type_ids", []), dtype=np.int64
         ),
