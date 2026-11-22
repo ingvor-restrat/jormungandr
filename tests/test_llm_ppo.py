@@ -995,15 +995,16 @@ def test_language_dqn_runtime_learns_replay(local_model, tmp_path):
         runtime.close_all()
 
 
+@pytest.mark.parametrize("candidate_context", ["local", "evidence"])
 def test_local_language_scores_ignore_other_candidates_and_survive_export(
-    local_model, tmp_path
+    local_model, tmp_path, candidate_context
 ):
     from examples.multiservice_adaptation import Task, append, context, observe, world
     from examples.adaptation_benchmark import SPEC
 
     cfg = {
         **config(local_model),
-        "llm_candidate_context": "local",
+        "llm_candidate_context": candidate_context,
         "llm_max_tokens": 768,
     }
     agent = algorithm_registry.get("llm_dqn").build_structured(SPEC, cfg, "cpu")
@@ -1031,7 +1032,7 @@ def test_local_language_scores_ignore_other_candidates_and_survive_export(
     altered_texts = dict(zip(altered.candidate_ids, agent.q._texts(altered)[1:]))
     assert texts[w.ids[0]] == altered_texts[w.ids[0]]
     assert texts[w.ids[1]] != altered_texts[w.ids[1]]
-    assert agent.q.identity["serialization"].endswith("local.v1")
+    assert agent.q.identity["serialization"].endswith(f"{candidate_context}.v1")
     export_structured_policy_bundle(
         tmp_path / "local",
         agent=agent,
@@ -1078,14 +1079,17 @@ def test_local_sdpa_and_cached_history_free_evaluation(local_model):
     assert by_id(first) == by_id(later)
 
 
-def test_local_bandit_chosen_only_loss_matches_full_candidate_loss(local_model):
+@pytest.mark.parametrize("candidate_context", ["local", "evidence"])
+def test_local_bandit_chosen_only_loss_matches_full_candidate_loss(
+    local_model, candidate_context
+):
     from examples.multiservice_adaptation import collect
     from examples.adaptation_benchmark import SPEC
     from jormungandr.algorithms.structured_dqn import StructuredDQNAgent
 
     cfg = {
         **config(local_model),
-        "llm_candidate_context": "local",
+        "llm_candidate_context": candidate_context,
         "llm_max_tokens": 768,
         "gamma": 0.0,
         "demonstration_weight": 0.0,
@@ -1138,3 +1142,65 @@ def test_language_reward_learner_estimates_stochastic_mean(local_model):
     prediction = result.candidate_values[row.candidate_index]
     assert 0.23 < prediction < 0.43
     assert agent.update_steps == 30
+
+
+def test_actor_evidence_excludes_routing_ids_but_keeps_causal_validation(local_model):
+    from examples.multiservice_adaptation import collect
+    from examples.multiservice_evidence import evidence_view
+    from examples.adaptation_benchmark import SPEC
+
+    cfg = {
+        **config(local_model),
+        "llm_candidate_context": "evidence",
+        "llm_max_tokens": 1024,
+        "gamma": 0.0,
+    }
+    agent = algorithm_registry.get("llm_dqn").build_structured(SPEC, cfg, "cpu")
+    row = collect(31, 1)[5]
+    obs = evidence_view(row.observation)
+    texts = agent.q._texts(obs)
+    assert all(key not in text for key in obs.candidate_ids for text in texts)
+    assert all("timestep" not in text for text in texts)
+    assert agent.q.context_diagnostics(obs)["actor_evidence"] is True
+    raw = obs.metadata["llm"]
+    bad = replace(
+        obs,
+        metadata={
+            "llm": {**raw, "history": [{**raw["history"][0], "timestep": row.timestep}]}
+        },
+    )
+    with pytest.raises(ValueError, match="future feedback"):
+        agent.update_structured([replace(row, observation=bad)])
+    agent.q.max_tokens = 8
+    with pytest.raises(ValueError, match="actor evidence exceeds"):
+        agent.q._texts(obs)
+
+
+def test_evidence_inference_encodes_identical_public_inputs_once(local_model):
+    from examples.multiservice_adaptation import Task, world, context, observe
+    from examples.multiservice_evidence import evidence_view
+    from examples.adaptation_benchmark import SPEC
+
+    cfg = {
+        **config(local_model),
+        "llm_candidate_context": "evidence",
+        "llm_max_tokens": 1024,
+    }
+    agent = algorithm_registry.get("llm_dqn").build_structured(SPEC, cfg, "cpu")
+    w = world(19, Task(8, 1.0, 0.0, 0), 0)
+    obs = evidence_view(observe(w, 0, context(w)))
+    sizes = []
+    hook = agent.q.backbone.register_forward_pre_hook(
+        lambda module, args, kwargs: sizes.append(len(kwargs["input_ids"])),
+        with_kwargs=True,
+    )
+    try:
+        results = agent.action_results_structured([obs, obs], deterministic=True)
+    finally:
+        hook.remove()
+    assert (
+        sum(sizes) == len(set(agent.q._texts(obs))) == 2
+    )  # State plus one common candidate view.
+    assert len(results[0].candidate_values) == 8
+    assert len(set(results[0].candidate_values)) == 1
+    assert results[0].candidate_values == results[1].candidate_values

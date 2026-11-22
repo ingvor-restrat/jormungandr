@@ -92,7 +92,7 @@ class LLMDQNAgent(StructuredDQNAgent):
             self._validate_transition(step)
         if (
             self.gamma == 0
-            and self.q.candidate_context == "local"
+            and self.q.candidate_context in {"local", "evidence"}
             and self.demonstration_weight == 0
         ):
             # The contextual reward loss uses only the chosen candidate. Local

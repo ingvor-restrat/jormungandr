@@ -62,8 +62,8 @@ class LanguageCandidatePolicy(nn.Module):
             raise ValueError("llm_dtype must be float32 or bfloat16")
         self.max_tokens = int(config.get("llm_max_tokens", 512))
         self.candidate_context = config.get("llm_candidate_context", "joint")
-        if self.candidate_context not in {"joint", "local"}:
-            raise ValueError("llm_candidate_context must be joint or local")
+        if self.candidate_context not in {"joint", "local", "evidence"}:
+            raise ValueError("llm_candidate_context must be joint, local or evidence")
         self.forward_batch_size = int(config.get("llm_forward_batch_size", 4))
         if self.max_tokens < 16 or self.forward_batch_size < 1:
             raise ValueError("invalid token or forward batch limit")
@@ -125,6 +125,8 @@ class LanguageCandidatePolicy(nn.Module):
         }
         if self.candidate_context == "local":
             self.identity["serialization"] = "jormungandr.llm_candidate.local.v1"
+        elif self.candidate_context == "evidence":
+            self.identity["serialization"] = "jormungandr.llm_candidate.evidence.v1"
         if attention != "eager":
             self.identity["attention_implementation"] = attention
         self.numeric_branch = None
@@ -230,6 +232,51 @@ class LanguageCandidatePolicy(nn.Module):
             }
             for i, key in enumerate(observation.candidate_ids)
         ]
+        if self.candidate_context == "evidence":
+            # An explicit actor-provided evidence view. Raw source events remain
+            # validated and available for replay auditing, but are not duplicated
+            # in the prompt. The actor must describe all decision-relevant public
+            # evidence. Routing IDs and row positions are not learned features.
+            texts = []
+            for choice in [None, *choices]:
+                selected = (
+                    []
+                    if choice is None
+                    else np.atleast_1d(choice["entity_indices"]).tolist()
+                )
+                payload = {
+                    "observation": current,
+                    "global": state["global"],
+                    "entities": [
+                        {k: v for k, v in entity.items() if k != "id"}
+                        for i, entity in enumerate(state["entities"])
+                        if i in selected
+                    ],
+                    "candidate": (
+                        None
+                        if choice is None
+                        else {
+                            k: v
+                            for k, v in choice.items()
+                            if k not in {"id", "entity_indices"}
+                        }
+                    ),
+                }
+                texts.append(
+                    json.dumps(payload, sort_keys=True, allow_nan=False)
+                    + ("\nState value:" if choice is None else "\nCandidate value:")
+                )
+            maximum = max(len(self.tokenizer(t)["input_ids"]) for t in set(texts))
+            if maximum > self.max_tokens:
+                raise ValueError(
+                    "actor evidence exceeds llm_max_tokens; shorten actor text or increase limit"
+                )
+            return texts, {
+                "requested_events": len(history),
+                "retained_events": 0,
+                "actor_evidence": True,
+                "max_sequence_tokens": maximum,
+            }
         if self.candidate_context == "local":
             # Independent candidate scoring is useful when alternatives do not
             # interact. It intentionally omits other candidates' evidence.
@@ -330,12 +377,17 @@ class LanguageCandidatePolicy(nn.Module):
         """Fuse learned text and numeric logits; scales support pure ablations."""
         groups = [self._texts(observation) for observation in batch.observations]
         texts = [text for group in groups for text in group]
-        order = None
-        if self.candidate_context == "local" and not self.training:
+        restore = None
+        if self.candidate_context in {"local", "evidence"} and not self.training:
             # Canonical inference microbatches also remove padding/rounding
             # differences under candidate permutations in reduced precision.
-            order = sorted(range(len(texts)), key=texts.__getitem__)
-            texts = [texts[i] for i in order]
+            # Encode identical public evidence only once. Besides saving work,
+            # this gives identical inputs identical backbone features even if
+            # their original rows would fall in different padded microbatches.
+            unique = sorted(set(texts))
+            positions = {text: i for i, text in enumerate(unique)}
+            restore = [positions[text] for text in texts]
+            texts = unique
         features = []
         device = self.action_head.weight.device
         for start in range(0, len(texts), self.forward_batch_size):
@@ -355,9 +407,8 @@ class LanguageCandidatePolicy(nn.Module):
                 hidden[torch.arange(len(last), device=device), last].float()
             )
         features = torch.cat(features)
-        if order is not None:
-            inverse = torch.argsort(torch.tensor(order, device=device))
-            features = features[inverse]
+        if restore is not None:
+            features = features[torch.tensor(restore, device=device)]
         rows, values, offset = [], [], 0
         width = batch.candidate_mask.shape[1]
         for group in groups:

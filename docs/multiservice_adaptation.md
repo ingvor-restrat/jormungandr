@@ -252,3 +252,123 @@ changes and training seeds. These results do not isolate whether more varied
 training data, a different state representation, optimization changes, or model
 capacity will solve it. Further tuning must use development data and reserve new
 untouched evaluations; the confirmation cases reported here have been examined.
+
+## Follow-up: learnability and compact evidence
+
+The old confirmation cases have now been inspected and are **development data**.
+They must not be reused to claim fresh confirmation of a revised model.
+
+`examples.multiservice_learning_control` is an independent small MLP diagnostic,
+not a replacement for the language policy. It learns from actual chosen-action
+rewards using candidate-relative public history. It does not see hidden winner
+labels, service names, switch times, or success probabilities. Training uses
+random change hazards and varied exploration policies. With seed 5101 and 32
+worlds per task, the 16-call control obtained rewards of 0.9121/0.8753 on stable
+4/8-service tasks and 0.7179/0.6593 on deterministic switching tasks. The matched
+last-outcome baseline obtained 0.7852/0.7681 on switching. Increasing history to
+64 calls did not solve this gap (0.6892/0.5988). More history is not by itself a
+solution, and these results do not demonstrate language-model learning.
+
+```bash
+python -m examples.multiservice_learning_control \
+  --output runs/learnability --device cuda
+python -m examples.multiservice_evidence \
+  --output runs/evidence-development --device cuda
+```
+
+The language experiment uses the opt-in `llm_candidate_context="evidence"`
+serializer. The actor supplies compact public evidence in candidate descriptions;
+the serializer excludes opaque routing IDs and does not duplicate raw history in
+the model prompt. Raw history is still retained and validated for causal replay.
+The actor is responsible for supplying all decision-relevant evidence, including
+interactions between alternatives where needed. Oversized evidence raises an
+error rather than silently truncating. Existing `joint` and `local` serializers
+remain unchanged. Export manifests identify the new serialization separately.
+
+For this example, evidence includes the latest own result, every retained own
+result with its relative age, and the chronological self/other outcome stream.
+It includes no recommended action, computed policy score, or numeric actor.
+The typed job is canonicalized; this does not demonstrate semantic understanding
+of arbitrary new API descriptions. An `EvidencePolicy` actor wrapper must also
+be used when loading this example's exported bundle so inference receives the
+same evidence transformation as training.
+
+`examples.multiservice_acceptance` defines a fixed numerical gate before new
+confirmation: at least 32 matched worlds per task, no more than 0.05 mean reward
+below the strongest of last-outcome/window-mean/window-UCB, and stable-task floors
+of 0.85 (four services) and 0.80 (eight services). It reports paired uncertainty
+without relaxing the threshold. Confirmation additionally requires two independent
+training seeds and untouched 128-call cases with 22/34-call changes and 0.82/0.18
+or 0.68/0.32 success probabilities. A per-run gate pass alone cannot establish
+that provenance. Software tests passing is separate from this performance gate.
+
+Matched-budget diagnostics did not identify discounting as the missing fix:
+8,000 immediate-reward updates reached 0.7614/0.7084 on switching, compared with
+0.7687/0.7070 for discounted Double-DQN (`gamma=0.9`) on the same training corpus.
+A larger discounted run worsened noisy-task performance. Broader training
+catalogs (3/5/7/9 services, still withholding 4/8) also did not close the switching
+gap. These are development diagnostics, not a statistical proof of equivalence.
+All runs, including failures, are summarized in
+[`multiservice_followup.json`](../benchmarks/multiservice_followup.json).
+
+The static collector left a specific coverage gap: among 20,736 transitions,
+none had 15 retained successes followed by a failure for the chosen service.
+The compact model consequently kept preferring a previously successful service
+after it failed. `examples.multiservice_evidence_online` adds native refinement
+from the language policy's own training interactions. It collects actual rewards
+on training worlds, then samples 75% recent interactions and 25% initial replay.
+Validation worlds never supply updates. The deployment bundle has no optimizer
+moments, so refinement deliberately starts a fresh optimizer.
+
+Two rounds of 36 training trials and 256 updates improved seed 5101 from
+0.5015/0.5394 to 0.8073/0.7597 on four/eight-service switching development tasks.
+These are matched worlds; the strongest baselines scored 0.7909/0.7738. All seven
+12-world development comparisons met the numerical tolerance. This preliminary
+result alone does not establish confirmation or seed robustness.
+
+```bash
+python -m examples.multiservice_evidence_online \
+  --bundle runs/evidence-development/language \
+  --output runs/evidence-online --seed 5101 --device cuda
+```
+
+Frozen bundle evaluation, including permutation and actual HTTP checks, is
+available separately:
+
+```bash
+python -m examples.multiservice_evidence_validation \
+  --bundle runs/evidence-online/round-2 \
+  --output runs/evidence-validation --stage development \
+  --seed 6101 --trials 32 --device cuda
+```
+
+This command exits nonzero when the performance gate fails. Use `--stage
+confirmation` only after development succeeds; consuming those results makes
+them unavailable for another claim of untouched confirmation.
+
+The first refinement was not seed-robust: seed 5203 obtained 0.4189 on noisy
+eight-service routing against a 0.4866 window-mean baseline. The follow-up
+`counts_v2` format adds public success/failure/observation counts to the existing
+recency and chronological evidence. It does not add a recommended action,
+smoothed policy score, or transferred numeric actor. The measured follow-up uses
+256 warmup updates followed by two additional on-policy rounds on new training
+worlds:
+
+```bash
+python -m examples.multiservice_evidence_online \
+  --bundle runs/evidence-online/round-2 \
+  --output runs/evidence-counts --seed 5101 --device cuda \
+  --evidence-format counts_v2 --warmup-updates 256 --collection-offset 20000
+python -m examples.multiservice_evidence_validation \
+  --bundle runs/evidence-counts/round-2 \
+  --output runs/evidence-counts-validation --stage development \
+  --seed 6101 --trials 32 --device cuda \
+  --observation-batch-size 32 --inference-batch-size 128
+```
+
+The validation runner reads `example_evidence_format` from the bundle manifest.
+Custom actors must pass that format to `EvidencePolicy`; omitting it selects the
+original `v1` format. Larger inference batches and duplicate-prompt elimination
+reduce evaluation cost without changing reward definitions, the information boundary, or the
+acceptance threshold. More refinement and changed inputs are combined in this
+experiment, so its improvement cannot be attributed to the count fields alone.

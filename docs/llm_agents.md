@@ -283,3 +283,14 @@ identity distinguishes serializations. `llm_attention_implementation: sdpa` is a
 optional memory-saving attention backend; `eager` remains the default. See the
 [multi-service example](multiservice_adaptation.md) for the complete information
 contract, explicit exploration, and executable tools.
+
+`llm_candidate_context: evidence` is an opt-in actor-supplied evidence view.
+It retains associated numeric features, but excludes routing IDs and raw history
+from the model prompt. Raw history remains validated for causal replay; the actor
+must place all decision-relevant public evidence in its text. Unlike `local`, the
+actor can explicitly summarize interactions between alternatives. Oversized text
+raises an error rather than being truncated, and the bundle records a distinct
+serialization identity. Inference encodes identical local/evidence prompts once
+and restores their original rows; training still uses the full gradient path.
+The multi-service example versions its actor input format in the bundle and
+includes on-policy training collection and a separate model-performance gate.

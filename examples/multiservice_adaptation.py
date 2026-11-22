@@ -139,7 +139,7 @@ def evidence(c, key, turn, ablation="history"):
     rewards = [
         1 - e.reward if ablation == "flipped_feedback" else e.reward for e in matching
     ]
-    return rewards, (turn - matching[-1].timestep if matching else WINDOW + 1)
+    return rewards, (turn - matching[-1].timestep if matching else c.max_events + 1)
 
 
 def observe(w, turn, c, ablation="history", reverse=False):
@@ -267,8 +267,20 @@ def select(w, t, scores, ids):
     return w.ids.index(ids[chosen]), False
 
 
-def evaluate(agent, worlds, method, output=None, *, reverse=False, http=False):
-    contexts = [context(w) for w in worlds]
+def evaluate(
+    agent,
+    worlds,
+    method,
+    output=None,
+    *,
+    reverse=False,
+    http=False,
+    history_window=WINDOW,
+    observation_batch_size=4,
+):
+    if observation_batch_size < 1:
+        raise ValueError("observation_batch_size must be positive")
+    contexts = [replace(context(w), max_events=history_window) for w in worlds]
     before = None if agent is None else (trainable_digest(agent), agent.update_steps)
     rows, rewards, regrets, best_choices, exploration_count = [], [], [], [], 0
     slot = {}
@@ -305,16 +317,17 @@ def evaluate(agent, worlds, method, output=None, *, reverse=False, http=False):
                 # Bounded outer batches avoid retaining an entire test suite on GPU.
                 if no_history_scores is None:
                     results = []
-                    for start in range(0, len(obs), 4):
+                    for start in range(0, len(obs), observation_batch_size):
                         results.extend(
                             agent.action_results_structured(
-                                obs[start : start + 4], deterministic=True
+                                obs[start : start + observation_batch_size],
+                                deterministic=True,
                             )
                         )
-                    if (
-                        method == "no_history"
-                        and agent.policy.candidate_context == "local"
-                    ):
+                    if method == "no_history" and agent.policy.candidate_context in {
+                        "local",
+                        "evidence",
+                    }:
                         # Public inputs are constant without history. Local scores
                         # are independent of row order, covered by offline tests.
                         no_history_scores = [
