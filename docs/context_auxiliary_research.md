@@ -129,3 +129,5 @@ README describes A100/H100 80GB nodes. Establish the configuration actually bein
 replicated and its resource budget. No full reference-scale run has been launched.
 
 The delivered framework API is described in [Auxiliary objectives](auxiliary_objectives.md).
+
+The next development study is [predictive objectives under noisy state](noisy_state_auxiliary.md).

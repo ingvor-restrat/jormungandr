@@ -282,6 +282,7 @@ Continue with:
 - [Algorithm and selector plugin contract](docs/plugins.md)
 - [Auxiliary objectives](docs/auxiliary_objectives.md)
 - [Context auxiliary research pilot](docs/context_auxiliary_research.md)
+- [Predictive objectives under noisy state](docs/noisy_state_auxiliary.md)
 - [QUBO rollout-selection experiment](docs/qubo-rollout-selection.md)
 - [Guided tour](docs/guide.md)
 - [Generic example trainer](docs/example-trainer.md)
