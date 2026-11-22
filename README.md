@@ -283,6 +283,7 @@ Continue with:
 - [Auxiliary objectives](docs/auxiliary_objectives.md)
 - [Context auxiliary research pilot](docs/context_auxiliary_research.md)
 - [Predictive objectives under noisy state](docs/noisy_state_auxiliary.md)
+- [Delayed feedback and n-step credit assignment](docs/delayed_credit.md)
 - [QUBO rollout-selection experiment](docs/qubo-rollout-selection.md)
 - [Guided tour](docs/guide.md)
 - [Generic example trainer](docs/example-trainer.md)

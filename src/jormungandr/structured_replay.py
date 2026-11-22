@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import math
+from numbers import Integral
 from typing import Any, Mapping, Sequence
 
 import numpy as np
@@ -27,7 +28,25 @@ class StructuredReplayTransition:
     split: str = "train"
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
+    bootstrap_steps: int = 1
+    return_gamma: float | None = None
+    truncated: bool = False
+
     def __post_init__(self) -> None:
+        if (
+            isinstance(self.bootstrap_steps, bool)
+            or not isinstance(self.bootstrap_steps, Integral)
+            or self.bootstrap_steps < 1
+        ):
+            raise ValueError("bootstrap_steps must be a positive integer")
+        if self.done and self.truncated:
+            raise ValueError("a transition cannot be both terminal and truncated")
+        if self.return_gamma is not None and (
+            not math.isfinite(self.return_gamma) or not 0 <= self.return_gamma <= 1
+        ):
+            raise ValueError("return_gamma must be finite and in [0, 1]")
+        if self.bootstrap_steps > 1 and self.return_gamma is None:
+            raise ValueError("multi-step returns require return_gamma")
         candidate_id = str(self.candidate_id).strip()
         if not candidate_id:
             raise ValueError("candidate_id is required")
@@ -123,7 +142,7 @@ class StructuredPrioritizedReplayBuffer:
             raise ValueError("replay buffer is empty")
         count = max(1, min(int(batch_size), size))
         priorities = self.priorities[:size].astype(np.float64)
-        probabilities = priorities ** self.alpha
+        probabilities = priorities**self.alpha
         total = float(probabilities.sum())
         if not math.isfinite(total) or total <= 0.0:
             probabilities.fill(1.0 / size)
@@ -147,9 +166,7 @@ class StructuredPrioritizedReplayBuffer:
         priorities: Sequence[float] | np.ndarray,
     ) -> None:
         index_array = np.asarray(indices, dtype=np.int64).reshape(-1)
-        priority_array = np.abs(
-            np.asarray(priorities, dtype=np.float32).reshape(-1)
-        )
+        priority_array = np.abs(np.asarray(priorities, dtype=np.float32).reshape(-1))
         if index_array.shape != priority_array.shape:
             raise ValueError("indices and priorities must be aligned")
         if index_array.size == 0:

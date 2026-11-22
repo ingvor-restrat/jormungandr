@@ -362,3 +362,62 @@ def test_structured_service_enforces_exact_supervision_update_budget(tmp_path) -
         assert runtime.get_structured_model("budgeted-bc")["updates"] == 3
     finally:
         runtime.close_all()
+
+
+def test_structured_ingress_requires_resolved_rewards_and_retains_return_horizon(
+    tmp_path,
+):
+    runtime = JormungandrRuntime(
+        checkpoint_root=str(tmp_path), tensorboard_root=str(tmp_path)
+    )
+    try:
+        runtime.create_structured_model(
+            representation={
+                "global_dim": 2,
+                "entity_dim": 3,
+                "candidate_dim": 4,
+                "entity_type_count": 2,
+            },
+            learner={
+                "enabled": True,
+                "min_replay": 100,
+                "algo": "structured_dqn",
+                "device": "cpu",
+                "gamma": 0.9,
+                "structured_model_dim": 16,
+                "structured_heads": 4,
+                "structured_layers": 1,
+            },
+            model_id="returns",
+            tensorboard_enabled=False,
+        )
+        item = {
+            "actor_id": "a",
+            "episode_id": "e",
+            "timestep": 0,
+            "policy_version": 0,
+            "observation": _observation(0),
+            "candidate_id": "candidate:0:0",
+            "next_observation": _observation(3),
+            "done": False,
+            "truncated": True,
+            "bootstrap_steps": 3,
+            "return_gamma": 0.9,
+        }
+        with pytest.raises(ValueError, match="reward"):
+            runtime.structured_experience_add("returns", [item])
+        with pytest.raises(ValueError, match="return_gamma"):
+            runtime.structured_experience_add(
+                "returns", [{**item, "reward": 1.0, "return_gamma": 0.5}]
+            )
+        with pytest.raises(ValueError, match="bootstrap_steps"):
+            runtime.structured_experience_add(
+                "returns", [{**item, "reward": 1.0, "bootstrap_steps": 1.5}]
+            )
+        added = runtime.structured_experience_add("returns", [{**item, "reward": 1.0}])
+        assert added["added"] == 1
+        stored = runtime._structured_models._record("returns").replay.items[0]
+        assert stored.reward == 1.0 and stored.bootstrap_steps == 3
+        assert stored.return_gamma == 0.9 and stored.truncated and not stored.done
+    finally:
+        runtime.close_all()

@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections import deque
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+import math
 import threading
 import time
 from typing import Any, Mapping, Sequence
@@ -552,6 +553,7 @@ class StructuredServiceManager:
                     "policy_version",
                     "observation",
                     "candidate_id",
+                    "reward",
                     "next_observation",
                 )
                 if item.get(key) is None
@@ -569,11 +571,17 @@ class StructuredServiceManager:
                     item["observation"], spec=record.spec
                 ),
                 candidate_id=str(item["candidate_id"]),
-                reward=float(item.get("reward", 0.0)),
+                reward=float(item["reward"]),
                 next_observation=entity_candidate_observation_from_payload(
                     item["next_observation"], spec=record.spec
                 ),
                 done=bool(item.get("done", False)),
+                truncated=bool(item.get("truncated", False)),
+                bootstrap_steps=item.get("bootstrap_steps", 1),
+                return_gamma=(
+                    None if item.get("return_gamma") is None
+                    else float(item["return_gamma"])
+                ),
                 actor_id=str(item["actor_id"]),
                 episode_id=str(item["episode_id"]),
                 timestep=int(item["timestep"]),
@@ -581,6 +589,11 @@ class StructuredServiceManager:
                 split=self._split(item.get("split", "train")),
                 metadata=dict(metadata),
             )
+            if transition.return_gamma is not None and not math.isclose(
+                transition.return_gamma, getattr(record.agent, "gamma", float("nan")),
+                rel_tol=0, abs_tol=1e-12
+            ):
+                raise ValueError("return_gamma does not match learner gamma")
             validator = getattr(record.agent, "validate_transition", None)
             if validator is not None:
                 validator(transition)

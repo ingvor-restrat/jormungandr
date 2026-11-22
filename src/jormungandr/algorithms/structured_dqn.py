@@ -194,6 +194,12 @@ class StructuredDQNAgent:
     ) -> UpdateResult:
         if not transitions:
             raise ValueError("at least one structured transition is required")
+        if any(
+            t.return_gamma is not None
+            and not math.isclose(t.return_gamma, self.gamma, rel_tol=0, abs_tol=1e-12)
+            for t in transitions
+        ):
+            raise ValueError("return_gamma does not match learner gamma")
         if self._has_auxiliary_objectives() and any(
             t.split != "train" for t in transitions
         ):
@@ -300,7 +306,12 @@ class StructuredDQNAgent:
                     .logits.gather(1, next_actions.unsqueeze(1))
                     .squeeze(1)
                 )
-                targets = rewards + self.gamma * (1.0 - dones) * target_next
+                discounts = torch.as_tensor(
+                    [self.gamma**item.bootstrap_steps for item in transitions],
+                    dtype=torch.float32,
+                    device=self.device,
+                )
+                targets = rewards + discounts * (1.0 - dones) * target_next
         td_error = targets - predicted
         per_item = torch.nn.functional.huber_loss(
             predicted,

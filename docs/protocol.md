@@ -52,6 +52,12 @@ prioritized replay. `replay_ratio` bounds learner samples per ingested
 environment transition, preventing a fast learner thread from silently
 changing the experimental update budget.
 
+Reward must be explicit; omitted/null rewards are rejected. Structured DQN also
+accepts `bootstrap_steps` (default 1), `return_gamma`, and `truncated` (default
+false). Aggregated returns require their construction gamma to match the learner.
+See [delayed feedback and n-step returns](delayed_credit.md) for terminal versus
+truncation semantics and late-receipt handling.
+
 Inspect a model with `GET /v2/models/{id}` and force a service-owned checkpoint
 with `POST /v2/models/{id}/policy/checkpoint`.
 

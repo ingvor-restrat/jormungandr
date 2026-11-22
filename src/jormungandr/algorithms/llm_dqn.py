@@ -77,7 +77,7 @@ class LLMDQNAgent(StructuredDQNAgent):
                 except (TypeError, ValueError) as exc:
                     raise ValueError("invalid LLM history event") from exc
                 if event.get("episode_id") == step.episode_id:
-                    limit = step.timestep + int(next_state)
+                    limit = step.timestep + (step.bootstrap_steps if next_state else 0)
                     if int(event.get("timestep", -1)) >= limit:
                         raise ValueError("LLM replay context contains future feedback")
         if contexts[0]["trial_id"] != contexts[1]["trial_id"]:
