@@ -45,73 +45,36 @@
 \SNHeader{strategynet.ai:Jormungandr}
 \title{\JORM{}: A Plugin Runtime for Distributed Reinforcement Learning}
 \author{\href{mailto:research@strategynet.ai}{research@strategynet.ai}}
-\date{August 2026}
+\date{November 2026 revision}
 
 \begin{document}
 \maketitle
 
 \begin{abstract}
-A reinforcement-learning experiment combines an environment, data-collection
-policy, replay rule, learning objective, model representation, validation
-protocol, and artifact lifecycle.  Treating one algorithm as the system makes
-those responsibilities difficult to compare or replace.  \JORM{} separates
-external actors from one versioned learner and resolves both the learning
-algorithm and rollout selector through plugins.  The implemented
-fixed-discrete-action service supports C51, quantile-regression DQN, DQN,
-discrete conservative Q-learning, maximum-entropy soft Q-learning, behavior
-cloning, MARWIL, PPO, IMPALA, an IMPACT-style APPO profile, categorical SAC,
-and a compact vector-observation DreamerV3 profile.  Training and validation
-stores remain isolated; legal masks, behavior probabilities, policy versions,
-checkpoints, TorchScript and verified ONNX exports, TensorBoard series, and internal comparison
-metrics share one lifecycle.  A second service profile transports variable-size
-typed entity sets and state-local semantic action candidates through central
-inference, prioritized transition replay, or policy-lag-aware joint PPO
-trajectories, plus reward-free weighted supervision over semantic factor
-choices and opt-in importance resampling of application-declared balance
-strata.  Structured behavior-cloning checkpoints initialize the compatible
-PPO transformer directly while keeping new optimizer and rollout state.  Each
-joint record carries one reward per environment turn,
-nested factor choices, and the exact sum of the conditional behavior log
-probabilities.  Structured PPO reports episode-return spread, range, unique
-count, episode-length range, reward sparsity, and the direct oldest-residual
-GAE weight before optimization, which prevents a critic fitting one common
-outcome---or a terminal residual with negligible reach at early decisions---from
-being mistaken for a policy receiving useful credit.
-Version 1.7 additionally separates value-head learning from critic gradients
-through a pretrained shared policy backbone and can transactionally back off a
-PPO proposal until every selected behavior-action ratio in the complete batch
-lies inside declared bounds.
-Inference shares batches across CPU or GPU replicas and automatically adjusts
-the number of active replicas and the batching delay.  It makes no assumption
-about the available hardware.  Fixed-vector value plugins execute one network
-call per batch; structured policies use the same versioned replica pool.
-Models may declare a windowed-X/state input layout, and fixed-vector clients
-may use a standalone FIX SBE message format.  Variable-size messages use JSON.
-A QUBO selector makes auditable yes/no decisions
-over prioritized transitions, contiguous rollout fragments, or a bounded
-search frontier by trading utility against redundancy.  Quantile critics expose mean, lower-quantile,
-and lower-tail CVaR decisions for noisy outcomes.  \VOLT{} can use frozen set
-or graph embeddings through the service today and can train its Torch Deep
-Sets or typed graph encoder through the in-process masked-policy interface;
-the current service transport has no graph-native payload.  Rust is reserved for
-profiled replay, selection, collation, and numerical kernels while policy
-modules remain in Torch.  A seeded synthetic comparison evaluates five
-compatible online transition learners on clean and sensor-noise cohorts; it
-demonstrates the comparison protocol within this cohort.  It supplies no
-environment-general ranking.  An independent three-seed CartPole diagnostic gives the built-in PPO
-and Stable-Baselines3 PPO equal 9,155-parameter networks and 49,152 interactions;
-both finish at the maximum held-out return in every run.  This paper defines
-the implemented interfaces and their limits.  A representation-parity control
-then gives the entity/candidate transformer the same CartPole seeds, PPO
-controls, and interaction budget; all three runs also finish at 500.  A
-four-way masked Taxi control
-then records zero invalid choices for all masked policies while the otherwise
-identical unmasked PPO control accumulates 462,511.  A generic exact-oracle
-constrained workbench then gives variable-factor joint PPO 12,288 terminal-only
-reward turns per run: random-start PPO finishes at 0.875 of oracle versus 0.469
-for random legal play, while behavior cloning followed by PPO finishes at
-0.923.  These bounded diagnostics do not imply application-general
-performance.
+Jörmungandr separates the programs that collect experience from the learner
+that updates a policy. Algorithms can change while data identity, legal
+actions, train--validation splits, checkpoints, and inference remain under
+one set of interfaces. The framework supports fixed-vector observations,
+variable sets of entities and candidate actions, and optional language-model
+policies. Applications supply their own environments, tools, and rewards.
+
+This paper explains the design and tests it on controlled problems. Earlier
+studies compare learning algorithms, structured action representations, and
+QUBO-based selection. A new study adapts a small pretrained language model to
+choose among executable tools using its own verified history. Follow-up numeric
+experiments examine auxiliary objectives, delayed rewards, and user preferences.
+Additional context and prediction losses learned their assigned tasks but did
+not materially accelerate the tested policies. Multi-step returns improved
+early learning when rewards were delayed, although final performance was
+similar. Explicit preference comparisons recovered a planted ranking more
+reliably than position-biased clicks in a synthetic shortlist task.
+
+The resulting additions are reusable mechanisms: causal context checks,
+explicit return horizons, optional loss composition, and records that keep
+user preference separate from task success. The experiments also show their
+limits. They do not establish general language-model improvement, efficient
+learning on arbitrary environments, or trading performance. Code, protocols,
+and recorded results accompany the paper.
 \end{abstract}
 
 \SNtwocolumntableofcontents
@@ -120,24 +83,17 @@ performance.
 
 \begin{SNcolumns}
 
-As we considered RL frameworks for research and production, we found that 
-many libraries made it difficult to deploy without the overhead: drawing inferences
-required a specialized runtime.  What we 
-wanted was a clear separation between the agents generating experiences,
-the reinforcement learning algorithm, and most critically the policy.  
-For our purposes, the ability to checkpoint and deploy policy parameters without the 
-overhead of the entire framework is critical for production use and forms a core
-requirement for Jörmungandr.  We also wanted to be able to compare different 
-algorithms and policies without having to change the underlying system.  
-This paper describes the design and implementation of a plugin-based distributed 
-reinforcement learning system that meets these requirements.
+We wanted actors to collect experience independently of the learner, and we
+wanted a trained policy to run without carrying the whole training system into
+production. We also wanted to compare algorithms without rebuilding the data
+and deployment paths for each one. Those requirements led to Jörmungandr.
 
-Distributed reinforcement learning has two kinds of scale.  More actors can
-produce more transitions, and a richer research programme can compare more
-objectives, policy models, replay rules, and risk criteria.  The first kind is
-usually visible in the worker topology.  The second is often hidden in a
-trainer whose storage, network, loss, checkpoint, and inference code all name
-one algorithm.
+The separation is useful during research as well. An apparent algorithm
+failure may come from missing history, a reward attached to the wrong action,
+or a validation procedure that changes while the model is being tuned. Keeping
+those responsibilities explicit makes such failures easier to investigate.
+The examples in this paper describe both successful changes and changes that
+did not help.
 
 The original \JORM{} service had this second shape.  It provided a useful C51
 path: actors published fixed-vector transitions, a central learner sampled
@@ -1368,28 +1324,253 @@ Complex-application efficacy requires separate evidence.
 
 \begin{SNcolumns}
 
-\section{Python, Torch, and a future Rust path}
+\section{Language policies, delayed outcomes, and user preferences}
+\label{sec:feedback}
 
-Python is appropriate for orchestration and research iteration, while Torch
-provides modules, automatic differentiation, device execution, and model export.
-The first native migration should follow measured profile evidence.  The
-likely CPU candidates are replay indexing, contiguous-fragment assembly, QUBO
-construction and local search, graph collation, preprocessing, and return
-kernels such as GAE or V-trace.
+\subsection{The language-model question}
 
-A PyO3 extension can preserve the plugin interface by accepting contiguous
-arrays and returning priorities, metrics, selections, or tensors.  DLPack or a
-documented NumPy ownership rule avoids copies.  Keeping policy modules in
-Torch avoids a second optimizer and checkpoint ecosystem.  A native backend
-must retain semantic plugin version, tensor names or an explicit migration,
-declared dtypes and shapes, deterministic seeds, and parity tests against the
-Python reference.
+This work began with a practical question: can we take a pretrained language
+model, give it access to tools, and teach it to choose useful actions from
+experience? That is an LLM-tuning problem. It also exposes more ordinary
+learning problems. A policy cannot infer a change in a service's reliability
+from an input that contains no relevant history. A reward arriving late needs
+to be associated with the decisions that preceded it. A user's choice among
+several answers is evidence of preference, but it does not make the other
+answers incorrect.
 
-Moving the whole algorithm to Rust before measurement would couple artifact handling
-more tightly to autograd.  Moving a quadratic selector or replay scan
-after it dominates a profile is a smaller and testable change.  The current
-plugin metadata already records \texttt{python-torch}; a future backend can
-declare \texttt{rust-pyo3-torch} without changing actor messages.
+We kept the language-model experiment and the later numeric controls separate.
+The language experiment tests a small pretrained model as a tool selector.
+The numeric experiments test specific learning mechanisms cheaply enough to
+compare controls and repeat runs. They do not establish improvements in
+language generation or reproduce an LLM reinforcement-learning paper.
+
+\JORM{} now has optional language-policy plugins built around a pretrained
+Transformer, LoRA adapters, and action-scoring heads. LoRA trains small
+low-rank updates while retaining the pretrained weights~\cite{lora}.
+The actor supplies the context and candidate tools. The learner scores those
+candidates and updates the trainable parameters. Tool execution, numerical
+calculations, and outcome verification remain application responsibilities.
+A language model choosing a tool need not perform that tool's computation
+inside its weights.
+
+Our confirmed routing experiment uses SmolLM2-135M~\cite{smollm2}. Each service
+accepts a known typed job, and an independent verifier checks the returned
+result. Service reliability can change during a session. The actor sees only
+its chosen service and the verified result; it does not see the outcomes of
+unchosen services or the simulator's preferred service. Its context contains
+16 recent calls, with counts and recency derived from that same history.
+
+The learner uses chosen-action reward targets with $\gamma=0$. It learns a
+contextual reward score, not a long-horizon exploration strategy. Every
+compared policy uses the same 10\% random exploration rule. During evaluation,
+weights are frozen and only the actor's history changes. This distinction
+matters: adaptation within an evaluation session comes from conditioning on
+new observations, not from another optimizer update.
+
+Two independently trained models passed the reserved seven-task comparison.
+Each task used 32 worlds per model and 128 calls per world. The acceptance
+rule allowed at most a five-percentage-point shortfall against the strongest
+matched reference, with additional stable-task floors. The largest observed
+shortfall was 2.002 percentage points. The exported models also passed
+candidate-order and real HTTP execution checks. Appendix~\ref{app:feedback}
+gives the task results and provenance.
+
+This result followed several failed controls. Training on the histories
+visited by the policy, and making public counts and recency explicit, helped.
+Those changes were combined, so the experiment does not measure their
+individual contributions. The final language policy did not receive weights
+transferred from a numeric actor. It also did not learn arbitrary API
+semantics: the typed job was known. General tool use and financial strategy
+learning remain separate questions.
+
+\subsection{Did extra context objectives help?}
+
+History helped the earlier task. We next asked whether another training
+objective could teach a model to use that history more effectively. The
+context-selection idea was motivated by ContextRL~\cite{contextrl}. Our
+experiments used numeric models and different tasks; they were not a
+replication of its GRPO-based LLM training.
+
+The first auxiliary task asked which of two histories supported a statement
+about the latest observed outcome. A negative history swapped two outcomes
+while preserving their counts. This prevented the model from solving the
+comparison by simply counting successes. We compared the contrastive loss
+with direct factual supervision and with extra reward-only updates.
+
+The model learned the context task, but its decisions did not improve enough
+to justify the additional training. We then tried forecasting noisy sensor
+readings and predicting observable changes in a hidden-state problem. Those
+heads also learned their tasks. Final reward gains were only about 0.02--0.06
+percentage points, with no sustained early-learning advantage in the recorded
+curves. Even a diagnostic arm supplied with hidden-state labels helped little.
+
+The useful conclusion is limited. These small problems supplied frequent
+reward feedback, and an additional objective did not materially improve the
+policy. That does not rule out auxiliary learning when rewards are sparse,
+observations are harder to interpret, or the model is larger. It does mean
+that a lower auxiliary loss is not sufficient evidence of a better agent.
+We retained the generic loss-composition interface and left the objectives
+optional. The controls and negative results remain part of the record.
+
+\subsection{When rewards arrive later}
+
+There are two meanings of ``delayed feedback.'' An environment may emit a
+reward several steps after a decision. Alternatively, a result belonging to
+an earlier transition may arrive late over a network. The first requires
+credit assignment. The second requires a reliable join on the original
+actor, episode, and timestep. Moving a late network receipt onto the current
+action changes the training data's meaning.
+
+For environment delay, an $n$-step return carries several observed rewards
+into one target. If a sampled span contains $k\leq n$ transitions, structured
+Double-DQN now uses
+\begin{equation}
+ y_t=\sum_{j=0}^{k-1}\gamma^j r_{t+j}
+ +\gamma^k(1-d)Q_{\bar\theta}
+ \left(s_{t+k},\arg\max_a Q_\theta(s_{t+k},a)\right),
+\end{equation}
+where $d=1$ denotes true termination. The shorter terminal tails use their
+actual $k$. A time-limit truncation closes the collected sequence but retains
+the bootstrap from the final observation, before reset. This support applies
+to structured DQN; it does not change every learner's truncation semantics.
+
+We tested the mechanism with one consequential choice followed by forced
+waits. Every episode lasted 13 transitions. A correct choice earned $+1$ and
+an incorrect choice $-1$, emitted at step 0, 4, or 12. Independently, the
+emission probability was either 1 or 0.25, and observation noise was either
+zero or 0.8. Non-emission meant an actual zero environment reward, not a
+missing API result. The observed state retained the cue and the chosen action,
+so memory was not an additional obstacle.
+
+At a 12-step delay and 128 optimizer updates, mean initial-choice accuracy was
+85.9\% for one-step DQN, 94.0\% for four-step returns, and 94.1\% for
+13-step returns. The methods used the same collected episodes and replay
+indices. With immediate rewards, one-step learning was faster initially.
+After 512 updates, performance was similar. Longer returns therefore helped
+early learning under delay in this control; they were not universally better.
+
+\end{SNcolumns}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.97\textwidth]{delayed_credit_learning.pdf}
+\caption{Credit assignment in the fixed-corpus control. Each line averages
+four noise/emission conditions and three seeds. Shading gives the seed range
+after averaging conditions within a seed, not a confidence interval. The
+dotted line is the cue-sign reference; the dashed line is uniform random
+choice. Both are evaluated independently of the learned values.}
+\label{fig:delayed-feedback}
+\end{figure}
+\begin{SNcolumns}
+
+The converter rejects mixed episode identities, missing timesteps, early
+boundaries, and inconsistent adjacent observations. It preserves the original
+action identity and records the discount used to construct the return.
+Structured ingress also now rejects an omitted reward instead of silently
+storing zero. It still does not reconcile late reward corrections: actors
+must resolve those outcomes before submitting finalized experience.
+
+These tests avoid another complication. After the opening choice, all actions
+are forced. In a general control task, intermediate actions may come from a
+behavior policy different from the target policy. Uncorrected multi-step
+returns can then introduce off-policy bias, as well as greater variance.
+That is a reason to keep the option explicit and test it on the intended task.
+
+\subsection{Several answers can be useful}
+
+A system need not reduce every request to one answer followed by a yes/no
+judgment. It can return a ranked shortlist and let the user choose. Several
+items may be acceptable, while one is preferred for the current purpose.
+This is a ranking problem; it does not require a distributional critic such
+as C51. C51 models the distribution of returns for an action. A preference
+scorer estimates which of two candidates a user favors.
+
+The new library records the candidate set and order actually displayed, the
+scores, context, policy version, and exposure identity. A separate receipt
+can contain a selection, abstention, ratings, or explicit comparisons. Exact
+retries are idempotent, conflicting reuse of an identifier is rejected, and
+feedback can wait for its exposure record. Training and validation remain
+separate. The join is bounded and in memory; durable storage and an HTTP
+preference-ingestion service have not been added.
+
+A click produces no training pair by default. The caller may explicitly
+assume that the selected item is preferred to every other displayed item,
+but this is a weak assumption. Users may not inspect every option, and display
+position may influence their choice. An unselected item is not thereby a
+wrong answer. Ratings are retained without automatic conversion to reward.
+
+For an explicit comparison, let $s_a$ and $s_b$ be the two scores. The pair
+loss is
+\begin{equation}
+ \ell=-p\log\sigma(s_a-s_b)
+       -(1-p)\log\left[1-\sigma(s_a-s_b)\right],
+\end{equation}
+with $p=1$ for a preference for $a$, $p=0$ for $b$, and $p=1/2$ for an
+explicit tie. A common shift in both scores has no effect. The scores are
+relative utilities; they are not independently calibrated probabilities that
+an answer is correct. Two acceptable answers need not be equally preferred.
+
+The synthetic check used six candidates per context. The evaluator deemed
+the best three under a planted utility function acceptable. A linear scorer
+could represent that function. Explicit comparisons had a 5\% reversal rate.
+For the click arms, a simulated user chose the first displayed option 80\% of
+the time and otherwise chose according to utility. One arm used a biased
+logging order; another randomized the display. These are declared simulation
+rules, not measured properties of real users.
+
+With 1,024 events and 512 updates, explicit comparisons recovered 97.0\% of
+the acceptable items in the top three. Biased clicks recovered 57.2\%, and
+randomized-display clicks recovered 75.4\%. The comparison is not matched
+for human effort: making a pairwise judgment is different from selecting an
+answer. It shows that the records and loss can recover known preferences,
+and that display bias can contaminate choice-derived labels.
+
+\end{SNcolumns}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{shortlist_preference_learning.pdf}
+\caption{Recovering three acceptable candidates in a six-option simulation.
+Bands show the range across three seeds. Random ranking has expected recall
+0.5. The larger click dataset is not uniformly better at this fixed training
+schedule. Explicit judgments and clicks have different noise and effort
+assumptions, so this is not a comparison of annotation efficiency.}
+\label{fig:shortlist-feedback}
+\end{figure}
+\begin{SNcolumns}
+
+\subsection{What belongs in the framework}
+
+The common additions are small: preserve the evidence that produced a label,
+construct returns without crossing episode boundaries, compose optional
+losses, and distinguish preference from correctness. The application still
+owns the environment, tool definitions, display policy, and meaning of a
+rating. A benchmark's simulated user or reward rule does not become a default
+framework policy.
+
+The language-model result remains limited to the routing task. Further work
+should compare tool-selection training across model sizes, tasks, and
+adaptation methods on fresh reserved cases. The numeric controls explain
+which mechanisms we tested along the way. They do not extend the evidence
+for language-model tuning to those other settings.
+
+\section{Python, Torch, and native learners}
+
+Python remains the main environment for orchestration and research, with Torch
+providing automatic differentiation and policy modules. Performance work should
+follow measurement: replay indexing, collation, and numerical kernels have
+different costs from the model forward pass.
+
+The current runtime also supports optional native episode learners through a
+subprocess protocol. The application registers a backend and sends versioned
+commands; the runtime owns its lifecycle. A Volt/Burn backend is exercised by
+HTTP-to-worker parity and checkpoint-restart tests. This is a separate native
+learner route, not a claim that all Torch plugins have been ported to Rust.
+The application-specific stock-and-option study is documented in the companion
+hedging paper.
+
+Any further native implementation must preserve the data and checkpoint
+contracts: tensor names, shapes and dtypes, split identity, versions, and
+numerical checks against a reference. A faster implementation that changes
+which observation or reward belongs to an action is not an equivalent learner.
 
 \section{Current implementation and limits}
 
@@ -1449,7 +1630,8 @@ turn.  Exact masks remain environment inputs.  The additive prefix summary
 conditions choices within one turn; temporal memory across turns requires
 recurrent state.
 
-The recorded functional suite contains 210 passing cases.  It includes direct
+The functional suite checks both the learner calculations and the service
+contracts. It includes direct
 finite updates and state round trips for every built-in, C51 projection and
 mask checks, graph-reference GAE, validation isolation, HTTP ingress, masked
 SAC entropy, QR-DQN tail output, QUBO cardinality and fragment audit, checkpoint
@@ -1483,27 +1665,180 @@ workbench is a small exact-oracle benchmark and does not establish scaling to a
 large action system.  Application actors still supply dynamic feasibility
 callbacks and execute actions.
 Multi-learner synchronization, authentication, a binary structured-trajectory
-transport, exact QUBO solving, native kernels, and a Volt-scale empirical QUBO
-advantage are absent from the release.
+transport, exact QUBO solving, and a Volt-scale empirical QUBO advantage remain
+outside this release. The preference ledger is a Python library, not a durable
+HTTP feedback service. The auxiliary studies do not justify enabling a context
+objective by default.
 
 \section{Conclusion}
 
-An RL library should preserve experiment identity while allowing the learning
-rule to change.  \JORM{} keeps actors, splits, masks, replay provenance,
-versions, validation, metrics, and artifacts stable, and makes algorithms and
-rollout allocation replaceable plugins.  Distributional, offline,
-asynchronous, maximum-entropy, and model-based profiles can therefore be
-compared through one lifecycle without calling the system a C51 model.
+The framework keeps collection, learning, validation, and deployment separate
+so that changing one need not silently change the others. The experiments
+illustrate why this matters. Supplying relevant history made a previously
+under-informed task learnable. Adding another objective did not necessarily
+improve the policy. Multi-step returns helped with delayed reward in a
+controlled problem. A click was a weaker preference label when display order
+influenced the simulated user.
 
-Quantile regression supplies a direct return-risk representation for noisy
-outcomes; maximum entropy supplies a bounded robustness hypothesis; CQL and
-V-trace address different shifts.  QUBO supplies an auditable allocation
-experiment whose binary unit is a rollout fragment or frontier node.  Volt
-retains financial and graph authority while Torch set or graph models supply the policy.  Rust
-can later accelerate measured CPU kernels behind the same interfaces.  The
-remaining test is empirical: under predeclared disturbances, paths, budgets,
-and controls, do these results survive valid offline, trajectory, model-based,
-and Volt-scale cohorts, and does added complexity repay its compute cost?
+These findings led to specific interfaces and tests, rather than a new default
+algorithm. The language-model work remains a bounded tool-routing result.
+Broader claims require fresh tasks and reserved evaluation data, particularly
+where decisions interact over time or users provide the feedback. The code
+and recorded failures make those next experiments easier to define and check.
+
+\end{SNcolumns}
+
+\begin{SNcolumns}
+\appendix
+\section{Protocols for the language and feedback studies}
+\label{app:feedback}
+
+The files cited here are in the public repository under \texttt{benchmarks/}.
+They retain individual run results and configuration details. The corresponding
+Markdown reports explain earlier failures and the limits of each comparison.
+Results from different task families are not pooled into one performance score.
+
+\subsection{Language tool routing}
+
+\texttt{multiservice\_followup.json} records two independently trained
+SmolLM2-135M policies (seeds 5101 and 5203), frozen before confirmation.
+Seven tasks used 32 worlds per model, with 128 calls per world: 57,344 primary
+model decisions in total. Each model was compared with last-outcome,
+window-mean, and window-UCB policies on matched outcome tapes, with the same
+10\% exploration rule. The acceptance rule was a maximum five-percentage-point
+shortfall on every task, plus stable-task floors of 85\% for four services
+and 80\% for eight. The observed maximum shortfall was 2.002 points.
+
+\begin{center}
+\small
+\begin{tabular}{lrrrr}
+\toprule
+& \multicolumn{2}{c}{Seed 5101} & \multicolumn{2}{c}{Seed 5203} \\
+Task & LLM & Ref. & LLM & Ref. \\
+\midrule
+Four stable & .913 & .913 & .916 & .916 \\
+Eight stable & .882 & .882 & .885 & .885 \\
+Four changes & .807 & .810 & .814 & .787 \\
+Eight changes & .763 & .775 & .780 & .789 \\
+Four noisy & .547 & .552 & .609 & .559 \\
+Eight noisy & .497 & .515 & .530 & .508 \\
+Eight harder & .440 & .456 & .439 & .459 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Entries are mean verified reward, rounded to three decimal places; Ref. is
+the strongest matched reference. A noisy eight-service reward near 0.5 is not
+a binary-classification accuracy. Service success probabilities and exploration
+limit attainable reward. Balanced history-free controls scored 25\% for four
+services and 12.5\% for eight. The confirmation contexts included public
+count/recency summaries and raw history; removing only one representation of
+history would not constitute a history-free control.
+
+The final policies were trained directly through the language-policy path,
+with no numeric-actor weight transfer. Exported-model checks included candidate
+reordering and 384 verified HTTP calls. Confirmation cases are now consumed:
+subsequent tuning needs new reserved cases. The fuller account is
+\texttt{docs/multiservice\_adaptation.md}; it separates original static-replay
+failures from the passing follow-up. This result does not establish arbitrary
+API interpretation, learned exploration, or profitable trading.
+
+\subsection{Auxiliary objectives}
+
+\texttt{context\_auxiliary\_research.json} records seeds 8101, 8203, and 8309,
+with 6,144 or 24,576 collected interactions. Each policy used a 16-call history.
+The four arms were reward only, contrastive context selection, direct factual
+supervision on the same paired contexts, and three reward-only updates per
+outer step. The last arm matched encoder-example count approximately; it did
+not match exact FLOPs. Evaluation reused task families already encountered
+in development.
+
+At 2,048 outer steps, mean reward for the smaller corpus was
+0.5941/0.5913/0.5907/0.5734 in that arm order. For the larger corpus it was
+0.6137/0.6069/0.6093/0.6253. The auxiliary arms incurred substantially more
+training work without improving final average reward. A repeat separated
+one-time backend startup from training time and reproduced all recorded mean
+reward curves. This was a numeric adaptation of one idea from
+ContextRL~\cite{contextrl}, not its LLM/GRPO training recipe.
+
+\texttt{noisy\_state\_auxiliary.json} records seeds 9109, 9209, and 9311.
+A binary hidden state changed with hazard 0.01 or 0.10; sensor noise had
+standard deviation 0.7 or 1.5. Models received 16 causal sensor observations,
+not hidden state or reward history. Corpora contained 8,192 or 32,768
+interactions. Future sensor readings at horizons 1, 4, and 8 were training
+targets only. Another head predicted whether the next reading differed by
+more than 1.5; this observable event was not labeled as a true regime switch.
+
+At the larger budget, final expected reward was 0.74563 for reward only,
+0.74587 for prediction, 0.74568 for observable-change supervision, and
+0.74584 for both. A hidden-state-supervision diagnostic scored 0.74579.
+Known-parameter Bayesian filters scored 0.75904 with the same window and
+0.75913 with full history; an oracle observing the state scored 0.8.
+Those references had information unavailable to the learned policy.
+
+The first measurement schedule missed early convergence. An unchanged repeat
+added checkpoints at 8, 16, 32, and 64 updates and reproduced the shared
+checkpoint rewards exactly. Prediction briefly led at the larger corpus, but
+not throughout early training. Neither a better auxiliary score nor a
+near-unit aggregate standardized forecast residual established better control
+or conditional uncertainty calibration.
+
+\subsection{Delayed credit assignment}
+
+\texttt{delayed\_credit.json} records three seeds (10103, 10211, 10301),
+12 delay/noise/emission conditions, and $n\in\{1,4,13\}$. Each condition
+used 256 random-choice episodes, or 3,328 transitions, and 1,024 evaluation
+episodes per seed. The native structured DQN update used an example-owned
+32-wide MLP, $\gamma=0.95$, batch size 64, learning rate 0.003, and target
+synchronization every 20 updates. Replay indices and initial weights were
+paired across methods. Checkpoints were 0, 32, 128, and 512 updates.
+
+The accuracy figure averages all four noise/emission combinations at each
+delay. At 512 updates, mean accuracy for $n=1/4/13$ was
+0.9414/0.9418/0.9417 at delay zero,
+0.9421/0.9404/0.9407 at delay four, and
+0.9413/0.9408/0.9376 at delay twelve. The result concerns learning speed on a
+fixed collected corpus, not online environment sample efficiency. The
+randomly initialized neural policies were not uniform random actors; their
+initial accuracies could therefore fall below 0.5. No recurrent model was
+needed for this deliberately observed-state control.
+
+\subsection{Ranked shortlists}
+
+\texttt{shortlist\_preference.json} records seeds 11113, 11213, and 11311,
+with 128 or 1,024 user events per arm and 2,048 independent evaluation contexts
+per seed. All arms used the same candidate features and initial weights.
+The scorer was linear in candidate features, context, and their elementwise
+product. It could represent the planted utility. Adam used learning rate
+0.03, batches of 64 exposures, and 512 updates.
+
+Each explicit event compared one random pair. Each choice event generated
+five assumed preferences, one against every unselected displayed item.
+The methods therefore shared exposure counts but not annotation quality or
+human effort. The larger-budget top-three acceptable recall was
+0.9704/0.5719/0.7544 for explicit, biased-choice, and randomized-choice arms.
+At 128 events the values were 0.9320/0.5640/0.7910. More noisy choice data did
+not monotonically improve this fixed training schedule.
+
+The ledger tests cover exact retries, conflicting IDs, delayed joins,
+displayed-candidate membership, ratings, ties, split isolation, and snapshot
+storage. The scorer tests cover candidate-ID alignment and weighted microbatch
+gradients. These establish software behavior. A real-user study would need
+its own exposure policy, feedback definitions, held-out participants or tasks,
+and a measure of annotation effort.
+
+\subsection{Rebuilding the results}
+
+The repository reports link the exact commands and source snapshots. The
+numeric entry points are \nolinkurl{examples/context_auxiliary_research.py},
+\nolinkurl{examples/noisy_state_auxiliary.py},
+\nolinkurl{examples/delayed_credit_benchmark.py}, and
+\nolinkurl{examples/shortlist_preference_benchmark.py}. These controls run on
+CPU; the language study uses the optional Transformers/PEFT dependencies.
+Figure generation for this paper reads the committed JSON results and does
+not retrain models. Seed ranges shown in figures are not confidence intervals.
+The three-seed pilots remain development evidence, even where a difference
+looks large.
 
 \end{SNcolumns}
 
@@ -1645,6 +1980,22 @@ CatBoost,
 LightGBM,
 \emph{Parameters},
 \url{https://lightgbm.readthedocs.io/en/stable/Parameters.html}.
+
+\bibitem{lora}
+E. J. Hu et al.,
+\emph{LoRA: Low-Rank Adaptation of Large Language Models}, 2021,
+\url{https://arxiv.org/abs/2106.09685}.
+
+\bibitem{smollm2}
+Hugging Face,
+\emph{SmolLM2-135M model card},
+\url{https://huggingface.co/HuggingFaceTB/SmolLM2-135M}.
+
+\bibitem{contextrl}
+P. Xu et al.,
+\emph{Context-Aware RL for Agentic and Multimodal LLMs},
+arXiv:2606.17053v1, June 2026,
+\url{https://arxiv.org/abs/2606.17053v1}.
 
 \end{thebibliography}
 

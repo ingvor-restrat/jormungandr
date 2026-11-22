@@ -10,13 +10,22 @@ the BC-to-PPO initialization path, hardware-aware replicated inference and
 load balancing, window/state inputs, verified ONNX checkpoint exports, the
 Jormungandr SBE endpoint, and the staged Rust boundary.
 
-The paper follows the plain 11-point article format used by the public Volt
-and Hypercube papers: Palatino and Helvetica typefaces, compact margins, and a
-standard title and abstract without a separate cover or contents page. It
-distinguishes the implemented fixed-discrete-action service and synthetic
-search benchmark from graph-native service transport, reference DreamerV3
-parity, native kernels, and Volt-scale empirical learning claims that remain
-future work.
+The November 2026 revision adds language-policy tool routing, auxiliary-objective
+controls, delayed credit assignment, and ranked-shortlist preference feedback.
+It rewrites the abstract, opening, and conclusion in plainer language. The LLM
+study is distinguished from numeric experiments; the latter are not presented as
+LLM-tuning results. An appendix records protocols and negative findings.
+
+The checked-in journal class uses a compact 8-point, two-column A4 layout,
+with full-width figures and a contents page. Application-specific financial
+studies remain in the companion hedging paper.
+
+Regenerate the two feedback-study vector figures from committed results, without
+training models, from the repository root:
+
+```bash
+python examples/plot_feedback_paper.py
+```
 
 Build from this directory:
 
