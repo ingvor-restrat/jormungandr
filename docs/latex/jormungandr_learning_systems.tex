@@ -1,7 +1,5 @@
 \documentclass{strategynet-journal}
 
-\usetikzlibrary{arrows.meta,positioning}
-
 \hypersetup{
   pdftitle={Jörmungandr: A Plugin Runtime for Distributed Reinforcement Learning},
   pdfauthor={research@strategynet.ai}
@@ -24,23 +22,6 @@
 \newcommand{\VOLT}{\textsf{Volt}}
 \newcommand{\E}{\mathbb{E}}
 \newcolumntype{P}[1]{>{\raggedright\arraybackslash}p{#1}}
-
-\tikzset{
-  jbox/.style={
-    draw=black!65,
-    fill=black!3,
-    rounded corners=2pt,
-    align=center,
-    minimum height=9mm,
-    text width=31mm,
-    font=\sffamily\fontsize{8}{9.5}\selectfont
-  },
-  jhot/.style={jbox,draw=blue!55!black,fill=blue!6},
-  jcontrol/.style={jbox,draw=teal!55!black,fill=teal!7},
-  jfleet/.style={jbox,text width=43mm,minimum height=17mm},
-  jflow/.style={-{Latex[length=2mm]},draw=black!80,line width=0.75pt},
-  jfuture/.style={-{Latex[length=2mm]},draw=blue!55!black,dashed,line width=0.75pt}
-}
 
 \SNHeader{strategynet.ai:Jormungandr}
 \title{\JORM{}: A Plugin Runtime for Distributed Reinforcement Learning}
@@ -95,8 +76,7 @@ those responsibilities explicit makes such failures easier to investigate.
 The examples in this paper describe both successful changes and changes that
 did not help.
 
-The original \JORM{} service had this second shape.  It provided a useful C51
-path: actors published fixed-vector transitions, a central learner sampled
+The original \JORM{} service was built around C51: actors published fixed-vector transitions, a central learner sampled
 prioritized replay, held-out items entered a separate validation store, and
 the model could be checkpointed and exported.  C51 was nevertheless both an
 algorithm and an architectural assumption.  Adding an on-policy learner would
@@ -112,57 +92,44 @@ action selection, and serializable state.  A selector plugin chooses training
 rows or rollout fragments.  The application supplies the environment, reward,
 legal actions, and train--validation split.
 
-This separation also clarifies robustness.  Reward outliers, stochastic
-returns, observation corruption, Q-value overestimation, offline distribution
-shift, asynchronous policy lag, and learned-model error are different
-problems.  C51, quantile regression, Huber loss, CQL, V-trace, maximum entropy,
-and world-model normalization address different subsets.  No algorithm name
-removes the need to declare and test the disturbance.
-
-\begin{quote}
-\itshape
-The learner may change how experience is valued, but it must not change what
-the experience means, which actions were legal, which policy produced it, or
-whether it was reserved for validation.
-\end{quote}
+Changing the algorithm does not necessarily fix a learning failure. A policy
+with no relevant history may have too little information to choose well.
+A learner receiving stale trajectories may need a correction for policy lag.
+The experiments below test these issues separately. Throughout, the recorded
+action, legal alternatives, producing policy, and validation split retain
+their original meaning.
 
 \end{SNcolumns}
 
 \section{System scope}
 
-\subsection{Actors and one learner authority}
+\subsection{Actors and the central learner}
 
 An actor runs the environment.  It resets an episode, observes state,
 requests or computes an action, applies the transition, constructs reward, and
-publishes provenance.  The service does not import the domain simulator in the
+records which actor, episode, and policy produced the transition.  The service does not import the domain simulator in the
 primary distributed path.  For model identifier $m$, one model record stores
 the replay stores, observation statistics, learner state, policy version, and
 artifacts.
 
-\begin{figure}[H]
+\begin{table}[H]
 \centering
-\resizebox{\textwidth}{!}{%
-\begin{tikzpicture}[node distance=9mm and 12mm]
-  \node[jbox] (actors) {external actors\\environment authority};
-  \node[jhot,right=of actors] (ingress) {versioned ingress\\split, masks, behavior};
-  \node[jbox,above right=7mm and 12mm of ingress] (train) {training replay\\transition or trajectory};
-  \node[jbox,below right=7mm and 12mm of ingress] (valid) {held-out validation\\no gradients};
-  \node[jhot,right=18mm of train] (learner) {selector plugin\\algorithm plugin};
-  \node[jbox,right=of learner] (artifact) {policy version\\checkpoint and export};
-  \draw[jflow] (actors) -- (ingress);
-  \draw[jflow] (ingress) -- (train);
-  \draw[jflow] (ingress) -- (valid);
-  \draw[jflow] (train) -- (learner);
-  \draw[jflow] (valid) -- (learner);
-  \draw[jflow] (learner) -- (artifact);
-  \draw[jflow,bend left=23] (artifact.south) to (actors.south);
-\end{tikzpicture}
-}%
-\caption{The domain remains outside the learner.  Training and validation may
-arrive interleaved, but routing precedes storage and creates two state-changing
-stores.}
-\label{fig:system}
-\end{figure}
+\small
+\begin{tabularx}{\textwidth}{@{}lXX@{}}
+\toprule
+Operation & Training transition & Validation transition \\
+\midrule
+Storage & Training replay & Separate validation store \\
+Observation statistics & Updates running statistics & Uses training statistics without updating them \\
+Sampling priority & May change after a learner update & Does not change training priorities \\
+Network parameters & May contribute to an optimizer step & No optimizer step \\
+Checkpoint selection & Learner produces candidate checkpoints & Selection rule must be specified by the experiment \\
+\bottomrule
+\end{tabularx}
+\caption{What the split changes when a transition reaches the service.
+Sending both splits in one request does not change these rules.}
+\label{tab:split-effects}
+\end{table}
 
 Every public transition declares the split, actor, episode, timestep, and
 policy version.  It contains current and next observations, chosen action,
@@ -186,32 +153,7 @@ maximum number of replicas.  These defaults work on CPU and on the GPUs visible
 to the process.  Explicit device and replica settings support repeatable
 benchmarks and fixed memory budgets.
 
-\begin{figure}[H]
-\centering
-\resizebox{\textwidth}{!}{%
-\begin{tikzpicture}[node distance=12mm and 14mm]
-  \node[jbox] (actors2) {concurrent callers\\vector or structured};
-  \node[jhot,right=of actors2] (queue) {shared batch queue\\matching requests};
-  \node[jfleet,right=of queue] (fleet) {allocated replica pool\\active $0,\ldots,a-1$; idle $a,\ldots,k-1$};
-  \node[jhot,right=of fleet] (reply) {versioned results\\device and replica ID};
-  \node[jcontrol,below=of queue] (tuner) {automatic tuning\\items/s; batch delay\\active replicas};
-  \node[jbox,below=of fleet] (learner2) {one learner\\weights updated here};
-  \node[jcontrol,right=of learner2] (standby) {new serving copy\\spare models};
-  \draw[jflow] (actors2) -- (queue);
-  \draw[jflow] (queue) -- node[above,font=\sffamily\scriptsize]{dispatch} (fleet);
-  \draw[jflow] (fleet) -- (reply);
-  \draw[jflow] (learner2) -- node[above,font=\sffamily\scriptsize]{model weights} (standby);
-  \draw[jfuture] (standby.north) to[bend right=18] node[right,font=\sffamily\scriptsize]{switch together} (fleet.south);
-  \draw[jflow] (queue.south) -- node[right,font=\sffamily\scriptsize]{measurements} (tuner.north);
-  \draw[jfuture] (tuner.west) to[bend left=38] node[left,font=\sffamily\scriptsize]{delay + active replicas} (queue.west);
-\end{tikzpicture}
-}%
-\caption{Hardware detection or explicit settings determine the replica pool.
-The tuner controls the number of active replicas and the batching delay.  The
-learner loads new weights into spare model copies, then switches every replica
-to the same version.}
-\label{fig:inference-load-balancing}
-\end{figure}
+
 
 Each replica keeps a current serving copy and a spare copy.  A refresh loads
 the learner's weights into every spare copy.  Optimizer state stays with the
@@ -443,20 +385,18 @@ external plugin or a separately validated profile.
 
 \begin{SNcolumns}
 
-\subsection{A disturbance taxonomy}
+\subsection{Sources of error}
 
 Reward outliers change the TD target; observation noise changes the estimated
 state; stochastic transitions widen the return distribution; an offline
 dataset changes support; actor lag changes the behavior policy; and a world
-model introduces approximation bias.  One robustness label cannot distinguish
-them.
+model introduces approximation bias.  These errors need different tests and remedies.
 
 The shared runtime offers training-only normalization, Huber losses in value
 profiles, gradient clipping, optional reward clipping, and opt-in Gaussian
 observation augmentation.  Reward clipping and augmentation are checkpointed
-because they alter the objective.  A clean validation store remains clean by
-default.  Named perturbed evaluation cohorts should carry the intended noise
-law and severity.
+because they alter the objective.  Validation observations are not augmented by default. A noise experiment
+should specify the perturbation distribution and its magnitude separately.
 
 Distributional critics are useful when outcome tails matter.  Double targets
 and twin critics address value overestimation.  CQL addresses offline action
@@ -470,7 +410,7 @@ calibrated epistemic uncertainty unimplemented.
 
 Eysenbach and Levine show that maximum-entropy RL maximizes a lower bound on a
 robust objective for characterized reward and transition disturbance sets
-\cite{maxentrobust}.  The result supplies a principled hypothesis: an entropy
+\cite{maxentrobust}.  This suggests a testable possibility: an entropy
 regularizer may retain multiple viable behaviors when one route or reward
 perturbation changes.  It does not show that MaxEnt RL is optimal for every
 sensor corruption, adversary, market regime, or reward misspecification.  The
@@ -815,14 +755,12 @@ $c_e>1.38$ ms per avoided terminal evaluation.  Any nonzero $c_g$ lowers that
 threshold.  Conversely, if $\widehat v_i$ itself requires the full rollout,
 the optimization is too late to recover rollout cost.
 
-This experiment demonstrates a plausible classical QUBO integration benefit
-under one synthetic error model and one coefficient set.  Exact solvers,
-quantum execution, learning performance, and Volt require separate evidence.
-The experiment does not yet test
-coefficient sensitivity, learned heuristic calibration, graph transpositions,
-path-dependent market regimes, or end-to-end policy improvement.  The next
-gate is a predeclared paired experiment on immutable Volt path cohorts using a
-production-available cheap estimate and Equation~(15) for total wall time.
+The diversity term saved evaluations in this synthetic search, at a measurable
+selection cost. The estimate in Equation~(12) comes from an oracle plus noise;
+a practical test must replace it with a cheap estimate available during
+search. It should also vary the coefficients and include all computation in
+Equation~(15). No quantum solver was used, and the experiment did not train
+a policy.
 
 \section{Policy representation and Volt}
 
@@ -936,13 +874,10 @@ runtime comparison endpoint aligns the latest rows for all model identifiers,
 including externally logged held-out performance measures, and a per-model
 endpoint retains recent history and the latest selection audit.
 
-The v2 structured profile exposes the full observability schema, including
-the latest scalar.  Its metrics endpoint retains learner update history,
+The structured service retains learner update history,
 accepts externally computed held-out measures at an explicit step, and writes
-learner and evaluation series to TensorBoard.  Environment-specific runners
-can therefore keep an append-only curve whose every evaluation row names the
-exact checkpoint, while the public service remains unaware of the business
-case.
+learner and evaluation series to TensorBoard.  An application can attach evaluation results to the checkpoint that produced
+them without adding its evaluation logic to the service.
 
 Objective losses from CQL, PPO, SAC, and Dreamer use distinct performance
 scales.  Model selection uses predeclared held-out environment measures at equal
@@ -955,8 +890,8 @@ policy choice requires the held-out environment measures.
 
 The first convergence experiment restricts its cohort to plugins that consume
 the same online one-step transition stream: DQN, C51, QR-DQN, maximum-entropy
-Soft-Q, and categorical SAC.  This condition establishes stream compatibility.
-Expected-winner selection is a separate empirical question.  PPO, APPO, and IMPALA require behavior-policy
+Soft-Q, and categorical SAC.  All five can learn from individual transitions, so they can share the same
+collection and update schedule.  PPO, APPO, and IMPALA require behavior-policy
 trajectories; BC, MARWIL, and CQL require a declared offline dataset; and
 DreamerV3 needs a sequence and model-compute budget.  Putting those objectives
 on this curve would change both their input data and their update budget.
@@ -979,8 +914,7 @@ $\overline R\pm1.96s_R/\sqrt{5}$ across the five run-level held-out means.
   \caption{Held-out convergence for compatible online transition learners.
   The dashed rule reference returns 2.8367 on the fixed paths.  Shading is the
   normal 95\% interval across five independent training runs; it quantifies
-  training-seed variation for this cohort.  Environment-general uncertainty
-  remains unmeasured.}
+  training-seed variation for this cohort.  The intervals do not measure variation across other environments.}
   \label{fig:ou-algorithm-convergence}
 \end{figure}
 
@@ -1006,12 +940,9 @@ Most agents crossed the reference point estimate at the episode-eight
 checkpoint; C51 improved more slowly.  MaxEnt Soft-Q has the largest final
 clean point estimate and SAC the largest perturbed point estimate, but their
 intervals overlap several alternatives.  Perturbation also improves some
-point estimates in this threshold-like environment.  The result therefore
-demonstrates a functioning comparison protocol and exposes behavioral
-differences; it does not establish a general winner or a robustness guarantee.
-The committed animation reveals convergence checkpoints, and a separate
-same-path playback shows final median-run actions and accumulated reward.  The
-single playback path supplies an explanation only and adds no evidence.
+point estimates in this threshold-like environment.  With five runs on one environment, the comparison gives no clear overall
+winner. The repository also includes an animation of the checkpoints and a
+playback of a median run, showing how its actions accumulate reward.
 
 \subsection{Independent PPO reference diagnostic}
 
@@ -1053,15 +984,13 @@ Stable-Baselines3 PPO & 8,192 & 24,576 & 12,288 & 500 / 500 / 500 \\
 \end{tabular}
 \end{table}
 
-The reference often crosses the threshold earlier, while both curves are
-non-monotone at intermediate checkpoints.  The result establishes that the
-generic \JORM{} PPO policy, value bootstrap, GAE ordering, behavior-policy
-metadata, clipping, and optimizer path can solve this control problem at the
-same capacity and budget as an independent implementation.  In all final
-\JORM{} updates, both behavior-log-probability and behavior-value fallback
-rates are zero.  It does not validate an unrelated reward, joint-action
-trajectory, variable representation, or multi-agent protocol; those remain
-separate application gates.
+Stable-Baselines3 reached the solved threshold earlier in two of the three
+runs. Both implementations ended at 500 on every run, though performance
+sometimes fell at intermediate checkpoints. This gives us an independent
+check of the basic PPO implementation before introducing variable candidate
+sets or joint actions. In the final Jörmungandr updates, all behavior log
+probabilities and values came from the recorded trajectories; none used a
+fallback estimate.
 
 \subsection{Entity/candidate representation parity}
 
@@ -1104,9 +1033,9 @@ while retaining IDs changes semantic logits by at most
 $1.08\times10^{-6}$ and values by at most $7.63\times10^{-6}$ in the recorded
 runs, below the $10^{-5}$ tolerance.  Wire round trip, trajectory storage,
 checkpoint restore, and the versioned structured inference bundle preserve the
-selected semantic candidate.  This rules out a gross variable-representation
-failure; it does not show that a particular application's features, reward, or
-joint constraints are sufficient.
+selected semantic candidate.  On CartPole, the structured representation therefore preserves both learning
+and the selected action through storage and export. Whether it contains enough
+information for a more complex task depends on that task's features.
 
 \subsection{Structured supervision diagnostic}
 
@@ -1123,9 +1052,9 @@ A central-service test interleaves the eight training and eight validation
 labels, retains them in separate bounded buffers, and updates only from the
 training split.  Its checkpoint initializes a frozen structured PPO model with
 identical candidate logits, a new optimizer, and update and policy-version
-counters at zero.  BC0 therefore validates reward-free semantic imitation and
-the BC-to-PPO handoff; it does not establish that a demonstration source is
-optimal or that imitation improves terminal return.
+counters at zero.  This checks that the learner can fit the labels and that PPO starts from the
+copied policy. The eight-label test is too small to measure generalization or
+the quality of the demonstrations.
 
 Teacher provenance is checked separately from learnability. A non-executing
 Python source audit records source hashes, large literal tables, opaque
@@ -1134,12 +1063,12 @@ It reports a mechanism rather than declaring every schedule invalid. A second
 diagnostic pairs supervision from distinct episodes by timestep and factor,
 requires the exact numeric model input to differ, and measures whether the
 semantic target changes. A third summary accepts only input and decision
-fingerprints from application-owned counterfactual interventions. Thus
-\JORM{} can expose trace-compatible teachers without importing a simulator or
-pretending that an unchanged action proves state independence.
+fingerprints from application-owned counterfactual interventions. These checks help identify teachers that might be replaying a schedule. They
+cannot decide whether an unchanged action is appropriate: that requires
+knowledge of the environment.
 
-Two exact, domain-neutral ``calculation friends'' provide a narrower boundary
-than asking a policy to approximate deterministic combinatorics.  The first
+The library also includes two exact solvers for decisions that do not need
+to be learned.  The first
 solves a caller-declared bipartite assignment exactly.  It can maximize
 assignment cardinality and then declared utility, or maximize total declared
 utility while treating an unassigned worker and task as zero utility; the
@@ -1168,8 +1097,8 @@ entropy by source, factor, and semantic target.  A seeded SHA-256 selector
 also produces input-order-independent, capped diagnostic subsets with an exact
 receipt.  In a six-worker synthetic routing control with unseen validation
 worlds and matched minibatches, pooled context reaches 98.4375\% and one
-candidate-attention block reaches 100\%.  The 1.5625-point difference verifies
-the mechanism; it is not a broad sample-efficiency claim.
+candidate-attention block reaches 100\%.  The difference is 1.5625 percentage points on this small routing task; a
+broader comparison would need more tasks and training budgets.
 
 \subsection{Conditional supervision-sampling diagnostic}
 
@@ -1185,10 +1114,9 @@ weighted loss contain 1.2617 rare records on average and contain none in
 26.07\% of batches.  Their objective estimate has mean absolute error
 0.150488.  Weight-proportional draws with unit post-draw loss weights contain
 10.6707 rare records on average, never omit them, and reduce mean absolute
-error to 0.056728; absolute bias from the exact objective is 0.000639.  All
-predeclared conditions pass.  This validates the generic buffer estimator,
-while application balance-group definitions and downstream learning gains
-require their own validation.
+error to 0.056728; absolute bias from the exact objective is 0.000639.  The sampler meets the test's acceptance conditions. It estimates the weighted
+objective more accurately in this corpus; the test does not train a policy or
+measure a downstream learning gain.
 
 \subsection{Prefix-conditioned preference diagnostic}
 
@@ -1214,8 +1142,8 @@ binary information limit.  A width-16 model with $d_p=4$ reaches accuracy one
 on every seed and median NLL $0.009255$.  Because this case has no reward or
 environment transition, it attributes the difference specifically to learned
 preference conditioning.  Masking, PPO credit, and horizon length are held
-constant.  This narrow capability test covers only the stated joint-action
-problem size.
+constant.  The test uses only two labels, so it checks that prefix information can affect
+the learned choice rather than measuring performance on a larger task.
 
 \subsection{Constrained joint-action learning diagnostic}
 
@@ -1268,9 +1196,9 @@ corpora reach 100\%.  Final PPO improves over paired random legal episodes by
 0.4061 on average.  A hierarchical paired bootstrap resampling training runs
 and common evaluation seeds gives a 95\% interval $[0.3581,0.4533]$.
 BC-to-PPO median return is 0.9337 of oracle, above the predeclared 0.80 gate,
-and no evaluated arm emits an infeasible action.  J1 passes.  The task is small
-enough for complete enumeration and isolates the structured formulation.
-Larger combinatorial environments require separate evidence.
+and no evaluated arm emits an infeasible action.  The result meets the J1 acceptance rule. Complete enumeration makes the
+optimum available for comparison here; larger tasks will need a different
+reference.
 
 \subsection{Masked-action representation diagnostic}
 
@@ -1318,9 +1246,8 @@ Masked \JORM{} success AUC is 0.7042 versus zero unmasked, so the declared B2
 mask gate passes.  Its final seed variance remains material: the independent
 masked references finish at 100\% on all seeds, whereas \JORM{} finishes at
 96\%, 100\%, and 92\%.  The masked policy had reached 97.3\% mean success at
-65,536 steps before later regression.  This supports hard constraint handling
-and also motivates checkpoint selection and stability diagnostics.
-Complex-application efficacy requires separate evidence.
+65,536 steps before later regression.  Masking works, but the later regression is still a weakness of this run.
+Checkpoint selection and training stability need further investigation.
 
 \begin{SNcolumns}
 
@@ -1404,13 +1331,11 @@ heads also learned their tasks. Final reward gains were only about 0.02--0.06
 percentage points, with no sustained early-learning advantage in the recorded
 curves. Even a diagnostic arm supplied with hidden-state labels helped little.
 
-The useful conclusion is limited. These small problems supplied frequent
-reward feedback, and an additional objective did not materially improve the
-policy. That does not rule out auxiliary learning when rewards are sparse,
-observations are harder to interpret, or the model is larger. It does mean
-that a lower auxiliary loss is not sufficient evidence of a better agent.
-We retained the generic loss-composition interface and left the objectives
-optional. The controls and negative results remain part of the record.
+We therefore left auxiliary objectives disabled by default. These tasks
+already supplied frequent rewards, and the extra losses added work without
+a useful policy improvement. Sparse rewards, harder observations, and larger
+models remain untested. The loss-composition interface lets those experiments
+be run without changing the main learner.
 
 \subsection{When rewards arrive later}
 
@@ -1539,18 +1464,14 @@ assumptions, so this is not a comparison of annotation efficiency.}
 
 \subsection{What belongs in the framework}
 
-The common additions are small: preserve the evidence that produced a label,
-construct returns without crossing episode boundaries, compose optional
-losses, and distinguish preference from correctness. The application still
-owns the environment, tool definitions, display policy, and meaning of a
-rating. A benchmark's simulated user or reward rule does not become a default
-framework policy.
+Jörmungandr now provides return construction, optional auxiliary losses, and
+records for displayed candidates and subsequent feedback. Applications define
+the tools, rewards, display order, and interpretation of ratings. The simulated
+users in these benchmarks remain example code.
 
-The language-model result remains limited to the routing task. Further work
-should compare tool-selection training across model sizes, tasks, and
-adaptation methods on fresh reserved cases. The numeric controls explain
-which mechanisms we tested along the way. They do not extend the evidence
-for language-model tuning to those other settings.
+A fuller LLM study would compare model sizes and adaptation methods on fresh
+tool-selection tasks. The numeric controls reported here helped us test the
+supporting code cheaply, but they do not answer that model comparison.
 
 \section{Python, Torch, and native learners}
 
@@ -1574,32 +1495,17 @@ which observation or reward belongs to an action is not an equivalent learner.
 
 \section{Current implementation and limits}
 
-The public implementation registers fixed-vector and structured profiles for
-C51, QR-DQN, DQN, CQL,
-maximum-entropy soft Q, BC, MARWIL, PPO, IMPALA, APPO, categorical SAC, and the
-compact DreamerV3 profile.  The HTTP service lists plugins, applies legal masks
-at inference and backup, stores behavior metadata, assembles contiguous
-trajectories, filters excessive policy lag for online trajectory learners,
-selects ordinary or QUBO batches, logs algorithm-qualified metrics,
-checkpoints arbitrary plugin state, restores it, and exports each plugin's
-declared Torch module.  The v2 structured service additionally provides
-central entity/candidate inference, prioritized transition replay, complete
-joint-trajectory ingress, policy-lag checks, exact conditional-log-probability
-PPO, reward-free weighted structured supervision, conditional balance groups,
-importance-resampled supervision batches, direct BC-to-PPO policy
-initialization, structured checkpointing and inference bundles, recent learner
-history, external held-out metrics, source/time-dependence/counterfactual
-teacher-provenance diagnostics, and TensorBoard persistence.
-Complete joint trajectories may use either the original step-array wire or a
-de-duplicated observation-chain sequence with transparent gzip request
-compression.
-Each structured-PPO update also records raw episode-return mean, standard
-deviation, minimum, maximum, unique-value count, episode-length range,
-nonzero-reward fraction, $gamma\lambda$, and the oldest-residual weight
-$(\gamma\lambda)^{N-1}$ before GAE.  This is a diagnostic distinction: high
-explained variance may describe a critic that predicts one common loss and its
-distance to termination, while the policy still has almost no evidence for
-ranking action sequences.
+The preceding sections describe the implemented algorithms, serving paths,
+and comparisons. Two further checks address failures that can be difficult
+to see in aggregate PPO metrics: a terminal reward that barely influences the
+opening action, and a critic update that changes a shared policy backbone.
+
+For long episodes, the learner records the return distribution, episode
+lengths, fraction of nonzero rewards, $\gamma\lambda$, and the weight
+$(\gamma\lambda)^{N-1}$ of the oldest residual in GAE. These measurements help
+explain a misleading combination: a critic may predict nearly identical
+terminal losses well while the early actions receive almost no useful
+advantage signal.
 
 The frozen \texttt{DelayedTerminalCredit-v0} gate checks this exact mechanism
 on balanced $-1/+1$ terminal rewards over 719 structured steps with zero
@@ -1608,9 +1514,9 @@ $\lambda=0.98$ and $\lambda=1$.  Every raw target is checked against
 $z(\gamma\lambda)^d$; maximum disagreement between implementations is
 $4.7684\times10^{-7}$, within the declared $2\times10^{-6}$ tolerance.  After
 the same batch normalization used by PPO, the positive opening advantage is
-$2.6763\times10^{-6}$ in the first arm and one in the episodic arm.  This
-selects $\lambda=1$ for a terminal-only child experiment as an estimator design
-decision.  No learning or variance conclusion follows.
+$2.6763\times10^{-6}$ in the first arm and one in the episodic arm.  We therefore chose $\lambda=1$ for the subsequent terminal-reward experiment.
+This check compares calculated targets; it does not measure training variance
+or return improvement.
 
 The independent \texttt{StructuredPPOSafety-v0} gate tests policy preservation
 over five seeds.  In a value-only joint update, the historical shared critic
@@ -1620,44 +1526,19 @@ moves by about $0.0200$.  A second deliberately oversized actor proposal leaves
 the frozen ratio interval $[0.5,2]$ in all unguarded seeds, reaching
 $2.061\times10^{-9}$.  Transactional backoff accepts the third common-random
 proposal in every seed at effective rate $0.01$; all committed ratios lie in
-$[0.670,1.518]$ or a tighter interval.  These results establish isolation and
-containment.  Return improvement requires a separate environment experiment.
+$[0.670,1.518]$ or a tighter interval.  The controls prevent these two deliberately induced policy changes. Whether
+they improve return has to be tested in an environment.
 
-The joint sampler can now be autoregressive in both legality and learned
-preference.  Optional low-rank candidate key/value heads condition later
-factor logits on the selected prefix while retaining one central inference per
-turn.  Exact masks remain environment inputs.  The additive prefix summary
-conditions choices within one turn; temporal memory across turns requires
-recurrent state.
+The automated tests also exercise each built-in learner through an update,
+checkpoint, export, restore, and masked inference. More specific tests check
+return calculations, action identity under candidate reordering, split
+isolation, trajectory ordering, and the BC-to-PPO transfer. Service tests cover
+batching, replicas, replay indexing, transport, and export verification. The
+repository retains the individual cases and their assertions.
 
-The functional suite checks both the learner calculations and the service
-contracts. It includes direct
-finite updates and state round trips for every built-in, C51 projection and
-mask checks, graph-reference GAE, validation isolation, HTTP ingress, masked
-SAC entropy, QR-DQN tail output, QUBO cardinality and fragment audit, checkpoint
-restore, frontier accounting and local-swap checks, replayable visualization
-audits, structured metrics history and TensorBoard persistence, exact joint
-sampling and PPO updates, multiprocess structured-trajectory ingress,
-compact sequence round trip and compressed HTTP ingress,
-policy-lag/duplicate/order rejection, structured export, supervised split
-isolation, semantic candidate permutation, conditional balance compatibility,
-importance-sampling objective checks, BC-to-PPO initialization, the seeded
-online comparisons, critic-backbone isolation, transactional joint-ratio
-rollback and backoff, the structured PPO safety gate, and artifact manifests.
-It also covers logarithmic priority indexing, request-size limits,
-windowed-X/state flattening, one network call per batch, structured serving
-replicas, the Jörmungandr SBE codec and endpoint, automatic tuning choices,
-and background ONNX export status and output verification.
-The exact-calculation cases additionally verify cardinality-first assignment,
-optional total-utility assignment, declared utility and seeded ties,
-positive task capacities, positive-cost shortest routes, caller-ordered route
-ties, multiple targets, source-as-target, and unreachable certificates. A
-separate threaded matrix gave every built-in eight mask-aware transitions;
-each completed an update, checkpoint, TorchScript export, restore, and masked
-inference.
-
-These are lifecycle tests.  They do not reproduce Atari, continuous-control,
-Minecraft, offline-RL, or Volt trading benchmarks.  The built-in CQL and SAC
+Passing those software tests is separate from reproducing published RL
+benchmarks. We have not run Atari, continuous-control, Minecraft, offline-RL,
+or Volt trading benchmark suites for these profiles.  The built-in CQL and SAC
 profiles are discrete.  The Dreamer profile is smaller than the reference.
 Replay data expire on restart.  Structured PPO currently consumes complete
 episodes; bootstrapped partial fragments remain unsupported.  The constrained
@@ -1672,19 +1553,22 @@ objective by default.
 
 \section{Conclusion}
 
-The framework keeps collection, learning, validation, and deployment separate
-so that changing one need not silently change the others. The experiments
-illustrate why this matters. Supplying relevant history made a previously
-under-informed task learnable. Adding another objective did not necessarily
-improve the policy. Multi-step returns helped with delayed reward in a
-controlled problem. A click was a weaker preference label when display order
-influenced the simulated user.
+The main benefit of the framework is that we can change a learner while
+keeping the collection, validation, and serving code in place. That made it
+possible to compare implementations and investigate failures with smaller,
+controlled tasks.
 
-These findings led to specific interfaces and tests, rather than a new default
-algorithm. The language-model work remains a bounded tool-routing result.
-Broader claims require fresh tasks and reserved evaluation data, particularly
-where decisions interact over time or users provide the feedback. The code
-and recorded failures make those next experiments easier to define and check.
+The tool-routing study produced a working language policy on the tested
+services. Relevant history was necessary, but adding auxiliary objectives in
+the numeric follow-ups brought little benefit. Longer returns improved early
+learning with delayed rewards, and the preference study showed how display
+order can distort labels inferred from clicks. These results determine which
+options the framework provides; they do not justify one default algorithm for
+every application.
+
+The next LLM experiments need fresh evaluation tasks. The existing confirmation
+cases have already informed development, and the numeric controls cannot
+substitute for tests of the language model itself.
 
 \end{SNcolumns}
 
