@@ -1,15 +1,21 @@
-# Jörmungandr paper
+# Jörmungandr papers
 
-[Jörmungandr: Learning from Decisions and Feedback](jormungandr_learning_systems.pdf)
-([source](jormungandr_learning_systems.tex)) connects prior research to our
-experiments in search selection, constrained decisions, tool use, delayed
-rewards, and user preferences. The November editorial revision replaces the
-implementation inventory with an explanation of the ideas and findings.
-Detailed experimental results remain in the linked reports and build commands
-below. No measurements were changed or models retrained for this revision.
+Two papers cover distinct applications of the framework:
+
+- [A Plugin Runtime for Distributed Reinforcement Learning](jormungandr_learning_systems.pdf)
+  ([source](jormungandr_learning_systems.tex)): the original 15-page paper on RL
+  algorithms, infrastructure, structured actions, search, and financial
+  application interfaces. Source and PDF are restored from revision `07ce89c`,
+  before the language-model material was incorporated.
+- [Adapting a Language Model to Tool Use](jormungandr_llm_adaptation.pdf)
+  ([source](jormungandr_llm_adaptation.tex)): the language-policy experiment,
+  comparisons with simple rules, and separate numeric studies of context
+  objectives, delayed rewards, and preferences. Those numeric results are not
+  presented as improvements already demonstrated in an LLM.
 
 The journal class uses a compact two-column A4 layout with full-width figures.
-Application-specific financial studies remain in the companion hedging paper.
+The companion hedging paper develops the stock-and-option application further.
+No models were retrained and no measurements changed for this split.
 
 Regenerate the two feedback-study vector figures from committed results, without
 training models, from the repository root:
@@ -23,11 +29,13 @@ Build from this directory:
 ```bash
 latexmk -pdf -interaction=nonstopmode -halt-on-error \
   jormungandr_learning_systems.tex
+latexmk -pdf -interaction=nonstopmode -halt-on-error \
+  jormungandr_llm_adaptation.tex
 ```
 
 `latexmk -c` removes intermediate files without deleting the PDF or source.
 
-Regenerate the Section 3 frontier trace, empirical data, and vector figures
+Regenerate the Section 6 frontier trace, empirical data, and vector figures
 from the repository root with:
 
 ```bash
