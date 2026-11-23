@@ -230,7 +230,7 @@ the recorded $[X,\mathrm{state}]$ order before normalization.  Flat vectors of
 the same width remain valid.  The layout records dimensions and flatten order;
 the actor defines the window and its temporal meaning.
 
-\subsection{Split isolation}
+\subsection{Preparing experience for learning}
 
 Training experience supplies the observation statistics used for normalization
 and enters replay for subsequent updates. Validation experience uses those
@@ -243,7 +243,8 @@ from one path share information, so dividing them between training and
 validation would weaken the independence of the evaluation even if their
 storage were separate.
 
-\subsection{Trajectory construction}
+The split determines the role of an episode; its temporal structure determines
+how a learner can use it.
 
 PPO and related methods estimate returns from a sequence of decisions. To
 prepare those sequences, the service groups records by actor and episode,
@@ -261,8 +262,6 @@ form required by the chosen algorithm.
 
 \begin{SNcolumns}
 
-\subsection{Algorithm interface}
-
 The plugin contains the model and the procedure for updating it. It accepts
 batches prepared by the service, performs the learning step, and returns enough
 information for replay priorities and training reports to be updated. An update
@@ -279,8 +278,6 @@ Sampling is implemented through a separate selector plugin. This allows an
 experiment to change how experience is chosen while keeping the learning
 objective fixed. External algorithms and selectors register through Python
 entry points, alongside the built-in implementations.
-
-\subsection{Checkpoint lifecycle}
 
 A checkpoint must contain enough information to resume the calculation that
 produced the policy. Along with model weights, it stores the optimizer state
@@ -346,100 +343,202 @@ benchmark parity with the cited references requires separate experiments.}
 \label{tab:algorithms}
 \end{table}
 
-\subsection{Value distributions}
+\subsection{Learning action values and return distributions}
 
-A scalar value function estimates the expected return from an action. In
-financial problems, the range of outcomes can matter as much as the mean:
-two actions with similar expected reward may have quite different downside.
-C51 represents that range through learned probabilities on fixed return
-points~\cite{c51}. QR-DQN learns the locations $\theta_i(s,a)$ of specified
-quantiles $\tau_i$~\cite{qrdqn}. For target samples $y_j$, its quantile-Huber
-loss is
+A value-based method learns how much future reward to expect after taking an
+action in a state. DQN represents this quantity, $Q(s,a)$, with a neural
+network~\cite{dqn}. A recorded transition supplies the immediate reward and
+an estimate of the value available at the next state. Training brings the
+prediction for the selected action toward that combined target. Reusing
+transitions through replay gives the network repeated opportunities to learn
+from an expensive simulation, while a slowly updated target network helps
+stabilize the targets.
 
+The maximization at the next state can favor an action whose value happens
+to be overestimated. Double DQN reduces this effect by choosing the next
+action with the current network and evaluating it with the target
+network~\cite{doubleq}. Jörmungandr's scalar profile also uses a dueling
+representation, with a state-value estimate and action-dependent adjustments.
+This is useful when much of an observation's value is shared by its available
+actions. For a portfolio, holding and making a small adjustment may have similar
+consequences in many states, with their differences becoming important near
+a risk or trading boundary.
+
+An expected value compresses a range of possible outcomes into one number.
+C51 retains that range as probabilities on a fixed grid of returns~\cite{c51}.
+An update shifts and discounts the next-state distribution according to the
+observed reward, then projects it back onto the grid. This lets the learner
+represent several plausible outcomes for the same action. The chosen grid
+must cover the return range relevant to the task; probability outside its
+bounds is absorbed at the ends. Our implementation uses the mean for action
+selection and retains the distribution for inspection.
+
+QR-DQN provides a different representation by learning the locations of
+quantiles at fixed probability levels~\cite{qrdqn}. The locations can move
+as the return distribution changes. If $\theta_i(s,a)$ is the estimated
+quantile at level $\tau_i$, target samples $y_j$ enter the quantile-Huber loss
 \[
   \mathcal L=
   \frac{1}{N}\sum_{i=1}^{N}\sum_{j=1}^{N}
   \left|\tau_i-\mathbf 1\{y_j-\theta_i<0\}\right|
   L_\kappa(y_j-\theta_i).
 \]
+The asymmetric weight gives overestimation and underestimation different
+costs at each quantile. The Huber term moderates the influence of large errors.
+Averaging the fitted quantiles gives an expected-return decision rule.
 
-The quantiles can be averaged for expected-return control. A downside rule
-can use a lower quantile or average the lowest fraction to obtain an empirical
-lower-tail CVaR score. Such a rule makes the risk preference explicit in action
-selection. Its usefulness depends on how well the estimated tails describe
-the evaluation population, particularly under a change in market conditions.
-The distribution describes variation in outcomes; uncertainty about the fitted
-model needs its own assessment.
+The same estimates also permit a downside rule. A lower quantile emphasizes
+a poor outcome at a specified probability level; averaging the lowest fraction
+provides an empirical lower-tail CVaR score. This is relevant when two portfolio
+actions have similar means and different losses in adverse paths. The risk
+level should be fixed before evaluation, since choosing it after inspecting
+the results changes the experiment. Estimated tails describe outcome variation
+under the fitted model, and their calibration requires checking on the paths
+where the policy will be used.
 
-DQN provides the scalar baseline. The Double-DQN construction uses separate
-selection and evaluation calculations to reduce the optimism introduced by
-maximizing noisy value estimates~\cite{dqn,doubleq}. Historical data raise a
-further concern: an action with little representation in the data may receive
-an unjustifiably high value. The discrete CQL implementation adds a conservative
-penalty to address this problem~\cite{cql}.
+\subsection{Policy gradients and asynchronous collection}
 
-\subsection{Policy, asynchronous, and offline objectives}
+Policy-gradient methods learn an action distribution directly. A value function
+helps judge whether an observed outcome was better or worse than expected from
+the state. This difference, called the advantage, determines the direction of
+the policy update. Generalized Advantage Estimation combines reward information
+from several horizons, with a decay parameter controlling the contribution of
+more distant residuals~\cite{gae}. Longer effective horizons can carry delayed
+rewards further back through an episode, at the cost of noisier estimates.
 
-PPO adjusts the probability of actions according to their estimated advantage
-over the value of the state. Generalized Advantage Estimation controls how
-reward information from different horizons contributes to that estimate~\cite{ppo,gae}.
-The clipped objective limits the incentive for large changes in action
-probability during repeated updates from the same data.
+PPO uses the ratio between the current probability of a recorded action and
+the probability assigned when it was collected~\cite{ppo}. Its clipped
+objective reduces the incentive to push that ratio far from one. This permits
+several passes over a collected batch while limiting how strongly the policy
+is encouraged to move in response to it. The implementation estimates
+advantages from ordered trajectories and fits the value function alongside
+the policy. The recorded behavior probabilities are therefore essential inputs
+to the update.
 
-When collection and learning proceed asynchronously, an actor may use an older
-policy. IMPALA accounts for that difference through V-trace corrections~\cite{impala}.
-The APPO implementation follows IMPACT, combining a target policy with
-truncated importance sampling and bounded circular replay~\cite{impact}.
-This makes the age and producing policy of a trajectory part of the learning
-calculation.
+PPO is a useful baseline when a simulator can supply fresh episodes under the
+current policy. Distributed collection complicates this arrangement because
+some actors may still be running an earlier version. An action can then have
+a substantially different probability under the learner's current policy.
+IMPALA addresses this difference through V-trace: probability-ratio corrections
+are applied along a trajectory, with truncation to control their variance~\cite{impala}.
+The actors can continue collecting while the central learner updates, and the
+correction accounts for the resulting policy lag within the method's limits.
 
-A shared actor--critic network introduces another route for policy change:
-training the value function can modify features also used to select actions.
-Structured PPO provides an optional scale for those critic gradients. It also
-offers a check on the action-probability ratios after a proposed update. If a
-proposal exceeds the declared bounds, the learner restores the preceding
-state and retries at a lower learning rate. Both controls are disabled by
-default and can be assessed independently in an experiment.
+The APPO profile combines asynchronous collection with a proximal update.
+Following IMPACT, it uses a target policy and truncated importance weights,
+with bounded circular replay allowing a limited amount of data reuse~\cite{impact}.
+This creates a practical tradeoff between reusing experience and allowing it
+to become stale. Jörmungandr records the producing policy and applies an age
+limit to the trajectory fragments accepted by the online learners. Comparisons
+should include collection throughput as well as reward per interaction,
+since additional parallelism can change both.
 
-Demonstrations provide a different starting point. Behavior cloning fits the
-observed choices directly, with weights available for balancing examples.
-MARWIL uses estimated trajectory advantages to weight the likelihood of
-historical actions, giving better-than-expected outcomes greater influence~\cite{marwil}.
-The resulting policy depends on the coverage and quality of the demonstrations,
-so its evaluation should include the situations in which it will be deployed.
+Training a shared actor--critic network introduces another interaction. A
+value update changes features that the policy also uses, so a policy fitted
+to demonstrations can move while its initially inaccurate critic learns.
+Structured PPO offers a scale for those critic gradients. An optional
+post-update check also measures action-probability ratios across the complete
+batch and retries an excessive proposal at a lower learning rate. These
+controls allow an experiment to examine whether preserving the current policy
+helps during a particular phase of training; both are disabled by default.
 
-\subsection{Entropy and world models}
+\subsection{Learning from demonstrations and historical experience}
 
-The maximum-entropy objective augments discounted reward with policy entropy,
+Historical decisions can provide a starting policy before collecting new
+experience. Behavior cloning treats the demonstrated action as a supervised
+target and increases its probability under the learned policy. This makes it
+a useful baseline for asking how much of the result is already explained by
+the examples. In the structured version, the target is a candidate identity
+within the feasible choices for that observation. Example weights can balance
+decision types that occur at different frequencies.
 
+The policy inherits the strengths and gaps of the demonstration set. If it
+reaches states that the teacher rarely visited, its predictions may be weak
+there. A practical evaluation therefore examines the states visited by the
+learned policy as well as accuracy on reserved examples. The shared structured
+representation permits a cloned policy to initialize PPO, after which
+experience from the application can refine its choices. The constrained
+allocation study below measures that progression explicitly.
+
+MARWIL incorporates the rewards attached to historical trajectories~\cite{marwil}.
+It estimates how much better their returns were than the learned state value
+and weights action likelihood by an exponential function of that advantage.
+Successful decisions receive greater influence, with normalization and
+clipping tempering the weight scale. This provides a gradual connection
+between imitating the collected behavior and emphasizing its better outcomes.
+Its usefulness depends on informative rewards and adequate coverage of the
+decisions the resulting policy will encounter.
+
+CQL approaches historical data through value learning~\cite{cql}. In a fixed
+dataset, the learner has limited opportunity to correct optimistic predictions
+for actions that were seldom taken. Those predictions can be amplified when
+future targets select the largest value. The discrete CQL profile adds a
+log-sum-exp penalty over action values relative to the value of the recorded
+action. This discourages large unsupported estimates while retaining the
+ordinary reward-based value target. The penalty strength controls how much
+conservatism enters the fit; evaluation must establish a useful balance between
+restricting extrapolation and overlooking genuinely better actions.
+
+These methods answer different questions about the same historical record.
+Behavior cloning measures what can be learned from the choices themselves.
+MARWIL uses outcomes to reweight those choices, while CQL fits a conservative
+value function from the transitions. Comparing them on a common dataset helps
+identify whether the reward information adds useful guidance beyond imitation.
+
+\subsection{Entropy-regularized decisions and learned dynamics}
+
+A policy can commit prematurely to an action that looks promising early in
+training. Maximum-entropy learning assigns value to retaining a spread of
+action probabilities as well as earning reward. Its objective is
 \[
  J_\alpha(\pi)=\E_\pi\left[
    \sum_{t\geq0}\gamma^t
    \left(r(s_t,a_t)+\alpha\mathcal H(\pi(\cdot\mid s_t))\right)
  \right].
 \]
+The coefficient $\alpha$ sets the relative importance of entropy. It changes
+the objective being learned, so it belongs among the declared settings of an
+experiment.
 
-Here $\alpha$ determines the value assigned to policy entropy. The soft-Q
-implementation incorporates this term in its value backup. Categorical SAC
-uses a learned action distribution and twin critics, with an option to adjust
-$\alpha$ during training~\cite{sac}. Legal-action masks restrict the distribution
-to feasible choices, and the entropy calculation uses the limit $0\log0=0$
-for masked actions.
+Soft-Q incorporates entropy through a smooth aggregation of the next-state
+action values. The associated Boltzmann policy gives higher-valued actions
+more probability, with $\alpha$ controlling concentration. This keeps several
+actions active when their estimated values are close. In an uncertain
+portfolio decision, that can prevent small value-estimation differences from
+immediately determining all collected experience. The benefit depends on the
+cost of exploration and should be measured under the intended disturbance.
 
-A world-model method takes a further step by learning how the environment
-evolves and training through imagined trajectories. DreamerV3 demonstrates
-this approach across a broad set of tasks~\cite{dreamerv3}. Jörmungandr includes
-a compact profile for vector observations, with learned latent dynamics and
-predictions of reward and continuation. Its imagined trajectories support
-actor and value updates. Reproducing the full published DreamerV3 system would
-require the reference representation and training procedure, including its
-recurrent state-space model and pixel decoder.
+Soft actor-critic couples an explicit stochastic policy with learned value
+estimates~\cite{sac}. The categorical implementation here evaluates the finite
+set of legal actions, uses twin critics to temper optimistic estimates, and
+updates target values gradually. Its optional temperature adjustment adapts
+$\alpha$ during training. Like the other off-policy value methods, it can reuse
+experience through replay. The entropy objective and twin-critic calculation
+make it a useful comparison with scalar DQN when the application can tolerate
+exploratory choices during collection.
+
+A learned world model offers another use for collected experience. It estimates
+how a state changes after an action and supplies predicted rewards along
+imagined trajectories. DreamerV3 demonstrates policy learning through such
+trajectories across a broad set of tasks~\cite{dreamerv3}. Once dynamics have
+been learned, a policy can receive many updates from internally generated
+experience, reducing the need to obtain all of that experience from the
+external environment.
+
+Jörmungandr includes a compact vector-observation profile with learned latent
+dynamics and reward and continuation predictions. It trains an actor and a
+value function through short imagined trajectories, using transformed reward
+and value scales to handle large magnitudes. Longer imagination horizons
+place greater demands on prediction accuracy because errors can accumulate
+along the path. Financial applications should check those predictions under
+changes in market conditions and include the cost of fitting the model.
+The current profile has a smaller representation than the published DreamerV3
+system; reproducing that system's benchmarks would require its full model and
+training procedure.
 
 \section{Noise, disturbance, and risk}
 
 \begin{SNcolumns}
-
-\subsection{Choosing a disturbance model}
 
 Robustness is easiest to assess when an experiment identifies where the
 uncertainty enters. Observation noise changes the information available to
@@ -460,8 +559,6 @@ weak coverage of actions in historical data, while V-trace addresses the age
 of the policy that collected a trajectory. An experiment can combine these
 questions, provided it reports the perturbation and performance measure used
 for each comparison.
-
-\subsection{What maximum entropy proves}
 
 Eysenbach and Levine relate maximum-entropy reinforcement learning to a lower
 bound on a robust objective for specified reward and transition disturbances~\cite{maxentrobust}.
@@ -547,7 +644,7 @@ $\mathcal{C}_t$.  Its single decision vector determines the next beam.
   \label{fig:qubo-frontier-trace}
 \end{figure}
 
-\subsection{Utility and redundancy}
+\subsection{Selecting a diverse subset}
 
 Let $\widehat v_i$ be the available scalar utility.  To prevent isolated
 outliers from determining the linear QUBO coefficient, the implementation uses
@@ -589,7 +686,9 @@ embeddings summarize state and delta plus action, reward, terminal, and length.
 In the path experiment below, a one-hot branch-position embedding makes paths
 with long common prefixes similar.
 
-\subsection{Constrained subset objective and QUBO matrix}
+The utility and similarity estimates determine the score of a candidate set.
+The remaining requirement is to express the selection budget in the binary
+objective.
 
 For $n$ candidates and target cardinality $k$, the binary energy is
 
@@ -667,7 +766,7 @@ that an item reaches the learner. The implementation therefore uses neutral
 learner weights; correcting for the combined selection probability remains
 an open part of the sampling procedure.
 
-\subsection{Controlled branching experiment}
+\subsection{Search quality and computational cost}
 
 The empirical question is whether the diversity term can preserve a good
 region under correlated heuristic error, and whether the saved evaluation
@@ -784,7 +883,9 @@ supports a bounded result: diversity improved average terminal quality in this
 noise model. The recovery results show that the gain depends on the metric
 and the search budget.
 
-\subsection{Compute break-even and interpretation}
+The improvement in search quality has a computational cost. To assess whether
+it pays for itself, we account for the selection work alongside the candidates
+and terminal paths evaluated.
 
 Let $c_g$ be the average cost of generating and cheaply scoring one candidate,
 $c_e$ the average terminal-evaluation cost, and $T_{s,A}$ selector time for
@@ -820,8 +921,6 @@ The present evidence concerns a classical selector in a synthetic search;
 testing it within policy training is a further experiment.
 
 \section{Policy representation and Volt}
-
-\subsection{Fixed embeddings and end-to-end encoders}
 
 A financial policy acts on a representation of a portfolio. Volt defines the
 contracts and calculates the consequences of changing holdings, including
@@ -885,8 +984,6 @@ fresh optimizer state. The value function then learns from returns. Scaling
 its gradients into the shared representation can help preserve the imitated
 policy during this initial value-fitting stage.
 
-\subsection{Quantile tree baselines}
-
 A frozen portfolio encoder also makes tree-based comparisons possible.
 CatBoost supports several quantiles in a single CPU model, while LightGBM
 normally fits one model per quantile level~\cite{catboost,lightgbm,catboostdocs,lightgbmdocs}.
@@ -915,7 +1012,7 @@ must be made within a fixed interval. We use matched interaction budgets and
 reserved episodes in the comparisons below, with repeated training runs to
 show sensitivity to initialization.
 
-\subsection{Controlled online transition comparison}
+\subsection{Comparing value-based and policy-gradient learners}
 
 We begin with five methods that can learn from the same stream of individual
 transitions: DQN, C51, QR-DQN, maximum-entropy Soft-Q, and categorical SAC.
@@ -976,7 +1073,9 @@ The accompanying animation shows the evaluated stages of training, and a
 playback illustrates how actions accumulate reward along one path. The
 aggregate results in the table remain the basis for the comparison.
 
-\subsection{PPO against an independent reference}
+The value-based comparison establishes a common transition-learning baseline.
+We next consider a policy-gradient method, using a familiar control problem
+to compare our PPO implementation with an independent reference.
 
 The trajectory cohort begins with CartPole-v1 because a familiar environment
 separates PPO mechanics from application representation.  The reference is
@@ -1023,7 +1122,12 @@ before changing the representation of observations and actions. In the final
 Jörmungandr updates, the recorded trajectories supplied the behavior
 probabilities and value estimates used in the calculation.
 
-\subsection{Changing the representation of the same task}
+\subsection{Action representation and feasibility}
+
+A working learner must also preserve the meaning of a decision when its input
+representation changes. We first hold the task fixed and change how the
+observations and actions are described. We then examine a task whose rules
+restrict which actions can be taken.
 
 The S0 control changes only the CartPole representation and compatible policy
 encoder.  Each four-coordinate vector becomes four typed entities with stable
@@ -1070,7 +1174,67 @@ while retaining action identity through the serving path. It provides a basis
 for introducing the more complicated choices considered below, where the
 representation must also describe their relationships and constraints.
 
-\subsection{Learning from demonstrations}
+The next comparison examines those restrictions directly. Taxi requires
+collecting and delivering a passenger, with only some actions valid in a given
+state. It lets us measure the effect of supplying that feasibility information
+to the policy during learning and evaluation.
+
+Taxi-v4 isolates legal-mask behavior on 500 discrete states and six
+actions.  The neural policies receive a one-hot state and two separate
+width-64 MLPs, giving 72,903 trainable parameters to both \JORM{} PPO and
+SB3-contrib MaskablePPO.  Four participants receive 131,072 interactions over
+three seeds: masked \JORM{} PPO, the same \JORM{} PPO with masking deliberately
+disabled, SB3-contrib MaskablePPO, and a 3,000-entry masked tabular Q-learning
+reference.  Evaluation uses fifty fixed reset seeds every 16,384 steps.  The
+primary gate requires zero environment-invalid actions for the masked
+participants, with masked \JORM{} success-area-under-curve at least equal to
+its unmasked counterpart.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{figures/masked_taxi_ppo_reference.pdf}
+  \caption{Taxi-v4 return and task-completion learning curves.  The masked
+  participants use the environment-supplied mask; the red control alone may
+  select masked actions.  Curves are means across three training seeds.}
+  \label{fig:masked-taxi-reference}
+\end{figure}
+
+\begin{table}[H]
+\centering
+\small
+\caption{Final Taxi-v4 held-out results by seed.  Each cell is success rate / mean return.}
+\label{tab:masked-taxi-reference}
+\begin{tabular}{lccc}
+\toprule
+Implementation & Run 0 & Run 1 & Run 2 \\
+\midrule
+\JORM{} PPO, masked & .96 / 0.18 & 1.00 / 8.20 & .92 / $-8.34$ \\
+\JORM{} PPO, unmasked & .00 / $-200$ & .00 / $-200$ & .00 / $-200$ \\
+SB3-contrib MaskablePPO & 1.00 / 8.44 & 1.00 / 8.24 & 1.00 / 8.44 \\
+Masked tabular Q-learning & 1.00 / 8.44 & 1.00 / 8.44 & 1.00 / 8.44 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+All masked participants record zero invalid choices throughout training and
+evaluation.  The unmasked control accumulates 462,511 invalid choices over the
+same interaction and evaluation schedule and never completes a held-out task.
+Masked \JORM{} success AUC is 0.7042 versus zero unmasked, so the declared B2
+mask gate passes.  Its final seed variance remains material: the independent
+masked references finish at 100\% on all seeds, whereas \JORM{} finishes at
+96\%, 100\%, and 92\%.  The masked policy had reached 97.3\% mean success at
+65,536 steps before later regression.  This supports hard constraint handling
+and also motivates checkpoint selection and stability diagnostics.
+The comparison thus identifies a working feasibility mechanism alongside a
+remaining training-stability problem.
+
+\subsection{Demonstrations and constrained joint decisions}
+
+The preceding comparisons establish basic learning and feasible-action
+selection. We now bring several choices into one decision and examine whether
+demonstrations provide a useful starting point. The smaller calculations first
+check how examples are fitted and sampled. A work-allocation experiment then
+measures the resulting policy through the reward it earns.
 
 Before using demonstrations to initialize PPO, we checked that the structured
 learner could fit a small set of labeled decisions and transfer the resulting
@@ -1105,7 +1269,10 @@ The gain in this small task motivates examining whether an
 application's candidate representation exposes the relationships needed for
 its decision.
 
-\subsection{Representing rare examples in a training batch}
+The distribution of those examples also matters. A rarely observed decision
+may receive a large training weight yet be absent from many uniformly sampled
+batches. We examine that effect with a corpus whose weighted objective can be
+calculated exactly.
 
 The sampling comparison uses a fixed synthetic corpus so that batch quality
 can be measured directly. It has 1,000 records
@@ -1123,7 +1290,9 @@ error to 0.056728; absolute bias from the exact objective is 0.000639.  The impr
 Testing whether it also accelerates a policy requires a learning experiment
 with the application's choice of balance groups.
 
-\subsection{Conditioning a choice on earlier selections}
+For a joint action, the information available to a later choice must include
+the relevant earlier selections. The following calculation tests this part
+of the representation before introducing a full sequence of rewarded decisions.
 
 In a joint action, an earlier selection can change which later option is
 preferable even when both remain feasible. The structured prefix head gives
@@ -1148,7 +1317,8 @@ on all five seeds and median NLL $0.009255$. The labels depend only on the
 earlier selection, which isolates the information contributed by the prefix.
 The result demonstrates the mechanism on this two-label problem.
 
-\subsection{Learning constrained joint actions}
+With those components in place, the work-allocation task tests learning from
+demonstrations and subsequent improvement through PPO under shared constraints.
 
 The joint-action experiment uses a small work-allocation task. On each of
 three turns, two to four typed workers
@@ -1202,57 +1372,6 @@ and the evaluated policies choose feasible actions throughout. Complete
 enumeration supplies a reliable optimum for this small task. Larger problems
 will require a suitable reference and a measurement of the computation needed
 to approach it.
-
-\subsection{Learning with feasible-action masks}
-
-Taxi-v4 isolates legal-mask behavior on 500 discrete states and six
-actions.  The neural policies receive a one-hot state and two separate
-width-64 MLPs, giving 72,903 trainable parameters to both \JORM{} PPO and
-SB3-contrib MaskablePPO.  Four participants receive 131,072 interactions over
-three seeds: masked \JORM{} PPO, the same \JORM{} PPO with masking deliberately
-disabled, SB3-contrib MaskablePPO, and a 3,000-entry masked tabular Q-learning
-reference.  Evaluation uses fifty fixed reset seeds every 16,384 steps.  The
-primary gate requires zero environment-invalid actions for the masked
-participants, with masked \JORM{} success-area-under-curve at least equal to
-its unmasked counterpart.
-
-\begin{figure}[H]
-  \centering
-  \includegraphics[width=\textwidth]{figures/masked_taxi_ppo_reference.pdf}
-  \caption{Taxi-v4 return and task-completion learning curves.  The masked
-  participants use the environment-supplied mask; the red control alone may
-  select masked actions.  Curves are means across three training seeds.}
-  \label{fig:masked-taxi-reference}
-\end{figure}
-
-\begin{table}[H]
-\centering
-\small
-\caption{Final Taxi-v4 held-out results by seed.  Each cell is success rate / mean return.}
-\label{tab:masked-taxi-reference}
-\begin{tabular}{lccc}
-\toprule
-Implementation & Run 0 & Run 1 & Run 2 \\
-\midrule
-\JORM{} PPO, masked & .96 / 0.18 & 1.00 / 8.20 & .92 / $-8.34$ \\
-\JORM{} PPO, unmasked & .00 / $-200$ & .00 / $-200$ & .00 / $-200$ \\
-SB3-contrib MaskablePPO & 1.00 / 8.44 & 1.00 / 8.24 & 1.00 / 8.44 \\
-Masked tabular Q-learning & 1.00 / 8.44 & 1.00 / 8.44 & 1.00 / 8.44 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-All masked participants record zero invalid choices throughout training and
-evaluation.  The unmasked control accumulates 462,511 invalid choices over the
-same interaction and evaluation schedule and never completes a held-out task.
-Masked \JORM{} success AUC is 0.7042 versus zero unmasked, so the declared B2
-mask gate passes.  Its final seed variance remains material: the independent
-masked references finish at 100\% on all seeds, whereas \JORM{} finishes at
-96\%, 100\%, and 92\%.  The masked policy had reached 97.3\% mean success at
-65,536 steps before later regression.  This supports hard constraint handling
-and also motivates checkpoint selection and stability diagnostics.
-The comparison thus identifies a working feasibility mechanism alongside a
-remaining training-stability problem.
 
 \begin{SNcolumns}
 
