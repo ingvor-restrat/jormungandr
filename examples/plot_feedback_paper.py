@@ -45,7 +45,7 @@ def main():
                 ys.mean(0),
                 marker="o",
                 markersize=3,
-                label=f"n={n}",
+                label=f"{n}-step return",
             )
             ax.fill_between(
                 protocol["checkpoints"],
@@ -58,11 +58,11 @@ def main():
             np.mean([r["points"][-1]["cue_oracle_accuracy"] for r in rows]),
             color="black",
             linestyle=":",
-            label="Cue-sign reference",
+            label="Observation rule",
         )
         ax.axhline(0.5, color="gray", linestyle="--", linewidth=0.7)
         ax.set_title(f"Reward delay: {delay} steps")
-        ax.set_xlabel("Optimizer updates")
+        ax.set_xlabel("Training updates")
         ax.grid(alpha=0.2)
     axes[0].set_ylabel("Initial-choice accuracy")
     axes[-1].legend(loc="lower right")
@@ -85,7 +85,7 @@ def main():
                 ys.mean(0),
                 marker="o",
                 markersize=3,
-                label=method.replace("_", " "),
+                label={"explicit_pairs": "Explicit comparisons", "biased_choices": "Biased clicks", "randomized_choices": "Clicks, randomized order"}[method],
             )
             ax.fill_between(
                 protocol["checkpoints"],
@@ -96,9 +96,9 @@ def main():
             )
         ax.axhline(0.5, color="gray", linestyle="--", linewidth=0.7)
         ax.set_title(f"{budget:,} feedback events")
-        ax.set_xlabel("Optimizer updates")
+        ax.set_xlabel("Training updates")
         ax.grid(alpha=0.2)
-    axes[0].set_ylabel("Acceptable-option recall in top three")
+    axes[0].set_ylabel("Fraction of acceptable options recovered")
     axes[1].legend(loc="lower right")
     fig.tight_layout()
     fig.savefig(OUT / "shortlist_preference_learning.pdf")

@@ -1,24 +1,15 @@
 # Jörmungandr paper
 
-[Jörmungandr: A Plugin Runtime for Distributed Reinforcement Learning](jormungandr_learning_systems.pdf)
-([source](jormungandr_learning_systems.tex)) describes the actor/learner
-boundary, algorithm and selector plugins, checkpoint lifecycle, noise and
-return-risk taxonomy, QUBO rollout allocation, Volt set/graph integration,
-the controlled QUBO frontier-search result, a seeded online-agent convergence
-comparison, structured joint PPO and reward-free behavior-cloning contracts,
-the BC-to-PPO initialization path, hardware-aware replicated inference and
-load balancing, window/state inputs, verified ONNX checkpoint exports, the
-Jormungandr SBE endpoint, and the staged Rust boundary.
+[Jörmungandr: Learning from Decisions and Feedback](jormungandr_learning_systems.pdf)
+([source](jormungandr_learning_systems.tex)) connects prior research to our
+experiments in search selection, constrained decisions, tool use, delayed
+rewards, and user preferences. The November editorial revision replaces the
+implementation inventory with an explanation of the ideas and findings.
+Detailed experimental results remain in the linked reports and build commands
+below. No measurements were changed or models retrained for this revision.
 
-The November 2026 revision adds language-policy tool routing, auxiliary-objective
-controls, delayed credit assignment, and ranked-shortlist preference feedback.
-It rewrites the abstract, opening, and conclusion in plainer language. The LLM
-study is distinguished from numeric experiments; the latter are not presented as
-LLM-tuning results. An appendix records protocols and negative findings.
-
-The checked-in journal class uses a compact 8-point, two-column A4 layout,
-with full-width figures and a contents page. Application-specific financial
-studies remain in the companion hedging paper.
+The journal class uses a compact two-column A4 layout with full-width figures.
+Application-specific financial studies remain in the companion hedging paper.
 
 Regenerate the two feedback-study vector figures from committed results, without
 training models, from the repository root:
@@ -36,7 +27,7 @@ latexmk -pdf -interaction=nonstopmode -halt-on-error \
 
 `latexmk -c` removes intermediate files without deleting the PDF or source.
 
-Regenerate the Section 6 frontier trace, empirical data, and vector figures
+Regenerate the Section 3 frontier trace, empirical data, and vector figures
 from the repository root with:
 
 ```bash
