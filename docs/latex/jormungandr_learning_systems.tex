@@ -258,9 +258,7 @@ be used as a common league table.
 We compare the reward earned on episodes excluded from training, with equal
 interaction budgets and several independent training runs. The first shows
 performance on new episodes; the second reveals sensitivity to initialization.
-Neither establishes performance on a different problem. Jörmungandr records
-these evaluations against the model version that produced them, alongside the
-training statistics needed to investigate failures.
+Neither establishes performance on a different problem.
 
 \subsection{Learning speed and uncertainty}
 
@@ -493,18 +491,13 @@ the figure compares their simulated results, not the cost of collecting them.}
 \end{figure}
 \begin{SNcolumns}
 
-Jörmungandr supplies the records and preference loss. Applications decide
-what to display and how to interpret feedback. The current preference library
-keeps its pending records in memory; persistent storage and an HTTP feedback
-service remain to be built.
-
 \section{What the results establish}
 
-The comparisons show that the runtime can train and serve several kinds of
-policy, preserve structured choices, and support experiments with delayed
-outcomes and user feedback. They also exposed weaknesses, including the
+The comparisons show how the information supplied to a learner and the
+feedback used to train it affect decisions. They also exposed weaknesses, including the
 late regression in Taxi and auxiliary objectives that added cost with little
-benefit. The recorded results should guide which features an application uses.
+benefit. These findings help distinguish useful additions from changes that merely
+make a model more complicated.
 
 The experiments are deliberately small. They do not establish performance
 across the much broader tasks studied in the cited literature, and no trading
