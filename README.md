@@ -328,6 +328,7 @@ internet-edge rate limiting belong in the deployment layer.
 
 Continue with:
 
+- [Quantitative research agents: notes and implementation plan](docs/quantitative-research-agent-plan.md)
 - [How Jörmungandr fits together](docs/architecture.md)
 - [Algorithm choices, noise, and quantile return models](docs/algorithms.md)
 - [Algorithm and selector plugin contract](docs/plugins.md)
