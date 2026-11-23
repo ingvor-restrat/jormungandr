@@ -3,10 +3,10 @@
 Two papers cover distinct applications of the framework:
 
 - [A Plugin Runtime for Distributed Reinforcement Learning](jormungandr_learning_systems.pdf)
-  ([source](jormungandr_learning_systems.tex)): the original 15-page paper on RL
+  ([source](jormungandr_learning_systems.tex)): the 15-page paper on RL
   algorithms, infrastructure, structured actions, search, and financial
-  application interfaces. Source and PDF are restored from revision `07ce89c`,
-  before the language-model material was incorporated.
+  application interfaces. The prose revision retains the technical scope and
+  experimental tables, with the language-model study published separately.
 - [Adapting a Language Model to Tool Use](jormungandr_llm_adaptation.pdf)
   ([source](jormungandr_llm_adaptation.tex)): the language-policy experiment,
   comparisons with simple rules, and separate numeric studies of context
